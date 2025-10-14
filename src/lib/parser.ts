@@ -1,3 +1,4 @@
+
 export type CreditData = {
   transactionDate: string;
   postingDate: string;
@@ -84,7 +85,7 @@ export function parseDepositAccount(text: string): DepositData[] {
       const desc = parts[1]?.trim() ?? '';
       const withdraw = parts[2]?.replace(/,/g, '').trim() ?? '';
       const deposit = parts[3]?.replace(/,/g, '').trim() ?? '';
-      let remark = parts[5]?.trim() ?? '';
+      let remark = parts.length > 5 ? (parts[5]?.trim() ?? '') : '';
       const amount = withdraw ? parseFloat(withdraw) : (deposit ? -parseFloat(deposit) : 0);
       
       if (remark === '行銀非約跨優') {
