@@ -84,9 +84,13 @@ export function parseDepositAccount(text: string): DepositData[] {
       const desc = parts[1]?.trim() ?? '';
       const withdraw = parts[2]?.replace(/,/g, '').trim() ?? '';
       const deposit = parts[3]?.replace(/,/g, '').trim() ?? '';
-      const remark = parts[5]?.trim() ?? '';
+      let remark = parts[5]?.trim() ?? '';
       const amount = withdraw ? parseFloat(withdraw) : (deposit ? -parseFloat(deposit) : 0);
       
+      if (remark === '行銀非約跨優') {
+        remark = '';
+      }
+
       const rule = special_rules[desc] || { merge_remark: true, remark_col: null };
       
       temp = [currentDate, time, '', amount, '', '', ''];
