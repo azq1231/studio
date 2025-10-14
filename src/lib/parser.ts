@@ -82,14 +82,19 @@ export function parseDepositAccount(text: string): DepositData[] {
 
       const parts = line.split('\t');
       const time = parts[0]?.trim() ?? '';
-      const desc = parts[1]?.trim() ?? '';
+      let desc = parts[1]?.trim() ?? '';
       const withdraw = parts[2]?.replace(/,/g, '').trim() ?? '';
       const deposit = parts[3]?.replace(/,/g, '').trim() ?? '';
       let remark = parts.length > 5 ? (parts[5]?.trim() ?? '') : '';
       const amount = withdraw ? parseFloat(withdraw) : (deposit ? -parseFloat(deposit) : 0);
       
-      if (remark === '行銀非約跨優') {
-        remark = '';
+      // Explicitly remove the unwanted text from both desc and remark
+      const unwantedText = '行銀非約跨優';
+      if (desc.includes(unwantedText)) {
+        desc = desc.replace(unwantedText, '').trim();
+      }
+      if (remark.includes(unwantedText)) {
+        remark = remark.replace(unwantedText, '').trim();
       }
 
       const rule = special_rules[desc] || { merge_remark: true, remark_col: null };
