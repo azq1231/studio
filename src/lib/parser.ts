@@ -20,10 +20,11 @@ export function parseCreditCard(text: string, rules: ReplacementRule[]): CreditD
     let shouldDeleteRow = false;
     for (const rule of rules) {
       if (rule.find && currentLine.includes(rule.find)) {
-        if (rule.deleteRow && rule.replace === '') {
+        if (rule.deleteRow) {
           shouldDeleteRow = true;
           break;
         }
+        // Only apply replacement if not deleting the row
         currentLine = currentLine.replace(new RegExp(rule.find, 'g'), rule.replace);
       }
     }
@@ -92,7 +93,7 @@ export function parseDepositAccount(text: string, rules: ReplacementRule[]): Dep
     let shouldDelete = false;
     for (const rule of rules) {
         if(rule.find && processedText.includes(rule.find)) {
-            if(rule.deleteRow && rule.replace === '') {
+            if(rule.deleteRow) {
                 shouldDelete = true;
                 break;
             }

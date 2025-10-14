@@ -230,7 +230,7 @@ export function FinanceFlowClient() {
             <Card>
               <CardHeader>
                 <CardDescription>
-                  設定自動取代或刪除規則。當「取代為」留空並勾選「刪除整筆資料」時，符合條件的資料將被移除。
+                  設定自動取代或刪除規則。勾選「刪除整筆資料」後，符合條件的資料將被整筆移除。
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -238,13 +238,13 @@ export function FinanceFlowClient() {
                   <form onSubmit={settingsForm.handleSubmit(handleSaveSettings)} className="space-y-4">
                     <div className="space-y-4">
                       {fields.map((field, index) => (
-                        <div key={field.id} className="p-3 border rounded-md space-y-4">
-                            <div className="flex items-end gap-2">
+                        <div key={field.id} className="p-3 border rounded-md space-y-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <FormField
                                     control={settingsForm.control}
                                     name={`rules.${index}.find`}
                                     render={({ field }) => (
-                                    <FormItem className="flex-1">
+                                    <FormItem>
                                         <FormLabel>尋找文字</FormLabel>
                                         <FormControl>
                                         <Input placeholder="要被取代的文字" {...field} />
@@ -257,36 +257,38 @@ export function FinanceFlowClient() {
                                     control={settingsForm.control}
                                     name={`rules.${index}.replace`}
                                     render={({ field }) => (
-                                    <FormItem className="flex-1">
+                                    <FormItem>
                                         <FormLabel>取代為</FormLabel>
                                         <FormControl>
-                                        <Input placeholder="新的文字 (留空為刪除)" {...field} />
+                                        <Input placeholder="新的文字 (留空為刪除文字)" {...field} />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
                                     )}
                                 />
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <FormField
+                                  control={settingsForm.control}
+                                  name={`rules.${index}.deleteRow`}
+                                  render={({ field }) => (
+                                    <FormItem className="flex flex-row items-center space-x-2 space-y-0">
+                                      <FormControl>
+                                        <Checkbox
+                                          checked={field.value}
+                                          onCheckedChange={field.onChange}
+                                        />
+                                      </FormControl>
+                                      <FormLabel className="font-normal text-sm text-muted-foreground">
+                                        刪除整筆資料
+                                      </FormLabel>
+                                    </FormItem>
+                                  )}
+                                />
                                 <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}>
                                     <Trash2 className="h-4 w-4 text-destructive" />
                                 </Button>
                             </div>
-                            <FormField
-                                control={settingsForm.control}
-                                name={`rules.${index}.deleteRow`}
-                                render={({ field }) => (
-                                  <FormItem className="flex flex-row items-center space-x-2 space-y-0">
-                                    <FormControl>
-                                      <Checkbox
-                                        checked={field.value}
-                                        onCheckedChange={field.onChange}
-                                      />
-                                    </FormControl>
-                                    <FormLabel className="font-normal text-sm text-muted-foreground">
-                                      如果「取代為」為空，則刪除整筆資料
-                                    </FormLabel>
-                                  </FormItem>
-                                )}
-                              />
                         </div>
                       ))}
                     </div>
