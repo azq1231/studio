@@ -1,4 +1,5 @@
 
+
 export type CreditData = {
   transactionDate: string;
   postingDate: string;
@@ -77,7 +78,11 @@ export function parseDepositAccount(text: string): DepositData[] {
 
     if (/^\d{2}:\d{2}:\d{2}/.test(line)) {
       if (temp) {
-        results.push(temp);
+        // Before pushing the old temp, check if we should filter it.
+        const tempDesc = (temp[2] as string).trim();
+        if (tempDesc !== "ＣＤＭ存款") {
+           results.push(temp);
+        }
       }
 
       const parts = line.split('\t');
@@ -93,7 +98,7 @@ export function parseDepositAccount(text: string): DepositData[] {
       temp = [currentDate, time, '', amount, '', '', ''];
 
       if (rule.merge_remark) {
-        temp[2] = `${desc} ${remark}`.trim();
+        temp[2] = `${desc} ${remark}`.trim().replace(/行銀非約跨優/g, '').trim();
       } else {
         temp[2] = desc;
         if (rule.remark_col !== null && temp.length > rule.remark_col) {
@@ -113,7 +118,10 @@ export function parseDepositAccount(text: string): DepositData[] {
   }
 
   if (temp) {
-    results.push(temp);
+    const tempDesc = (temp[2] as string).trim();
+    if (tempDesc !== "ＣＤＭ存款") {
+        results.push(temp);
+    }
   }
 
   return results.map(r => ({
