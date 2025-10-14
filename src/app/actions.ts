@@ -3,9 +3,10 @@
 import { detectReportType } from '@/ai/flows/detect-report-type';
 import { parseCreditCard, parseDepositAccount, type CreditData, type DepositData } from '@/lib/parser';
 
-type ReplacementRule = {
+export type ReplacementRule = {
     find: string;
     replace: string;
+    deleteRow?: boolean;
 };
 
 export async function processBankStatement(
@@ -22,14 +23,8 @@ export async function processBankStatement(
     }
 
     try {
-        let processedText = text;
-        for (const rule of replacementRules) {
-            if (rule.find) {
-                processedText = processedText.replace(new RegExp(rule.find, 'g'), rule.replace);
-            }
-        }
-        
-        const sections = processedText.split(/(?=交易日期)/).filter(s => s.trim() !== '');
+        // The text replacement logic is now handled inside the parsers.
+        const sections = text.split(/(?=交易日期)/).filter(s => s.trim() !== '');
         let allCreditData: CreditData[] = [];
         let allDepositData: DepositData[] = [];
 
@@ -37,16 +32,16 @@ export async function processBankStatement(
             const { reportType } = await detectReportType({ text: section });
 
             if (reportType === 'credit_card') {
-                const parsed = parseCreditCard(section);
+                const parsed = parseCreditCard(section, replacementRules);
                 allCreditData.push(...parsed);
             } else if (reportType === 'deposit_account') {
-                const parsed = parseDepositAccount(section);
+                const parsed = parseDepositAccount(section, replacementRules);
                 allDepositData.push(...parsed);
             } else { // 'unknown' or if AI fails, try both as a fallback
-                const creditParsed = parseCreditCard(section);
+                const creditParsed = parseCreditCard(section, replacementRules);
                 if (creditParsed.length > 0) allCreditData.push(...creditParsed);
                 
-                const depositParsed = parseDepositAccount(section);
+                const depositParsed = parseDepositAccount(section, replacementRules);
                 if (depositParsed.length > 0) allDepositData.push(...depositParsed);
             }
         }

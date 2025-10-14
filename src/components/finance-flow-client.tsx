@@ -15,10 +15,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCaption } from '@/components/ui/table';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Skeleton } from '@/components/ui/skeleton';
+import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings } from 'lucide-react';
-import { processBankStatement } from '@/app/actions';
+import { processBankStatement, type ReplacementRule } from '@/app/actions';
 import type { CreditData, DepositData } from '@/lib/parser';
+
 
 const statementFormSchema = z.object({
   statement: z.string().min(10, { message: '報表內容至少需要10個字元。' }),
@@ -27,6 +29,7 @@ const statementFormSchema = z.object({
 const replacementRuleSchema = z.object({
   find: z.string().min(1, { message: '請輸入要尋找的文字' }),
   replace: z.string(),
+  deleteRow: z.boolean().default(false),
 });
 
 const settingsFormSchema = z.object({
@@ -35,7 +38,6 @@ const settingsFormSchema = z.object({
 
 type StatementFormData = z.infer<typeof statementFormSchema>;
 type SettingsFormData = z.infer<typeof settingsFormSchema>;
-type ReplacementRule = z.infer<typeof replacementRuleSchema>;
 
 
 export function FinanceFlowClient() {
@@ -72,12 +74,18 @@ export function FinanceFlowClient() {
            settingsForm.reset({ rules: parsedRules });
         }
       } else {
-        // Set default rule if nothing is saved
-        settingsForm.reset({ rules: [{ find: '行銀非約跨優', replace: '' }] });
+        // Set default rules if nothing is saved
+        settingsForm.reset({ rules: [
+          { find: '行銀非約跨優', replace: '', deleteRow: false },
+          { find: 'ＣＤＭ存款', replace: '', deleteRow: true }
+        ] });
       }
     } catch (e) {
       console.error("Failed to load replacement rules from localStorage", e);
-      settingsForm.reset({ rules: [{ find: '行銀非約跨優', replace: '' }] });
+      settingsForm.reset({ rules: [
+          { find: '行銀非約跨優', replace: '', deleteRow: false },
+          { find: 'ＣＤＭ存款', replace: '', deleteRow: true }
+      ] });
     }
   }, [settingsForm]);
 
@@ -222,7 +230,7 @@ export function FinanceFlowClient() {
             <Card>
               <CardHeader>
                 <CardDescription>
-                  在這裡設定您想要自動取代的文字。例如，您可以將特定的商店名稱取代為更通用的類別，或移除不需要的備註文字。
+                  設定自動取代或刪除規則。當「取代為」留空並勾選「刪除整筆資料」時，符合條件的資料將被移除。
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -230,36 +238,55 @@ export function FinanceFlowClient() {
                   <form onSubmit={settingsForm.handleSubmit(handleSaveSettings)} className="space-y-4">
                     <div className="space-y-4">
                       {fields.map((field, index) => (
-                        <div key={field.id} className="flex items-end gap-2 p-2 border rounded-md">
-                          <FormField
-                            control={settingsForm.control}
-                            name={`rules.${index}.find`}
-                            render={({ field }) => (
-                              <FormItem className="flex-1">
-                                <FormLabel>尋找文字</FormLabel>
-                                <FormControl>
-                                  <Input placeholder="要被取代的文字" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={settingsForm.control}
-                            name={`rules.${index}.replace`}
-                            render={({ field }) => (
-                              <FormItem className="flex-1">
-                                <FormLabel>取代為</FormLabel>
-                                <FormControl>
-                                  <Input placeholder="新的文字 (留空為刪除)" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}>
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
+                        <div key={field.id} className="p-3 border rounded-md space-y-4">
+                            <div className="flex items-end gap-2">
+                                <FormField
+                                    control={settingsForm.control}
+                                    name={`rules.${index}.find`}
+                                    render={({ field }) => (
+                                    <FormItem className="flex-1">
+                                        <FormLabel>尋找文字</FormLabel>
+                                        <FormControl>
+                                        <Input placeholder="要被取代的文字" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={settingsForm.control}
+                                    name={`rules.${index}.replace`}
+                                    render={({ field }) => (
+                                    <FormItem className="flex-1">
+                                        <FormLabel>取代為</FormLabel>
+                                        <FormControl>
+                                        <Input placeholder="新的文字 (留空為刪除)" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                    )}
+                                />
+                                <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}>
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                            </div>
+                            <FormField
+                                control={settingsForm.control}
+                                name={`rules.${index}.deleteRow`}
+                                render={({ field }) => (
+                                  <FormItem className="flex flex-row items-center space-x-2 space-y-0">
+                                    <FormControl>
+                                      <Checkbox
+                                        checked={field.value}
+                                        onCheckedChange={field.onChange}
+                                      />
+                                    </FormControl>
+                                    <FormLabel className="font-normal text-sm text-muted-foreground">
+                                      如果「取代為」為空，則刪除整筆資料
+                                    </FormLabel>
+                                  </FormItem>
+                                )}
+                              />
                         </div>
                       ))}
                     </div>
@@ -268,7 +295,7 @@ export function FinanceFlowClient() {
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={() => append({ find: '', replace: '' })}
+                          onClick={() => append({ find: '', replace: '', deleteRow: false })}
                         >
                           <PlusCircle className="mr-2 h-4 w-4" />
                           新增規則

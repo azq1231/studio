@@ -1,4 +1,4 @@
-
+import type { ReplacementRule } from '@/app/actions';
 
 export type CreditData = {
   transactionDate: string;
@@ -7,23 +7,40 @@ export type CreditData = {
   amount: number;
 };
 
-export function parseCreditCard(text: string): CreditData[] {
+export function parseCreditCard(text: string, rules: ReplacementRule[]): CreditData[] {
   const lines = text.split('\n');
   const results: CreditData[] = [];
+
   for (const line of lines) {
-    const clean = line.replace(/\u3000/g, ' ').trim();
-    if (!/^\d{2}\/\d{2}/.test(clean)) {
+    let currentLine = line.replace(/\u3000/g, ' ').trim();
+    if (!/^\d{2}\/\d{2}/.test(currentLine)) {
       continue;
     }
-    const parts = clean.split(/\s{2,}|\t+/);
+
+    let shouldDeleteRow = false;
+    for (const rule of rules) {
+      if (rule.find && currentLine.includes(rule.find)) {
+        if (rule.deleteRow && rule.replace === '') {
+          shouldDeleteRow = true;
+          break;
+        }
+        currentLine = currentLine.replace(new RegExp(rule.find, 'g'), rule.replace);
+      }
+    }
+
+    if (shouldDeleteRow) {
+      continue;
+    }
+
+    const parts = currentLine.split(/\s{2,}|\t+/);
     if (parts.length >= 2) {
       const transactionDate = parts[0].trim();
       const postingDate = /^\d{2}\/\d{2}/.test(parts[1]) ? parts[1].trim() : '';
       
-      const amountMatch = clean.match(/(-?[\d,]+(\.\d+)?)$/);
+      const amountMatch = currentLine.match(/(-?[\d,]+(\.\d+)?)$/);
       const amount = amountMatch ? parseFloat(amountMatch[0].replace(/,/g, '')) : 0;
       
-      let description = clean;
+      let description = currentLine;
       if (amountMatch) {
           description = description.substring(0, description.lastIndexOf(amountMatch[0])).trim();
       }
@@ -64,11 +81,26 @@ const special_rules: Record<string, SpecialRule> = {
   "國保保費": { merge_remark: false, remark_col: 5 },
 };
 
-export function parseDepositAccount(text: string): DepositData[] {
+export function parseDepositAccount(text: string, rules: ReplacementRule[]): DepositData[] {
   const lines = text.split('\n').map(l => l.trim()).filter(l => l);
   const results: (string|number)[][] = [];
   let currentDate = '';
   let temp: (string|number)[] | null = null;
+
+  const applyRules = (text: string) => {
+    let processedText = text;
+    let shouldDelete = false;
+    for (const rule of rules) {
+        if(rule.find && processedText.includes(rule.find)) {
+            if(rule.deleteRow && rule.replace === '') {
+                shouldDelete = true;
+                break;
+            }
+            processedText = processedText.replace(new RegExp(rule.find, 'g'), rule.replace);
+        }
+    }
+    return { processedText, shouldDelete };
+  }
 
   for (const line of lines) {
     if (/^\d{4}\/\d{2}\/\d{2}/.test(line)) {
@@ -78,15 +110,11 @@ export function parseDepositAccount(text: string): DepositData[] {
 
     if (/^\d{2}:\d{2}:\d{2}/.test(line)) {
       if (temp) {
-        // Before pushing the old temp, check if we should filter it.
-        const tempDesc = (temp[2] as string).trim();
-        if (tempDesc !== "ＣＤＭ存款") {
-           results.push(temp);
-        }
+        results.push(temp);
       }
 
       const parts = line.split('\t');
-      const time = parts[0]?.trim() ?? '';
+      let time = parts[0]?.trim() ?? '';
       let desc = parts[1]?.trim() ?? '';
       const withdraw = parts[2]?.replace(/,/g, '').trim() ?? '';
       const deposit = parts[3]?.replace(/,/g, '').trim() ?? '';
@@ -95,16 +123,27 @@ export function parseDepositAccount(text: string): DepositData[] {
       
       const rule = special_rules[desc] || { merge_remark: true, remark_col: null };
       
-      temp = [currentDate, time, '', amount, '', '', ''];
-
+      let finalDescription = '';
       if (rule.merge_remark) {
-        temp[2] = `${desc} ${remark}`.trim().replace(/行銀非約跨優/g, '').trim();
+        finalDescription = `${desc} ${remark}`.trim();
       } else {
-        temp[2] = desc;
-        if (rule.remark_col !== null && temp.length > rule.remark_col) {
-          temp[rule.remark_col] = remark;
-        }
+        finalDescription = desc;
       }
+
+      const { processedText, shouldDelete } = applyRules(finalDescription);
+      if(shouldDelete) {
+        temp = null;
+        continue;
+      }
+      finalDescription = processedText;
+
+
+      temp = [currentDate, time, finalDescription, amount, '', '', ''];
+      
+      if (!rule.merge_remark && rule.remark_col !== null && temp.length > rule.remark_col) {
+        temp[rule.remark_col] = remark;
+      }
+
       continue;
     }
 
@@ -118,10 +157,7 @@ export function parseDepositAccount(text: string): DepositData[] {
   }
 
   if (temp) {
-    const tempDesc = (temp[2] as string).trim();
-    if (tempDesc !== "ＣＤＭ存款") {
-        results.push(temp);
-    }
+    results.push(temp);
   }
 
   return results.map(r => ({
