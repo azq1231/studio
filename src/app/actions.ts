@@ -3,7 +3,15 @@
 import { detectReportType } from '@/ai/flows/detect-report-type';
 import { parseCreditCard, parseDepositAccount, type CreditData, type DepositData } from '@/lib/parser';
 
-export async function processBankStatement(text: string): Promise<{
+type ReplacementRule = {
+    find: string;
+    replace: string;
+};
+
+export async function processBankStatement(
+    text: string, 
+    replacementRules: ReplacementRule[]
+): Promise<{
     success: boolean;
     creditData: CreditData[];
     depositData: DepositData[];
@@ -14,7 +22,14 @@ export async function processBankStatement(text: string): Promise<{
     }
 
     try {
-        const sections = text.split(/(?=交易日期)/).filter(s => s.trim() !== '');
+        let processedText = text;
+        for (const rule of replacementRules) {
+            if (rule.find) {
+                processedText = processedText.replace(new RegExp(rule.find, 'g'), rule.replace);
+            }
+        }
+        
+        const sections = processedText.split(/(?=交易日期)/).filter(s => s.trim() !== '');
         let allCreditData: CreditData[] = [];
         let allDepositData: DepositData[] = [];
 
