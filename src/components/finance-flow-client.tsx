@@ -227,29 +227,23 @@ export function FinanceFlowClient() {
   });
 
   useEffect(() => {
-    if (isUserLoading) return; // Wait until user status is resolved
+    if (isUserLoading) return; 
 
-    let mergedData: CreditData[] = [];
+    let mergedData = [...creditData];
 
-    // 1. Add saved transactions if user is logged in
     if (user && savedTransactions) {
-        mergedData = [...savedTransactions];
+      const existingIds = new Set(mergedData.map(d => d.id));
+      const newSaved = savedTransactions.filter(t => !existingIds.has(t.id));
+      mergedData.push(...newSaved);
     }
-
-    // 2. Add local data that hasn't been saved yet
-    const savedIds = new Set(savedTransactions?.map(t => t.id) || []);
-    const localUnsavedData = creditData.filter(t => !savedIds.has(t.id));
-    mergedData.push(...localUnsavedData);
-
-    // 3. Create a unique list based on ID
+    
     const uniqueData = Array.from(new Map(mergedData.map(item => [item.id, item])).values());
     
-    // Set the final state
-    if (user) {
-        setCreditData(uniqueData);
+    if (JSON.stringify(uniqueData) !== JSON.stringify(creditData)) {
+      setCreditData(uniqueData);
     }
 
-  }, [user, isUserLoading, savedTransactions]);
+  }, [user, isUserLoading, savedTransactions, creditData]);
 
 
   useEffect(() => {
@@ -282,25 +276,19 @@ export function FinanceFlowClient() {
 
       if (savedCategoryRulesRaw) {
         const savedRules = JSON.parse(savedCategoryRulesRaw) as CategoryRule[];
-        const defaultKeywords = new Set(DEFAULT_CATEGORY_RULES.map(r => r.keyword));
-        
-        // Add saved rules that are not in the new default list
-        savedRules.forEach(savedRule => {
-          if (!defaultKeywords.has(savedRule.keyword)) {
-            finalCategoryRules.push(savedRule);
-          }
-        });
-        
-        // Prioritize saved rules over default ones if keyword is the same
         const savedRulesMap = new Map(savedRules.map(r => [r.keyword, r]));
-        finalCategoryRules = finalCategoryRules.map(rule => savedRulesMap.get(rule.keyword) || rule);
+        
+        // Add new default rules that are not in saved rules
+        DEFAULT_CATEGORY_RULES.forEach(defaultRule => {
+            if (!savedRulesMap.has(defaultRule.keyword)) {
+                savedRulesMap.set(defaultRule.keyword, defaultRule);
+            }
+        });
+        finalCategoryRules = Array.from(savedRulesMap.values());
       }
-
-      // Remove duplicates just in case
-      const uniqueRules = Array.from(new Map(finalCategoryRules.map(r => [r.keyword, r])).values());
       
-      settingsForm.setValue('categoryRules', uniqueRules);
-      localStorage.setItem('categoryRules', JSON.stringify(uniqueRules));
+      settingsForm.setValue('categoryRules', finalCategoryRules);
+      localStorage.setItem('categoryRules', JSON.stringify(finalCategoryRules));
 
     } catch (e) {
       console.error("Failed to load settings from localStorage", e);
@@ -309,7 +297,6 @@ export function FinanceFlowClient() {
 
   const handleSaveSettings = (data: SettingsFormData) => {
     try {
-      // Ensure we don't save duplicate keywords
       const uniqueReplacementRules = Array.from(new Map(data.replacementRules.map(r => [r.find, r])).values());
       const uniqueCategoryRules = Array.from(new Map(data.categoryRules.map(r => [r.keyword, r])).values());
 
@@ -350,7 +337,6 @@ export function FinanceFlowClient() {
     setAvailableCategories(updatedCategories);
     localStorage.setItem('availableCategories', JSON.stringify(updatedCategories));
 
-    // Also remove any rules that use this category
     const currentRules = settingsForm.getValues('categoryRules');
     const updatedRules = currentRules.filter(rule => rule.category !== categoryToRemove);
     settingsForm.setValue('categoryRules', updatedRules, { shouldDirty: true, shouldValidate: true });
@@ -367,8 +353,16 @@ export function FinanceFlowClient() {
     const result = await processBankStatement(values.statement, replacementRules, categoryRules);
     
     if (result.success) {
-      setCreditData(result.creditData);
-      setDepositData(result.depositData);
+      // Append new data and remove duplicates
+      setCreditData(prevData => {
+        const combined = [...prevData, ...result.creditData];
+        return Array.from(new Map(combined.map(item => [item.id, item])).values());
+      });
+      setDepositData(prevData => {
+        const combined = [...prevData, ...result.depositData];
+        // Assuming deposit data also gets a unique ID in the parser
+        return Array.from(new Map(combined.map(item => [item.id, item])).values());
+      });
 
       if (user && firestore && result.creditData.length > 0) {
         try {
@@ -376,12 +370,12 @@ export function FinanceFlowClient() {
           const transactionsCollection = collection(firestore, 'users', user.uid, 'creditCardTransactions');
           result.creditData.forEach(transaction => {
             const docRef = doc(transactionsCollection, transaction.id);
-            batch.set(docRef, transaction);
+            batch.set(docRef, transaction, { merge: true });
           });
           await batch.commit();
           toast({
             title: "儲存成功",
-            description: `${result.creditData.length} 筆信用卡資料已儲存到您的帳戶。`
+            description: `${result.creditData.length} 筆新資料已儲存到您的帳戶。`
           });
         } catch (e) {
           console.error("Error saving to Firestore:", e);
@@ -392,7 +386,6 @@ export function FinanceFlowClient() {
           });
         }
       } 
-
 
       if (result.creditData.length === 0 && result.depositData.length === 0) {
         toast({
@@ -411,6 +404,7 @@ export function FinanceFlowClient() {
     
     setIsLoading(false);
     setHasProcessed(true);
+    statementForm.reset({ statement: '' }); // Clear textarea after processing
   }
 
   function handleDownload() {
@@ -434,7 +428,7 @@ export function FinanceFlowClient() {
           '類型': d.category,
           '摘要＋存摺備註': d.description,
           '金額（支出正、存入負）': d.amount,
-          '空白': d.blank,
+          '空白': '',
           '對方銀行代碼': d.bankCode,
           '對方帳號（留空）': d.accountNumber,
         }));
@@ -490,9 +484,11 @@ export function FinanceFlowClient() {
                     title: "更新失敗",
                     description: "無法將類型變更儲存到資料庫。",
                 });
-                // Revert UI change on failure
                 if (savedTransactions) {
-                   setCreditData(savedTransactions);
+                   const originalItem = savedTransactions.find(t => t.id === transactionId);
+                   if (originalItem) {
+                       setCreditData(prevData => prevData.map(item => item.id === transactionId ? originalItem : item));
+                   }
                 }
             }
         }
@@ -513,7 +509,6 @@ export function FinanceFlowClient() {
                     title: "刪除失敗",
                     description: "無法從資料庫中刪除此筆交易。",
                 });
-                // Revert UI change on failure
                 setCreditData(originalData);
             }
         }
@@ -524,12 +519,12 @@ export function FinanceFlowClient() {
       return categoryFields;
     }
     return [...categoryFields].sort((a, b) => {
-      const aValue = a[sortKey] || '';
-      const bValue = b[sortKey] || '';
+      const aValue = settingsForm.getValues(`categoryRules.${categoryFields.findIndex(f => f.id === a.id)}.keyword`) || '';
+      const bValue = settingsForm.getValues(`categoryRules.${categoryFields.findIndex(f => f.id === b.id)}.keyword`) || '';
       const comparison = aValue.localeCompare(bValue, 'zh-Hant');
       return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [categoryFields, sortKey, sortDirection])
+  }, [categoryFields, sortKey, sortDirection, settingsForm]);
 
   const sortedCreditData = useMemo(() => {
     if (!creditSortKey) return creditData;
@@ -541,12 +536,10 @@ export function FinanceFlowClient() {
         let comparison = 0;
         if (creditSortKey === 'transactionDate') {
             try {
-                // Assuming format is MM/DD
                 const dateA = parse(aValue, 'MM/dd', new Date());
                 const dateB = parse(bValue, 'MM/dd', new Date());
                 comparison = dateA.getTime() - dateB.getTime();
             } catch {
-                // Fallback for invalid date formats
                 comparison = (aValue || '').localeCompare(bValue || '');
             }
         } else if (typeof aValue === 'string' && typeof bValue === 'string') {
@@ -554,7 +547,6 @@ export function FinanceFlowClient() {
         } else if (typeof aValue === 'number' && typeof bValue === 'number') {
             comparison = aValue - bValue;
         } else {
-            // Fallback for mixed types
             comparison = String(aValue).localeCompare(String(bValue), 'zh-Hant');
         }
 
@@ -594,10 +586,9 @@ export function FinanceFlowClient() {
     creditData.forEach(transaction => {
       try {
         const { transactionDate, category, amount } = transaction;
-        if (amount <= 0) return; // Only sum expenses
+        if (amount <= 0) return; 
 
         const date = parse(transactionDate, 'MM/dd', new Date());
-        // Assuming current year if year is not present. This might need adjustment.
         const monthKey = format(date, 'yyyy年M月');
         
         categories.add(category);
@@ -638,11 +629,11 @@ export function FinanceFlowClient() {
   const noDataFound = hasProcessed && !isLoading && creditData.length === 0 && depositData.length === 0;
   const hasData = creditData.length > 0 || depositData.length > 0;
   
-  const defaultTab = hasProcessed
+  const defaultTab = hasData
     ? (creditData.length > 0 ? "credit" : "deposit")
-    : (savedTransactions && savedTransactions.length > 0 ? "credit" : "statement");
+    : "statement";
 
-  const showResults = (hasProcessed && hasData) || (!isUserLoading && !hasProcessed && hasData);
+  const showResults = (hasProcessed && hasData) || (!isUserLoading && !hasProcessed && hasData && !isLoadingTransactions);
 
 
   const SortableHeader = ({ sortKey: key, children }: { sortKey: SortKey, children: React.ReactNode }) => {
@@ -953,13 +944,13 @@ export function FinanceFlowClient() {
             </AccordionItem>
           </Accordion>
 
-          {(isLoading || isLoadingTransactions || showResults) && (
+          {(isLoading || showResults) && (
             <Card>
               <CardHeader>
                 <h3 className="text-xl font-semibold font-headline">處理結果</h3>
               </CardHeader>
               <CardContent>
-                {(isLoading || isLoadingTransactions) && (
+                {(isLoading || isLoadingTransactions) && !hasData && (
                   <div className="space-y-4">
                     <div className="flex items-center space-x-4">
                       <Skeleton className="h-10 w-24 rounded-md" />
@@ -969,7 +960,7 @@ export function FinanceFlowClient() {
                   </div>
                 )}
                 
-                {hasData && !(isLoading || isLoadingTransactions) && (
+                {hasData && (
                   <div>
                     <div className="flex justify-end items-center mb-4">
                       <Button variant="outline" size="sm" onClick={handleDownload}>
@@ -1050,8 +1041,8 @@ export function FinanceFlowClient() {
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {depositData.map((row, i) => (
-                                <TableRow key={i}>
+                              {depositData.map((row) => (
+                                <TableRow key={row.id}>
                                   <TableCell className="font-mono">{row.date}</TableCell>
                                   <TableCell>{row.category}</TableCell>
                                   <TableCell>{row.description}</TableCell>
@@ -1120,7 +1111,7 @@ export function FinanceFlowClient() {
                   </div>
                 )}
 
-                {noDataFound && !(isLoading || isLoadingTransactions) && (
+                {noDataFound && !isLoading && !isLoadingTransactions && (
                   <div className="text-center text-muted-foreground p-8 border-2 border-dashed rounded-lg">
                     <AlertCircle className="mx-auto h-12 w-12" />
                     <p className="mt-4 text-lg">無有效資料</p>
@@ -1135,5 +1126,3 @@ export function FinanceFlowClient() {
     </div>
   );
 }
-
-    

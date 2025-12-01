@@ -1,4 +1,5 @@
 import type { ReplacementRule, CategoryRule } from '@/app/actions';
+import { randomUUID } from 'crypto';
 
 // This is the final, categorized data structure
 export type CreditData = {
@@ -90,6 +91,7 @@ export function parseCreditCard(text: string): RawCreditData[] {
 
 
 export type DepositData = {
+  id: string; // Add ID for uniqueness
   date: string;
   category: string;
   description: string;
@@ -174,8 +176,8 @@ export function parseDepositAccount(text: string, replacementRules: ReplacementR
       
       const category = applyCategoryRules(finalDescription, categoryRules);
 
-      // [date, category, description, amount, blank, bankCode, accountNumber]
-      temp = [currentDate, category, finalDescription, amount, '', '', ''];
+      // [id, date, category, description, amount, blank, bankCode, accountNumber]
+      temp = [randomUUID(), currentDate, category, finalDescription, amount, '', '', ''];
       
       if (!rule.merge_remark && rule.remark_col !== null && temp.length > rule.remark_col) {
         temp[rule.remark_col] = remark;
@@ -187,8 +189,8 @@ export function parseDepositAccount(text: string, replacementRules: ReplacementR
     if (temp && line) {
       const match = line.match(/^([\d/]+)/);
       if (match) {
-        if(temp.length > 5) temp[5] = match[1]; // bankCode
-        if(temp.length > 6) temp[6] = ''; // accountNumber
+        if(temp.length > 6) temp[6] = match[1]; // bankCode
+        if(temp.length > 7) temp[7] = ''; // accountNumber
       }
     }
   }
@@ -198,12 +200,13 @@ export function parseDepositAccount(text: string, replacementRules: ReplacementR
   }
 
   return results.map(r => ({
-    date: r[0] as string,
-    category: r[1] as string,
-    description: r[2] as string,
-    amount: r[3] as number,
-    blank: r[4] as string,
-    bankCode: r[5] as string,
-    accountNumber: r[6] as string,
+    id: r[0] as string,
+    date: r[1] as string,
+    category: r[2] as string,
+    description: r[3] as string,
+    amount: r[4] as number,
+    blank: r[5] as string,
+    bankCode: r[6] as string,
+    accountNumber: r[7] as string,
   }));
 }
