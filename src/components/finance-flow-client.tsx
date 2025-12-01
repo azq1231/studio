@@ -81,7 +81,7 @@ export function FinanceFlowClient() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
   const transactionsQuery = useMemoFirebase(
-    () => (user && firestore ? collection(firestore, 'users', user.uid, 'credit_card_transactions') : null),
+    () => (user && firestore ? collection(firestore, 'users', user.uid, 'creditCardTransactions') : null),
     [user, firestore]
   );
   
@@ -286,49 +286,50 @@ export function FinanceFlowClient() {
 
 
   async function onSubmit(values: StatementFormData) {
-    if (!user) {
-      toast({
-        variant: "destructive",
-        title: "請先登入",
-        description: "您需要登入才能處理並儲存您的報表。",
-      });
-      return;
-    }
-
     setIsLoading(true);
     setHasProcessed(false);
-    // setCreditData([]); // Don't clear local data, it will be replaced by Firestore data on save
+    
+    if (user) {
+      // If user is logged in, don't clear local data, it will be replaced by Firestore data on save
+    } else {
+      setCreditData([]);
+    }
     setDepositData([]);
 
     const { replacementRules, categoryRules } = settingsForm.getValues();
     const result = await processBankStatement(values.statement, replacementRules, categoryRules);
     
     if (result.success) {
-      // Don't set credit data here directly, it will be updated by the useCollection hook
-      // setCreditData(result.creditData); 
-      setDepositData(result.depositData);
-
-      if (result.creditData.length > 0 && firestore && user) {
-        try {
-          const batch = writeBatch(firestore);
-          const transactionsCollection = collection(firestore, 'users', user.uid, 'credit_card_transactions');
-          result.creditData.forEach(transaction => {
-            const docRef = doc(transactionsCollection); // Create a new doc with a unique ID
-            batch.set(docRef, transaction);
-          });
-          await batch.commit();
-          toast({
-            title: "儲存成功",
-            description: `${result.creditData.length} 筆信用卡資料已儲存到您的帳戶。`
-          });
-        } catch (e) {
-          console.error("Error saving to Firestore:", e);
-          toast({
-            variant: "destructive",
-            title: "儲存失敗",
-            description: "無法將資料儲存到資料庫。",
-          });
+      if (user && firestore) {
+        // User is logged in, save to Firestore. `useCollection` will update the UI.
+        if (result.creditData.length > 0) {
+          try {
+            const batch = writeBatch(firestore);
+            const transactionsCollection = collection(firestore, 'users', user.uid, 'creditCardTransactions');
+            result.creditData.forEach(transaction => {
+              const docRef = doc(transactionsCollection); // Create a new doc with a unique ID
+              batch.set(docRef, transaction);
+            });
+            await batch.commit();
+            toast({
+              title: "儲存成功",
+              description: `${result.creditData.length} 筆信用卡資料已儲存到您的帳戶。`
+            });
+          } catch (e) {
+            console.error("Error saving to Firestore:", e);
+            toast({
+              variant: "destructive",
+              title: "儲存失敗",
+              description: "無法將資料儲存到資料庫。",
+            });
+          }
         }
+         // Set deposit data locally as it's not saved to firestore
+        setDepositData(result.depositData);
+      } else {
+        // User is not logged in, just update the local state to show results.
+        setCreditData(result.creditData);
+        setDepositData(result.depositData);
       }
 
       if (result.creditData.length === 0 && result.depositData.length === 0) {
@@ -492,7 +493,7 @@ export function FinanceFlowClient() {
           <CardDescription>
             {isClient && user
               ? "將您的網路銀行報表內容直接複製並貼到下方文字框中，處理後的資料將會自動儲存到您的帳戶。"
-              : "請先登入。登入後，將報表內容貼入下方，處理後的資料將會自動儲存。"}
+              : "將您的網路銀行報表內容直接複製並貼到下方文字框中。如需儲存資料，請先登入。"}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -508,7 +509,7 @@ export function FinanceFlowClient() {
                         placeholder="例如：&#10;11/02	吃	新東陽忠孝一門市	500"
                         className="min-h-[250px] font-mono text-sm bg-background/50"
                         {...field}
-                        disabled={isUserLoading || !user}
+                        disabled={isLoading}
                       />
                     </FormControl>
                     <FormMessage />
@@ -516,9 +517,9 @@ export function FinanceFlowClient() {
                 )}
               />
               <div className="flex justify-end">
-                <Button type="submit" disabled={isLoading || isUserLoading || !user || !statementForm.formState.isValid} className="bg-accent hover:bg-accent/90 text-accent-foreground">
+                <Button type="submit" disabled={isLoading || isUserLoading || !statementForm.formState.isValid} className="bg-accent hover:bg-accent/90 text-accent-foreground">
                   {(isLoading || isUserLoading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  處理並儲存報表
+                  { user ? "處理並儲存報表" : "處理報表" }
                 </Button>
               </div>
             </form>
