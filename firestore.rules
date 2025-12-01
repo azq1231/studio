@@ -1,81 +1,80 @@
 /**
- * Core Philosophy: This ruleset enforces a strict user-ownership model where all data is
- * siloed within a user-specific document tree. The primary goal is to guarantee the privacy
- * and security of sensitive financial transaction data, ensuring that a user can only ever
- * access their own information.
+ * Core Philosophy: This ruleset enforces a strict user-ownership model where all data is private.
+ * Access to any piece of information is granted only if the authenticated user's ID matches the
+ * user ID specified in the document path.
  *
- * Data Structure: All data is organized hierarchically under the `/users/{userId}` path.
- * Each user's document contains two distinct subcollections for their financial data:
- * `creditCardTransactions` and `depositAccountTransactions`. This separation simplifies
- * rules and ensures data integrity.
- *   - /users/{userId}
- *     - /creditCardTransactions/{transactionId}
- *     - /depositAccountTransactions/{transactionId}
+ * Data Structure: All application data is segregated into user-specific subcollections. The top-level
+ * 'users' collection acts as a container, with each user's data stored under a path like
+ * `/users/{userId}/{collectionName}/{documentId}`. This hierarchical structure is the foundation
+ * of the security model.
  *
  * Key Security Decisions:
- * - User data is strictly isolated. Access is granted only when the authenticated user's
- *   UID matches the `{userId}` in the document path.
- * - Listing all users is explicitly disallowed to prevent user enumeration.
- * - The root user document (`/users/{userId}`) is read-only for the owner and cannot be
- *   modified by clients, assuming it is managed server-side.
- * - There is no public or shared data; all collections are private.
+ * - User Isolation: Users are completely isolated from one another. They cannot read, write, or even
+ *   list data belonging to other users.
+ * - No Public Data: All endpoints require authentication.
+ * - User Enumeration Disabled: Listing the top-level `/users` collection is explicitly forbidden to
+ *   prevent discovery of other users on the platform.
+ * - Parent Document Lockdown: Direct access to the `/users/{userId}` document is disallowed. Its
+ *   purpose is solely to group subcollections, not to store data directly. This prevents users from
+
+ *   accidentally deleting their own root document and orphaning their data.
  *
- * Denormalization for Authorization: This ruleset leverages a path-based security model,
- * which is a form of structural denormalization. By placing all of a user's data under a
- * path containing their UID (`/users/{userId}`), authorization checks become extremely
- * fast and simple. We do not need to read other documents (using `get()`) to verify
- * ownership, leading to better performance and lower costs.
+ * Denormalization for Authorization: This ruleset leverages a path-based security model, which is highly
+ * efficient. Authorization decisions are made by inspecting the document's path rather than its content.
+ * Consequently, denormalizing ownership data (like a `userId` field) onto documents is unnecessary,
+ * leading to simpler and more performant rules.
  *
- * Structural Segregation: Credit card transactions and deposit account transactions are
- * stored in separate, dedicated subcollections. This design choice creates homogeneous
- * collections where all documents share the same security context, resulting in cleaner,
- * more maintainable, and more secure rules than if they were mixed in a single collection.
+ * Structural Segregation: User data is naturally segregated by type into distinct subcollections
+ * (`creditCardTransactions`, `depositAccountTransactions`). This clean separation ensures that the
+ * security posture for each data type is uniform and easy to manage, enhancing both security and
+ * performance for list operations.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions to improve readability and reuse of logic.
+    // --------------------------------------------------------------------------------
+    // Helper Functions
+    // --------------------------------------------------------------------------------
 
     /**
-     * Returns true if the user is authenticated.
+     * Checks if the user is authenticated.
      */
     function isSignedIn() {
       return request.auth != null;
     }
 
     /**
-     * Returns true if the currently signed-in user's UID matches the
-     * provided userId from the document path. This is the core function
-     * for enforcing user ownership.
-     * @param userId The UID of the user to check against.
+     * Checks if the currently authenticated user's ID matches the user ID from the path.
+     * This is the primary function for enforcing data ownership.
      */
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
     /**
-     * Returns true if the user is the owner AND the document already exists.
-     * Used for safe update and delete operations.
-     * @param userId The UID of the user to check against.
+     * A stricter version of isOwner used for updates and deletes.
+     * It ensures the document exists before allowing a modification, preventing writes
+     * to non-existent paths.
      */
     function isExistingOwner(userId) {
       return isOwner(userId) && resource != null;
     }
 
+    // --------------------------------------------------------------------------------
+    // User Data Rules
+    // --------------------------------------------------------------------------------
+
     /**
-     * @description   Provides a read-only root document for user-specific data. Disallows
-     *                all client-side writes to prevent modification of core user data and
-     *                forbids listing to prevent user enumeration.
-     * @path          /users/{userId}
-     * @allow         A user (auth.uid: 'user_abc') can read their own user document at `/users/user_abc`. (get)
-     * @deny          A user (auth.uid: 'user_xyz') CANNOT read another user's document at `/users/user_abc`. (get)
-     * @deny          No user can list all documents in the `/users` collection. (list)
-     * @deny          No user can create, update, or delete their own user document. (create, update, delete)
-     * @principle     Restricts access to a user's own data tree and prevents user enumeration.
+     * @description Locks down the top-level user documents. Their sole purpose is to organize subcollections.
+     *   This prevents user enumeration and stops users from deleting their own root document.
+     * @path /users/USER_123
+     * @allow (none) - No direct operations are permitted on this path.
+     * @deny A user attempting to `get` or `list` from `/users`. A user attempting to `create` their own document at `/users/USER_123`.
+     * @principle Enforces strict data segregation and prevents user enumeration by disallowing listing of the root collection.
      */
     match /users/{userId} {
-      allow get: if isOwner(userId);
+      allow get: if false;
       allow list: if false;
       allow create: if false;
       allow update: if false;
@@ -83,13 +82,11 @@ service cloud.firestore {
     }
 
     /**
-     * @description   Secures a user's private credit card transactions. Only the user who
-     *                owns this data can perform any read or write operations.
-     * @path          /users/{userId}/creditCardTransactions/{transactionId}
-     * @allow         A user (auth.uid: 'user_abc') can create a new transaction at `/users/user_abc/creditCardTransactions/trans_123`. (create)
-     * @allow         The same user can read, update, or delete that transaction. (get, update, delete)
-     * @deny          Another user (auth.uid: 'user_xyz') CANNOT read or write to `/users/user_abc/creditCardTransactions/trans_123`.
-     * @principle     Enforces strict data ownership for all operations within a user's private subcollection.
+     * @description Secures a user's private credit card transactions. Only the user who owns this data tree can access it.
+     * @path /users/USER_123/creditCardTransactions/TXN_ABC
+     * @allow A user with auth.uid 'USER_123' can (create), (get), (update), or (delete) their own transaction.
+     * @deny A different user with auth.uid 'USER_456' is blocked from all operations on this path.
+     * @principle Restricts access to a user's own data tree. All operations are scoped to the authenticated owner.
      */
     match /users/{userId}/creditCardTransactions/{transactionId} {
       allow get: if isOwner(userId);
@@ -100,13 +97,11 @@ service cloud.firestore {
     }
 
     /**
-     * @description   Secures a user's private deposit account transactions. Only the user
-     *                who owns this data can perform any read or write operations.
-     * @path          /users/{userId}/depositAccountTransactions/{transactionId}
-     * @allow         A user (auth.uid: 'user_abc') can create a new transaction at `/users/user_abc/depositAccountTransactions/trans_456`. (create)
-     * @allow         The same user can read, update, or delete that transaction. (get, update, delete)
-     * @deny          Another user (auth.uid: 'user_xyz') CANNOT read or write to `/users/user_abc/depositAccountTransactions/trans_456`.
-     * @principle     Enforces strict data ownership for all operations within a user's private subcollection.
+     * @description Secures a user's private deposit account transactions. Only the user who owns this data tree can access it.
+     * @path /users/USER_123/depositAccountTransactions/TXN_XYZ
+     * @allow A user with auth.uid 'USER_123' can (create), (get), (update), or (delete) their own transaction.
+     * @deny A different user with auth.uid 'USER_456' is blocked from all operations on this path.
+     * @principle Restricts access to a user's own data tree. All operations are scoped to the authenticated owner.
      */
     match /users/{userId}/depositAccountTransactions/{transactionId} {
       allow get: if isOwner(userId);
