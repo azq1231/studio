@@ -18,7 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast"
-import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings, Tags, Edit } from 'lucide-react';
+import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings } from 'lucide-react';
 import { processBankStatement, type ReplacementRule, type CategoryRule } from '@/app/actions';
 import type { CreditData, DepositData } from '@/lib/parser';
 
@@ -382,61 +382,72 @@ export function FinanceFlowClient() {
                         <CardDescription className="mb-4">
                           設定自動取代或刪除規則。勾選「刪除整筆資料」後，符合條件的資料將被整筆移除。
                         </CardDescription>
-                        <div className="space-y-4 max-h-72 overflow-y-auto pr-2">
-                          {replacementFields.map((field, index) => (
-                            <div key={field.id} className="p-3 border rounded-md space-y-3 bg-background/50">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="rounded-md border">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-2/5">尋找文字</TableHead>
+                                <TableHead className="w-2/5">取代為</TableHead>
+                                <TableHead className="w-1/5">刪除整筆資料</TableHead>
+                                <TableHead className="w-[50px]">操作</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {replacementFields.map((field, index) => (
+                                <TableRow key={field.id}>
+                                  <TableCell className="p-1">
                                     <FormField
-                                        control={settingsForm.control}
-                                        name={`replacementRules.${index}.find`}
-                                        render={({ field }) => (
+                                      control={settingsForm.control}
+                                      name={`replacementRules.${index}.find`}
+                                      render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel>尋找文字</FormLabel>
-                                            <FormControl>
-                                            <Input placeholder="要被取代的文字" {...field} />
-                                            </FormControl>
-                                            <FormMessage />
+                                          <FormControl>
+                                            <Input placeholder="要被取代的文字" {...field} className="h-9"/>
+                                          </FormControl>
+                                          <FormMessage className="text-xs px-2"/>
                                         </FormItem>
-                                        )}
+                                      )}
                                     />
+                                  </TableCell>
+                                  <TableCell className="p-1">
                                     <FormField
-                                        control={settingsForm.control}
-                                        name={`replacementRules.${index}.replace`}
-                                        render={({ field }) => (
+                                      control={settingsForm.control}
+                                      name={`replacementRules.${index}.replace`}
+                                      render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel>取代為</FormLabel>
-                                            <FormControl>
-                                            <Input placeholder="新的文字 (留空為刪除文字)" {...field} />
-                                            </FormControl>
-                                            <FormMessage />
+                                          <FormControl>
+                                            <Input placeholder="新的文字 (留空為刪除)" {...field} className="h-9"/>
+                                          </FormControl>
+                                           <FormMessage className="text-xs px-2"/>
                                         </FormItem>
-                                        )}
+                                      )}
                                     />
-                                </div>
-                                <div className="flex items-center justify-between">
-                                  <FormField
+                                  </TableCell>
+                                  <TableCell className="p-1 text-center">
+                                    <FormField
                                       control={settingsForm.control}
                                       name={`replacementRules.${index}.deleteRow`}
                                       render={({ field }) => (
-                                        <FormItem className="flex flex-row items-center space-x-2 space-y-0">
+                                        <FormItem className="flex justify-center items-center">
                                           <FormControl>
                                             <Checkbox
                                               checked={field.value}
                                               onCheckedChange={field.onChange}
                                             />
                                           </FormControl>
-                                          <FormLabel className="font-normal text-sm text-muted-foreground">
-                                            刪除整筆資料
-                                          </FormLabel>
                                         </FormItem>
                                       )}
                                     />
-                                    <Button type="button" variant="ghost" size="icon" onClick={() => removeReplacement(index)}>
-                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                  </TableCell>
+                                  <TableCell className="p-1">
+                                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeReplacement(index)}>
+                                      <Trash2 className="h-4 w-4 text-destructive" />
                                     </Button>
-                                </div>
-                            </div>
-                          ))}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
                         </div>
                          <Button
                           type="button"
@@ -453,32 +464,41 @@ export function FinanceFlowClient() {
                         <CardDescription className="mb-4">
                            設定交易項目關鍵字與對應的類型。處理報表時，將會自動帶入符合的第一個類型。
                         </CardDescription>
-                         <div className="space-y-4 max-h-72 overflow-y-auto pr-2">
-                          {categoryFields.map((field, index) => (
-                            <div key={field.id} className="p-3 border rounded-md space-y-3 bg-background/50">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
-                                    <FormField
+                        <div className="rounded-md border">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-1/2">關鍵字</TableHead>
+                                <TableHead className="w-1/2">類型</TableHead>
+                                <TableHead className="w-[50px]">操作</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {categoryFields.map((field, index) => (
+                                <TableRow key={field.id}>
+                                  <TableCell className="p-1">
+                                      <FormField
                                         control={settingsForm.control}
                                         name={`categoryRules.${index}.keyword`}
                                         render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel>關鍵字</FormLabel>
                                             <FormControl>
-                                            <Input placeholder="交易項目中的文字" {...field} />
+                                            <Input placeholder="交易項目中的文字" {...field} className="h-9"/>
                                             </FormControl>
-                                            <FormMessage />
+                                            <FormMessage className="text-xs px-2"/>
                                         </FormItem>
                                         )}
                                     />
-                                    <FormField
+                                  </TableCell>
+                                   <TableCell className="p-1">
+                                     <FormField
                                         control={settingsForm.control}
                                         name={`categoryRules.${index}.category`}
                                         render={({ field }) => (
                                             <FormItem>
-                                                <FormLabel>類型</FormLabel>
                                                 <Select onValueChange={field.onChange} defaultValue={field.value}>
                                                     <FormControl>
-                                                        <SelectTrigger>
+                                                        <SelectTrigger className="h-9">
                                                             <SelectValue placeholder="選擇一個類型" />
                                                         </SelectTrigger>
                                                     </FormControl>
@@ -488,18 +508,20 @@ export function FinanceFlowClient() {
                                                         ))}
                                                     </SelectContent>
                                                 </Select>
-                                                <FormMessage />
+                                                <FormMessage className="text-xs px-2"/>
                                             </FormItem>
                                         )}
                                     />
-                                </div>
-                                <div className="flex justify-end">
-                                    <Button type="button" variant="ghost" size="icon" onClick={() => removeCategory(index)}>
-                                        <Trash2 className="h-4 w-4 text-destructive" />
-                                    </Button>
-                                </div>
-                            </div>
-                          ))}
+                                   </TableCell>
+                                  <TableCell className="p-1">
+                                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeCategory(index)}>
+                                          <Trash2 className="h-4 w-4 text-destructive" />
+                                      </Button>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
                         </div>
                          <Button
                           type="button"
