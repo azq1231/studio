@@ -231,20 +231,24 @@ export function FinanceFlowClient() {
 
     setCreditData(prevData => {
         if (!user || !savedTransactions) {
+            // No user or no saved transactions, keep the existing client-side data
             return prevData;
         }
 
         const existingIds = new Set(prevData.map(d => d.id));
+        // Filter out saved transactions that are already present in the local state
         const newSaved = savedTransactions.filter(t => !existingIds.has(t.id));
         
         if (newSaved.length === 0) {
-            // If the saved data is just a subset of what's already on screen, no need to merge
+            // Optimization: if all saved transactions are already in local state, do nothing.
             if (savedTransactions.every(st => existingIds.has(st.id))) {
                 return prevData;
             }
         }
-
+        
+        // Merge local data with new data from Firestore
         const mergedData = [...prevData, ...newSaved];
+        // Ensure uniqueness just in case of any overlap
         const uniqueData = Array.from(new Map(mergedData.map(item => [item.id, item])).values());
         
         return uniqueData;
@@ -295,12 +299,11 @@ export function FinanceFlowClient() {
 
       if (savedCategoryRulesRaw) {
         const savedRules = JSON.parse(savedCategoryRulesRaw) as CategoryRule[];
-        const finalRulesMap = new Map(savedRules.map(r => [r.keyword, r]));
-        
-        DEFAULT_CATEGORY_RULES.forEach(defaultRule => {
-            if (!finalRulesMap.has(defaultRule.keyword)) {
-                finalRulesMap.set(defaultRule.keyword, defaultRule);
-            }
+        // Use a Map to prioritize user-saved rules over defaults.
+        // Start with defaults, then overwrite with user's saved rules.
+        const finalRulesMap = new Map(DEFAULT_CATEGORY_RULES.map(r => [r.keyword, r]));
+        savedRules.forEach(savedRule => {
+            finalRulesMap.set(savedRule.keyword, savedRule);
         });
         finalCategoryRules = Array.from(finalRulesMap.values());
       }
@@ -386,6 +389,7 @@ export function FinanceFlowClient() {
           const transactionsCollection = collection(firestore, 'users', user.uid, 'creditCardTransactions');
           result.creditData.forEach(transaction => {
             const docRef = doc(transactionsCollection, transaction.id);
+            // Use set with merge:true to create or overwrite.
             batch.set(docRef, transaction, { merge: true });
           });
           await batch.commit();
@@ -393,12 +397,12 @@ export function FinanceFlowClient() {
             title: "儲存成功",
             description: `${result.creditData.length} 筆新資料已自動儲存到您的帳戶。`
           });
-        } catch (e) {
+        } catch (e: any) {
           console.error("Error saving to Firestore:", e);
           toast({
             variant: "destructive",
             title: "儲存失敗",
-            description: "無法將資料儲存到資料庫。",
+            description: e.message || "無法將資料儲存到資料庫。",
           });
         }
       } 
