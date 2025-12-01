@@ -1,92 +1,116 @@
 /**
- * This ruleset enforces a strict user-ownership security model for a financial
- * transaction application. The core philosophy is that all data is private and
- * belongs exclusively to the user who created it.
+ * Core Philosophy: This ruleset enforces a strict user-ownership model where all data is
+ * siloed within a user-specific document tree. The primary goal is to guarantee the privacy
+ * and security of sensitive financial transaction data, ensuring that a user can only ever
+ * access their own information.
  *
- * Data Structure:
- * All user-specific data, such as credit card and deposit account transactions,
- * is nested within a user-specific document path: /users/{userId}/...
- * This hierarchical structure makes ownership clear and security rules simple.
+ * Data Structure: All data is organized hierarchically under the `/users/{userId}` path.
+ * Each user's document contains two distinct subcollections for their financial data:
+ * `creditCardTransactions` and `depositAccountTransactions`. This separation simplifies
+ * rules and ensures data integrity.
+ *   - /users/{userId}
+ *     - /creditCardTransactions/{transactionId}
+ *     - /depositAccountTransactions/{transactionId}
  *
  * Key Security Decisions:
- * - Strict Ownership: A user can only access data (read, write, delete) if their
- *   authenticated UID matches the {userId} in the document path.
- * - No Public Data: There are no publicly readable collections. All access
- *   requires authentication.
- * - No User Listing: The rules do not allow querying the top-level `/users`
- *   collection, preventing enumeration of all application users.
- * - Path-Based Security: Authorization decisions rely on the document path,
- *   which is a fast and cost-effective strategy that avoids extra database reads
- *   (get() calls) within the rules.
+ * - User data is strictly isolated. Access is granted only when the authenticated user's
+ *   UID matches the `{userId}` in the document path.
+ * - Listing all users is explicitly disallowed to prevent user enumeration.
+ * - The root user document (`/users/{userId}`) is read-only for the owner and cannot be
+ *   modified by clients, assuming it is managed server-side.
+ * - There is no public or shared data; all collections are private.
+ *
+ * Denormalization for Authorization: This ruleset leverages a path-based security model,
+ * which is a form of structural denormalization. By placing all of a user's data under a
+ * path containing their UID (`/users/{userId}`), authorization checks become extremely
+ * fast and simple. We do not need to read other documents (using `get()`) to verify
+ * ownership, leading to better performance and lower costs.
+ *
+ * Structural Segregation: Credit card transactions and deposit account transactions are
+ * stored in separate, dedicated subcollections. This design choice creates homogeneous
+ * collections where all documents share the same security context, resulting in cleaner,
+ * more maintainable, and more secure rules than if they were mixed in a single collection.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ------------------------------------------------------------------------
-    // Helper Functions
-    // ------------------------------------------------------------------------
+    // Helper functions to improve readability and reuse of logic.
 
     /**
-     * Checks if the user is authenticated.
+     * Returns true if the user is authenticated.
      */
     function isSignedIn() {
       return request.auth != null;
     }
 
     /**
-     * Validates if the currently authenticated user's ID matches the
-     * document's owner ID from the path. This is the primary function for
-     * establishing ownership.
+     * Returns true if the currently signed-in user's UID matches the
+     * provided userId from the document path. This is the core function
+     * for enforcing user ownership.
+     * @param userId The UID of the user to check against.
      */
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
     /**
-     * Ensures that a document exists before allowing an update or delete,
-     * in addition to verifying ownership. This prevents writes on documents
-     * that have been deleted.
+     * Returns true if the user is the owner AND the document already exists.
+     * Used for safe update and delete operations.
+     * @param userId The UID of the user to check against.
      */
     function isExistingOwner(userId) {
       return isOwner(userId) && resource != null;
     }
 
-    // ------------------------------------------------------------------------
-    // Collection Rules
-    // ------------------------------------------------------------------------
+    /**
+     * @description   Provides a read-only root document for user-specific data. Disallows
+     *                all client-side writes to prevent modification of core user data and
+     *                forbids listing to prevent user enumeration.
+     * @path          /users/{userId}
+     * @allow         A user (auth.uid: 'user_abc') can read their own user document at `/users/user_abc`. (get)
+     * @deny          A user (auth.uid: 'user_xyz') CANNOT read another user's document at `/users/user_abc`. (get)
+     * @deny          No user can list all documents in the `/users` collection. (list)
+     * @deny          No user can create, update, or delete their own user document. (create, update, delete)
+     * @principle     Restricts access to a user's own data tree and prevents user enumeration.
+     */
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
+    }
 
     /**
-     * @description Controls access to a user's private credit card transactions.
-     * @path /users/{userId}/creditCardTransactions/{transactionId}
-     * @allow A user (UID 'user123') creating a new transaction for themselves. (auth.uid == 'user123', path == '/users/user123/...')
-     * @deny A different user (UID 'user456') attempting to read transactions for 'user123'. (auth.uid == 'user456', path == '/users/user123/...')
-     * @principle Restricts access to a user's own data tree. Only the owner can view or manage their financial data.
+     * @description   Secures a user's private credit card transactions. Only the user who
+     *                owns this data can perform any read or write operations.
+     * @path          /users/{userId}/creditCardTransactions/{transactionId}
+     * @allow         A user (auth.uid: 'user_abc') can create a new transaction at `/users/user_abc/creditCardTransactions/trans_123`. (create)
+     * @allow         The same user can read, update, or delete that transaction. (get, update, delete)
+     * @deny          Another user (auth.uid: 'user_xyz') CANNOT read or write to `/users/user_abc/creditCardTransactions/trans_123`.
+     * @principle     Enforces strict data ownership for all operations within a user's private subcollection.
      */
     match /users/{userId}/creditCardTransactions/{transactionId} {
-      // READ: Owner can get a single document or list all their documents.
       allow get: if isOwner(userId);
       allow list: if isOwner(userId);
-
-      // WRITE: Owner can create, update, and delete their own documents.
       allow create: if isOwner(userId);
       allow update: if isExistingOwner(userId);
       allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Controls access to a user's private deposit account transactions.
-     * @path /users/{userId}/depositAccountTransactions/{transactionId}
-     * @allow A user (UID 'user123') deleting one of their own transactions. (auth.uid == 'user123', path == '/users/user123/...')
-     * @deny An unauthenticated user attempting to list any transactions. (auth == null)
-     * @principle Restricts access to a user's own data tree. Only the owner can view or manage their financial data.
+     * @description   Secures a user's private deposit account transactions. Only the user
+     *                who owns this data can perform any read or write operations.
+     * @path          /users/{userId}/depositAccountTransactions/{transactionId}
+     * @allow         A user (auth.uid: 'user_abc') can create a new transaction at `/users/user_abc/depositAccountTransactions/trans_456`. (create)
+     * @allow         The same user can read, update, or delete that transaction. (get, update, delete)
+     * @deny          Another user (auth.uid: 'user_xyz') CANNOT read or write to `/users/user_abc/depositAccountTransactions/trans_456`.
+     * @principle     Enforces strict data ownership for all operations within a user's private subcollection.
      */
     match /users/{userId}/depositAccountTransactions/{transactionId} {
-      // READ: Owner can get a single document or list all their documents.
       allow get: if isOwner(userId);
       allow list: if isOwner(userId);
-
-      // WRITE: Owner can create, update, and delete their own documents.
       allow create: if isOwner(userId);
       allow update: if isExistingOwner(userId);
       allow delete: if isExistingOwner(userId);

@@ -4,7 +4,7 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "CreditCardTransaction",
       "type": "object",
-      "description": "Represents a single credit card transaction.",
+      "description": "Represents a single credit card transaction record.",
       "properties": {
         "id": {
           "type": "string",
@@ -12,27 +12,26 @@
         },
         "transactionDate": {
           "type": "string",
-          "description": "The date the transaction occurred.",
+          "description": "The date when the transaction occurred, in YYYY-MM-DD format.",
           "format": "date"
         },
         "postingDate": {
           "type": "string",
-          "description": "The date the transaction was posted to the account.",
+          "description": "The date when the transaction was posted to the account, in YYYY-MM-DD format.",
           "format": "date"
         },
         "description": {
           "type": "string",
-          "description": "A description of the transaction."
+          "description": "A description of the transaction, including the merchant or service."
         },
         "amount": {
           "type": "number",
-          "description": "The amount of the transaction."
+          "description": "The amount of the transaction. Positive for charges, negative for credits."
         }
       },
       "required": [
         "id",
         "transactionDate",
-        "postingDate",
         "description",
         "amount"
       ]
@@ -41,7 +40,7 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "DepositAccountTransaction",
       "type": "object",
-      "description": "Represents a single transaction in a deposit account.",
+      "description": "Represents a single transaction record for a deposit account.",
       "properties": {
         "id": {
           "type": "string",
@@ -49,34 +48,34 @@
         },
         "transactionDate": {
           "type": "string",
-          "description": "The date the transaction occurred.",
+          "description": "The date when the transaction occurred, in YYYY-MM-DD format.",
           "format": "date"
         },
-        "time": {
+        "transactionTime": {
           "type": "string",
-          "description": "The time the transaction occurred."
+          "description": "The time when the transaction occurred, in HH:MM:SS format."
         },
         "description": {
           "type": "string",
-          "description": "A description of the transaction, including combined summary and passbook remarks."
+          "description": "A description of the transaction."
         },
         "amount": {
           "type": "number",
-          "description": "The amount of the transaction (positive for withdrawals, negative for deposits)."
+          "description": "The amount of the transaction. Positive for withdrawals, negative for deposits."
         },
-        "counterpartyBankCode": {
+        "otherPartyBankCode": {
           "type": "string",
-          "description": "The bank code of the counterparty."
+          "description": "The bank code of the other party involved in the transaction, if applicable."
         },
-        "counterpartyAccountNumber": {
+        "otherPartyAccountNumber": {
           "type": "string",
-          "description": "The account number of the counterparty."
+          "description": "The account number of the other party involved in the transaction, if applicable."
         }
       },
       "required": [
         "id",
         "transactionDate",
-        "time",
+        "transactionTime",
         "description",
         "amount"
       ]
@@ -97,11 +96,11 @@
           "schema": {
             "$ref": "#/backend/entities/CreditCardTransaction"
           },
-          "description": "Stores credit card transaction data for a specific user. The userId parameter identifies the owner of the transactions.",
+          "description": "Stores credit card transactions for a specific user. Only the user with the matching userId can access these transactions.",
           "params": [
             {
               "name": "userId",
-              "description": "The unique identifier of the user who owns the transaction."
+              "description": "The unique identifier of the user."
             },
             {
               "name": "transactionId",
@@ -117,11 +116,11 @@
           "schema": {
             "$ref": "#/backend/entities/DepositAccountTransaction"
           },
-          "description": "Stores deposit account transaction data for a specific user. The userId parameter identifies the owner of the transactions.",
+          "description": "Stores deposit account transactions for a specific user. Only the user with the matching userId can access these transactions.",
           "params": [
             {
               "name": "userId",
-              "description": "The unique identifier of the user who owns the transaction."
+              "description": "The unique identifier of the user."
             },
             {
               "name": "transactionId",
@@ -131,6 +130,6 @@
         }
       }
     ],
-    "reasoning": "The Firestore data structure is designed to securely store and manage financial transaction data parsed from user-provided bank statements. It prioritizes authorization independence, clarity, and scalability.  Given that users parse data from their own bank statements, the primary authorization model is path-based ownership under each user's document.  This approach avoids complex authorization logic and enables atomic operations.  The structure leverages structural segregation, separating credit card transactions and deposit account transactions into distinct subcollections under each user's document to simplify security rules and improve query performance. Each document contains only the data it needs, eliminating unnecessary data transfer and reducing storage costs. Finally, the structure models data clarity through standard naming and explicit data types to improve maintainability.\n\n**Authorization Independence:** Authorization is achieved through path-based ownership under `/users/{userId}`.  No `get()` calls are needed in security rules because access control is based on the user's ID in the path. The `userId` parameter identifies the owner of the transactions.\n\n**QAPs (Rules are not Filters):** The path-based ownership structure enables secure `list` operations.  A user can only list transactions under their own `userId`, which is validated in the security rules.\n\n**Denormalization:** While not explicitly denormalizing user roles in this scenario (since access is based solely on ownership), one could extend the model to include shared accounts, in which case the `members` map and role definitions should be denormalized onto the documents."
+    "reasoning": "This design prioritizes security and scalability for the FinanceFlow application. Given that users will be pasting bank statements and the application will parse and present this data, the structure focuses on isolating user data. Each user has exclusive access to their parsed transactions, ensuring privacy and preventing unauthorized access.\n\nAuthorization Independence: The design uses path-based ownership under `/users/{userId}`. This structure inherently provides authorization independence because access control is determined directly by the path and the authenticated user's ID (`request.auth.uid`). No `get()` calls are required in the security rules to check parent document properties.\n\nQAPs (Rules are not Filters):\n*   Secure List Operations: Because data is segregated by user ID, listing transactions is inherently secure. Rules can easily allow listing all documents under `/users/{userId}/creditCardTransactions` or `/users/{userId}/depositAccountTransactions` where `request.auth.uid == userId`. There's no need to filter based on document content, avoiding the 'rules are not filters' problem.\n*   Ownership: Path-based ownership (`/users/{userId}`) makes ownership clear and enforceable in security rules.\n\nThe design segregates credit card and deposit account transactions into separate subcollections under each user to maintain a homogeneous security posture within each collection, simplifying rules. The structure is:\n\n/users/{userId}/creditCardTransactions/{transactionId}\n/users/{userId}/depositAccountTransactions/{transactionId}\n\nThis ensures that all documents in a collection share the same security requirements (owned by the user), avoiding the need for complex rule logic based on document content."
   }
 }
