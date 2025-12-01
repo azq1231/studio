@@ -101,14 +101,42 @@ export function FinanceFlowClient() {
         }
       } else {
         settingsForm.setValue('categoryRules', [
-          { keyword: '新東陽', category: '餐飲' },
-          { keyword: '全家', category: '餐飲' },
-          { keyword: '統一超商', category: '餐飲' },
-          { keyword: '加油站', category: '交通' },
-          { keyword: '全聯', category: '居家' },
-          { keyword: '麗冠有線電視', category: '固定支出' },
-          { keyword: '台灣電力', category: '固定支出' },
-          { keyword: '國外交易服務費', category: '雜項' },
+          { keyword: 'VULTR', category: '方' },
+          { keyword: '國外交易服務費', category: '方' },
+          { keyword: 'GOOGLE*CLOUD', category: '方' },
+          { keyword: '悠遊卡自動加值', category: '方' },
+          { keyword: 'REPLIT, INC.', category: '方' },
+          { keyword: '伯朗咖啡', category: '方' },
+          { keyword: '柒號洋樓', category: '方' },
+          { keyword: '新東陽', category: '吃' },
+          { keyword: '全家', category: '吃' },
+          { keyword: '元心燃麻辣堂', category: '吃' },
+          { keyword: '統一超商', category: '吃' },
+          { keyword: '玉喜飯店', category: '吃' },
+          { keyword: '爭鮮', category: '吃' },
+          { keyword: '八方雲集', category: '吃' },
+          { keyword: '樂活養生健康鍋', category: '吃' },
+          { keyword: '順成西點麵包', category: '吃' },
+          { keyword: '誠品生活', category: '吃' },
+          { keyword: '星巴克－自動加值', category: '吃' },
+          { keyword: 'COMFORT BURGER', category: '吃' },
+          { keyword: '雙月食品社', category: '吃' },
+          { keyword: '加油站', category: '家' },
+          { keyword: '全聯', category: '家' },
+          { keyword: '55688', category: '家' },
+          { keyword: 'IKEA', category: '家' },
+          { keyword: '優步', category: '家' },
+          { keyword: 'OP錢包', category: '家' },
+          { keyword: 'NET', category: '家' },
+          { keyword: '麗冠有線電視', category: '固定' },
+          { keyword: '09202***01', category: '固定' },
+          { keyword: '國都汽車', category: '固定' },
+          { keyword: '台灣電力', category: '固定' },
+          { keyword: '橙印良品', category: '蘇' },
+          { keyword: 'PayEasy', category: '蘇' },
+          { keyword: '金玉堂', category: '秀' },
+          { keyword: '秀泰全球影城', category: '吃' }, // Per user's list
+          { keyword: '寶雅', category: '秀' },
         ]);
       }
     } catch (e) {
@@ -226,7 +254,7 @@ export function FinanceFlowClient() {
                   <FormItem>
                     <FormControl>
                       <Textarea
-                        placeholder="例如：&#10;11/02	11/03	新東陽忠孝一門市	500"
+                        placeholder="例如：&#10;11/02	吃	新東陽忠孝一門市	500"
                         className="min-h-[250px] font-mono text-sm bg-background/50"
                         {...field}
                       />
@@ -259,7 +287,7 @@ export function FinanceFlowClient() {
               <CardContent className="pt-6">
                  <Form {...settingsForm}>
                   <form onSubmit={settingsForm.handleSubmit(handleSaveSettings)} className="space-y-6">
-                    <Tabs defaultValue="replacement">
+                    <Tabs defaultValue="category">
                       <TabsList className="grid w-full grid-cols-2">
                         <TabsTrigger value="replacement">取代規則</TabsTrigger>
                         <TabsTrigger value="category">分類規則</TabsTrigger>
@@ -498,3 +526,5 @@ export function FinanceFlowClient() {
     </div>
   );
 }
+
+    
