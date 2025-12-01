@@ -14,8 +14,9 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
-import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithRedirect } from 'firebase/auth';
 import { LogIn, LogOut } from 'lucide-react';
+import { signOut } from 'firebase/auth';
 
 export function AuthButton() {
   const { user, isUserLoading } = useUser();
@@ -24,7 +25,7 @@ export function AuthButton() {
   const handleLogin = async () => {
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithPopup(auth, provider);
+      await signInWithRedirect(auth, provider);
     } catch (error) {
       console.error('Error signing in with Google', error);
     }
