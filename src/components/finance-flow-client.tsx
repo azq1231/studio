@@ -118,14 +118,23 @@ export function FinanceFlowClient() {
   });
 
   useEffect(() => {
+    let mergedData: CreditData[] = [];
+    if (savedTransactions) {
+      mergedData = [...savedTransactions];
+    }
+  
+    const savedIds = new Set(savedTransactions?.map(t => t.id) || []);
+    const localOnlyData = creditData.filter(t => !savedIds.has(t.id));
+    mergedData.push(...localOnlyData);
+
+    // Filter out duplicates that might come from local state after processing
+    const uniqueData = Array.from(new Map(mergedData.map(item => [item.id, item])).values());
+  
     if (!isUserLoading && user) {
-        const mergedData = [...(savedTransactions || [])];
-        const savedIds = new Set(savedTransactions?.map(t => t.id));
-        const localOnlyData = creditData.filter(t => !savedIds.has(t.id));
-        mergedData.push(...localOnlyData);
-        setCreditData(mergedData);
+      setCreditData(uniqueData);
     } else if (!isUserLoading && !user) {
-        setCreditData(creditData);
+      // If logged out, only show the non-saved (local) data.
+      setCreditData(creditData);
     }
   }, [user, isUserLoading, savedTransactions]);
 
@@ -311,10 +320,10 @@ export function FinanceFlowClient() {
     const { replacementRules, categoryRules } = settingsForm.getValues();
     const result = await processBankStatement(values.statement, replacementRules, categoryRules);
     
-    setCreditData(result.creditData);
-    setDepositData(result.depositData);
-
     if (result.success) {
+      setCreditData(result.creditData);
+      setDepositData(result.depositData);
+
       if (user && firestore && result.creditData.length > 0) {
         try {
           const batch = writeBatch(firestore);
@@ -1066,5 +1075,7 @@ export function FinanceFlowClient() {
     </div>
   );
 }
+
+    
 
     
