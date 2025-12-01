@@ -18,7 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings } from 'lucide-react';
-import { processBankStatement, type ReplacementRule } from '@/app/actions';
+import { processBankStatement, type ReplacementRule, type CategoryRule } from '@/app/actions';
 import type { CreditData, DepositData } from '@/lib/parser';
 
 
@@ -32,8 +32,14 @@ const replacementRuleSchema = z.object({
   deleteRow: z.boolean().default(false),
 });
 
+const categoryRuleSchema = z.object({
+  keyword: z.string().min(1, { message: '請輸入關鍵字' }),
+  category: z.string().min(1, { message: '請輸入類型' }),
+});
+
 const settingsFormSchema = z.object({
-  rules: z.array(replacementRuleSchema),
+  replacementRules: z.array(replacementRuleSchema),
+  categoryRules: z.array(categoryRuleSchema),
 });
 
 type StatementFormData = z.infer<typeof statementFormSchema>;
@@ -56,45 +62,67 @@ export function FinanceFlowClient() {
   const settingsForm = useForm<SettingsFormData>({
     resolver: zodResolver(settingsFormSchema),
     defaultValues: {
-      rules: [],
+      replacementRules: [],
+      categoryRules: [],
     },
   });
 
-  const { fields, append, remove } = useFieldArray({
+  const { fields: replacementFields, append: appendReplacement, remove: removeReplacement } = useFieldArray({
     control: settingsForm.control,
-    name: 'rules',
+    name: 'replacementRules',
   });
+  
+  const { fields: categoryFields, append: appendCategory, remove: removeCategory } = useFieldArray({
+    control: settingsForm.control,
+    name: 'categoryRules',
+  });
+
 
   useEffect(() => {
     try {
-      const savedRules = localStorage.getItem('replacementRules');
-      if (savedRules) {
-        const parsedRules = JSON.parse(savedRules);
-        if (Array.isArray(parsedRules)) {
-           settingsForm.reset({ rules: parsedRules });
+      const savedReplacementRules = localStorage.getItem('replacementRules');
+      if (savedReplacementRules) {
+        const parsed = JSON.parse(savedReplacementRules);
+        if (Array.isArray(parsed)) {
+           settingsForm.setValue('replacementRules', parsed);
         }
       } else {
-        // Set default rules if nothing is saved
-        settingsForm.reset({ rules: [
+        settingsForm.setValue('replacementRules', [
           { find: '行銀非約跨優', replace: '', deleteRow: false },
           { find: 'ＣＤＭ存款', replace: '', deleteRow: true }
-        ] });
+        ]);
+      }
+
+      const savedCategoryRules = localStorage.getItem('categoryRules');
+       if (savedCategoryRules) {
+        const parsed = JSON.parse(savedCategoryRules);
+        if (Array.isArray(parsed)) {
+           settingsForm.setValue('categoryRules', parsed);
+        }
+      } else {
+        settingsForm.setValue('categoryRules', [
+          { keyword: '新東陽', category: '餐飲' },
+          { keyword: '全家', category: '餐飲' },
+          { keyword: '統一超商', category: '餐飲' },
+          { keyword: '加油站', category: '交通' },
+          { keyword: '全聯', category: '居家' },
+          { keyword: '麗冠有線電視', category: '固定支出' },
+          { keyword: '台灣電力', category: '固定支出' },
+          { keyword: '國外交易服務費', category: '雜項' },
+        ]);
       }
     } catch (e) {
-      console.error("Failed to load replacement rules from localStorage", e);
-      settingsForm.reset({ rules: [
-          { find: '行銀非約跨優', replace: '', deleteRow: false },
-          { find: 'ＣＤＭ存款', replace: '', deleteRow: true }
-      ] });
+      console.error("Failed to load rules from localStorage", e);
     }
   }, [settingsForm]);
 
   const handleSaveSettings = (data: SettingsFormData) => {
     try {
-      localStorage.setItem('replacementRules', JSON.stringify(data.rules));
+      localStorage.setItem('replacementRules', JSON.stringify(data.replacementRules));
+      localStorage.setItem('categoryRules', JSON.stringify(data.categoryRules));
       toast({
         title: "設定已儲存",
-        description: "您的取代規則已成功儲存。",
+        description: "您的規則已成功儲存。",
       });
     } catch (e) {
        toast({
@@ -111,8 +139,8 @@ export function FinanceFlowClient() {
     setCreditData([]);
     setDepositData([]);
 
-    const replacementRules = settingsForm.getValues('rules');
-    const result = await processBankStatement(values.statement, replacementRules);
+    const { replacementRules, categoryRules } = settingsForm.getValues();
+    const result = await processBankStatement(values.statement, replacementRules, categoryRules);
     
     if (result.success) {
       setCreditData(result.creditData);
@@ -121,7 +149,7 @@ export function FinanceFlowClient() {
         toast({
           variant: "default",
           title: "提醒",
-          description: "未解析到任何有效資料，請檢查您的報表格式或取代規則是否正確。",
+          description: "未解析到任何有效資料，請檢查您的報表格式或規則是否正確。",
         });
       }
     } else {
@@ -198,7 +226,7 @@ export function FinanceFlowClient() {
                   <FormItem>
                     <FormControl>
                       <Textarea
-                        placeholder="例如：&#10;11/2 吃 新東陽忠孝一門市７００９ 500"
+                        placeholder="例如：&#10;11/02	11/03	新東陽忠孝一門市	500"
                         className="min-h-[250px] font-mono text-sm bg-background/50"
                         {...field}
                       />
@@ -223,85 +251,146 @@ export function FinanceFlowClient() {
           <AccordionTrigger>
             <div className="flex items-center gap-2">
               <Settings className="w-5 h-5" />
-              <span className="text-lg font-semibold">取代設定</span>
+              <span className="text-lg font-semibold">規則設定</span>
             </div>
           </AccordionTrigger>
           <AccordionContent>
             <Card>
-              <CardHeader>
-                <CardDescription>
-                  設定自動取代或刪除規則。勾選「刪除整筆資料」後，符合條件的資料將被整筆移除。
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
+              <CardContent className="pt-6">
                  <Form {...settingsForm}>
-                  <form onSubmit={settingsForm.handleSubmit(handleSaveSettings)} className="space-y-4">
-                    <div className="space-y-4">
-                      {fields.map((field, index) => (
-                        <div key={field.id} className="p-3 border rounded-md space-y-3">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <FormField
-                                    control={settingsForm.control}
-                                    name={`rules.${index}.find`}
-                                    render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>尋找文字</FormLabel>
-                                        <FormControl>
-                                        <Input placeholder="要被取代的文字" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    control={settingsForm.control}
-                                    name={`rules.${index}.replace`}
-                                    render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>取代為</FormLabel>
-                                        <FormControl>
-                                        <Input placeholder="新的文字 (留空為刪除文字)" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                    )}
-                                />
+                  <form onSubmit={settingsForm.handleSubmit(handleSaveSettings)} className="space-y-6">
+                    <Tabs defaultValue="replacement">
+                      <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="replacement">取代規則</TabsTrigger>
+                        <TabsTrigger value="category">分類規則</TabsTrigger>
+                      </TabsList>
+                      <TabsContent value="replacement" className="mt-4">
+                        <CardDescription className="mb-4">
+                          設定自動取代或刪除規則。勾選「刪除整筆資料」後，符合條件的資料將被整筆移除。
+                        </CardDescription>
+                        <div className="space-y-4 max-h-72 overflow-y-auto pr-2">
+                          {replacementFields.map((field, index) => (
+                            <div key={field.id} className="p-3 border rounded-md space-y-3 bg-background/50">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <FormField
+                                        control={settingsForm.control}
+                                        name={`replacementRules.${index}.find`}
+                                        render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>尋找文字</FormLabel>
+                                            <FormControl>
+                                            <Input placeholder="要被取代的文字" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={settingsForm.control}
+                                        name={`replacementRules.${index}.replace`}
+                                        render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>取代為</FormLabel>
+                                            <FormControl>
+                                            <Input placeholder="新的文字 (留空為刪除文字)" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                        )}
+                                    />
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <FormField
+                                      control={settingsForm.control}
+                                      name={`replacementRules.${index}.deleteRow`}
+                                      render={({ field }) => (
+                                        <FormItem className="flex flex-row items-center space-x-2 space-y-0">
+                                          <FormControl>
+                                            <Checkbox
+                                              checked={field.value}
+                                              onCheckedChange={field.onChange}
+                                            />
+                                          </FormControl>
+                                          <FormLabel className="font-normal text-sm text-muted-foreground">
+                                            刪除整筆資料
+                                          </FormLabel>
+                                        </FormItem>
+                                      )}
+                                    />
+                                    <Button type="button" variant="ghost" size="icon" onClick={() => removeReplacement(index)}>
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                </div>
                             </div>
-                            <div className="flex items-center justify-between">
-                              <FormField
-                                  control={settingsForm.control}
-                                  name={`rules.${index}.deleteRow`}
-                                  render={({ field }) => (
-                                    <FormItem className="flex flex-row items-center space-x-2 space-y-0">
-                                      <FormControl>
-                                        <Checkbox
-                                          checked={field.value}
-                                          onCheckedChange={field.onChange}
-                                        />
-                                      </FormControl>
-                                      <FormLabel className="font-normal text-sm text-muted-foreground">
-                                        刪除整筆資料
-                                      </FormLabel>
-                                    </FormItem>
-                                  )}
-                                />
-                                <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}>
-                                    <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                     <div className="flex justify-between items-center mt-4">
-                        <Button
+                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={() => append({ find: '', replace: '', deleteRow: false })}
+                          className="mt-4"
+                          onClick={() => appendReplacement({ find: '', replace: '', deleteRow: false })}
                         >
                           <PlusCircle className="mr-2 h-4 w-4" />
-                          新增規則
+                          新增取代規則
                         </Button>
+                      </TabsContent>
+                      <TabsContent value="category" className="mt-4">
+                        <CardDescription className="mb-4">
+                           設定交易項目關鍵字與對應的類型。處理報表時，將會自動帶入符合的第一個類型。
+                        </CardDescription>
+                         <div className="space-y-4 max-h-72 overflow-y-auto pr-2">
+                          {categoryFields.map((field, index) => (
+                            <div key={field.id} className="p-3 border rounded-md space-y-3 bg-background/50">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <FormField
+                                        control={settingsForm.control}
+                                        name={`categoryRules.${index}.keyword`}
+                                        render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>關鍵字</FormLabel>
+                                            <FormControl>
+                                            <Input placeholder="交易項目中的文字" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={settingsForm.control}
+                                        name={`categoryRules.${index}.category`}
+                                        render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>類型</FormLabel>
+                                            <FormControl>
+                                            <Input placeholder="要指定的類型" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                        )}
+                                    />
+                                </div>
+                                <div className="flex justify-end">
+                                    <Button type="button" variant="ghost" size="icon" onClick={() => removeCategory(index)}>
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                </div>
+                            </div>
+                          ))}
+                        </div>
+                         <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="mt-4"
+                          onClick={() => appendCategory({ keyword: '', category: '' })}
+                        >
+                          <PlusCircle className="mr-2 h-4 w-4" />
+                          新增分類規則
+                        </Button>
+                      </TabsContent>
+                    </Tabs>
+                     <div className="flex justify-end items-center mt-6">
                         <Button type="submit">儲存設定</Button>
                       </div>
                   </form>
@@ -409,5 +498,3 @@ export function FinanceFlowClient() {
     </div>
   );
 }
-
-    

@@ -3,7 +3,7 @@ import type { ReplacementRule } from '@/app/actions';
 // This is the final, categorized data structure
 export type CreditData = {
   transactionDate: string;
-  category: string;
+  category: string; // This will hold either the rule-based category or the original posting date
   description: string;
   amount: number;
 };
@@ -35,8 +35,13 @@ export function parseCreditCard(text: string): RawCreditData[] {
     let postingDate = '';
     let descriptionStartIndex = 1;
 
-    // Check if the second part is a posting date
-    if (/^\d{1h,2}\/\d{1,2}/.test(parts[1])) {
+    // Check if the second part is a posting date (e.g., "11/02" or just a word like "吃")
+    if (/^\d{1,2}\/\d{1,2}$/.test(parts[1])) {
+      postingDate = parts[1];
+      descriptionStartIndex = 2;
+    } else {
+      // If it's not a date, it might be the start of the description or a manual category
+      // We will treat it as the posting date for now, and let the rules engine decide.
       postingDate = parts[1];
       descriptionStartIndex = 2;
     }
@@ -61,10 +66,16 @@ export function parseCreditCard(text: string): RawCreditData[] {
         }
     }
 
+    // If description from parts is empty, it means the structure was likely [date] [posting_date/category] [description_and_amount]
+    if (!description && parts.length > descriptionStartIndex) {
+        description = parts.slice(descriptionStartIndex).join(' ');
+    }
+
+
     if (description) {
       results.push({
         transactionDate,
-        postingDate,
+        postingDate, // Pass the original second column value
         description,
         amount,
       });

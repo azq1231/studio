@@ -1,7 +1,6 @@
 'use server';
 
 import { detectReportType } from '@/ai/flows/detect-report-type';
-import { categorizeTransaction } from '@/ai/flows/categorize-transaction';
 import { parseCreditCard, parseDepositAccount, type CreditData, type DepositData, type RawCreditData } from '@/lib/parser';
 
 export type ReplacementRule = {
@@ -10,8 +9,13 @@ export type ReplacementRule = {
     deleteRow?: boolean;
 };
 
-async function processSingleCreditEntry(entry: RawCreditData, rules: ReplacementRule[]): Promise<CreditData | null> {
-    let description = entry.description;
+export type CategoryRule = {
+    keyword: string;
+    category: string;
+};
+
+function applyReplacementRules(description: string, rules: ReplacementRule[]): { processedText: string, shouldDelete: boolean } {
+    let processedText = description;
     let shouldDelete = false;
 
     for (const rule of rules) {
@@ -20,38 +24,45 @@ async function processSingleCreditEntry(entry: RawCreditData, rules: Replacement
                 shouldDelete = true;
                 break;
             }
-            description = description.replace(new RegExp(rule.find, 'g'), rule.replace);
+            processedText = processedText.replace(new RegExp(rule.find, 'g'), rule.replace);
         }
     }
+    return { processedText, shouldDelete };
+}
 
+
+function applyCategoryRules(description: string, postingDate: string, rules: CategoryRule[]): string {
+    for (const rule of rules) {
+        if (rule.keyword && description.includes(rule.keyword)) {
+            return rule.category;
+        }
+    }
+    // If no rules match, return the original posting date
+    return postingDate;
+}
+
+async function processSingleCreditEntry(entry: RawCreditData, replacementRules: ReplacementRule[], categoryRules: CategoryRule[]): Promise<CreditData | null> {
+    const { processedText: description, shouldDelete } = applyReplacementRules(entry.description, replacementRules);
+    
     if (shouldDelete || !description.trim()) {
         return null;
     }
+    
+    const category = applyCategoryRules(description, entry.postingDate, categoryRules);
 
-    try {
-        const { category } = await categorizeTransaction({ description });
-        return {
-            transactionDate: entry.transactionDate,
-            category: category,
-            description: description,
-            amount: entry.amount,
-        };
-    } catch (e) {
-        console.error(`Failed to categorize description "${description}":`, e);
-        // Fallback to a default category if AI fails
-        return {
-            transactionDate: entry.transactionDate,
-            category: '其他',
-            description: description,
-            amount: entry.amount,
-        };
-    }
+    return {
+        transactionDate: entry.transactionDate,
+        category: category,
+        description: description,
+        amount: entry.amount,
+    };
 }
 
 
 export async function processBankStatement(
     text: string, 
-    replacementRules: ReplacementRule[]
+    replacementRules: ReplacementRule[],
+    categoryRules: CategoryRule[]
 ): Promise<{
     success: boolean;
     creditData: CreditData[];
@@ -72,7 +83,7 @@ export async function processBankStatement(
 
             if (reportType === 'credit_card') {
                 const rawParsed = parseCreditCard(section);
-                const processedPromises = rawParsed.map(entry => processSingleCreditEntry(entry, replacementRules));
+                const processedPromises = rawParsed.map(entry => processSingleCreditEntry(entry, replacementRules, categoryRules));
                 const processedEntries = (await Promise.all(processedPromises)).filter((e): e is CreditData => e !== null);
                 allCreditData.push(...processedEntries);
 
@@ -83,7 +94,7 @@ export async function processBankStatement(
                 // Fallback: try parsing as credit card first
                 const rawParsed = parseCreditCard(section);
                 if (rawParsed.length > 0) {
-                    const processedPromises = rawParsed.map(entry => processSingleCreditEntry(entry, replacementRules));
+                    const processedPromises = rawParsed.map(entry => processSingleCreditEntry(entry, replacementRules, categoryRules));
                     const processedEntries = (await Promise.all(processedPromises)).filter((e): e is CreditData => e !== null);
                     allCreditData.push(...processedEntries);
                 } else {
