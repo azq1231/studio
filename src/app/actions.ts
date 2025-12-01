@@ -1,13 +1,53 @@
 'use server';
 
 import { detectReportType } from '@/ai/flows/detect-report-type';
-import { parseCreditCard, parseDepositAccount, type CreditData, type DepositData } from '@/lib/parser';
+import { categorizeTransaction } from '@/ai/flows/categorize-transaction';
+import { parseCreditCard, parseDepositAccount, type CreditData, type DepositData, type RawCreditData } from '@/lib/parser';
 
 export type ReplacementRule = {
     find: string;
     replace: string;
     deleteRow?: boolean;
 };
+
+async function processSingleCreditEntry(entry: RawCreditData, rules: ReplacementRule[]): Promise<CreditData | null> {
+    let description = entry.description;
+    let shouldDelete = false;
+
+    for (const rule of rules) {
+        if (rule.find && description.includes(rule.find)) {
+            if (rule.deleteRow) {
+                shouldDelete = true;
+                break;
+            }
+            description = description.replace(new RegExp(rule.find, 'g'), rule.replace);
+        }
+    }
+
+    if (shouldDelete || !description.trim()) {
+        return null;
+    }
+
+    try {
+        const { category } = await categorizeTransaction({ description });
+        return {
+            transactionDate: entry.transactionDate,
+            category: category,
+            description: description,
+            amount: entry.amount,
+        };
+    } catch (e) {
+        console.error(`Failed to categorize description "${description}":`, e);
+        // Fallback to a default category if AI fails
+        return {
+            transactionDate: entry.transactionDate,
+            category: '其他',
+            description: description,
+            amount: entry.amount,
+        };
+    }
+}
+
 
 export async function processBankStatement(
     text: string, 
@@ -23,7 +63,6 @@ export async function processBankStatement(
     }
 
     try {
-        // The text replacement logic is now handled inside the parsers.
         const sections = text.split(/(?=交易日期)/).filter(s => s.trim() !== '');
         let allCreditData: CreditData[] = [];
         let allDepositData: DepositData[] = [];
@@ -32,17 +71,26 @@ export async function processBankStatement(
             const { reportType } = await detectReportType({ text: section });
 
             if (reportType === 'credit_card') {
-                const parsed = parseCreditCard(section, replacementRules);
-                allCreditData.push(...parsed);
+                const rawParsed = parseCreditCard(section);
+                const processedPromises = rawParsed.map(entry => processSingleCreditEntry(entry, replacementRules));
+                const processedEntries = (await Promise.all(processedPromises)).filter((e): e is CreditData => e !== null);
+                allCreditData.push(...processedEntries);
+
             } else if (reportType === 'deposit_account') {
                 const parsed = parseDepositAccount(section, replacementRules);
                 allDepositData.push(...parsed);
-            } else { // 'unknown' or if AI fails, try both as a fallback
-                const creditParsed = parseCreditCard(section, replacementRules);
-                if (creditParsed.length > 0) allCreditData.push(...creditParsed);
-                
-                const depositParsed = parseDepositAccount(section, replacementRules);
-                if (depositParsed.length > 0) allDepositData.push(...depositParsed);
+            } else { 
+                // Fallback: try parsing as credit card first
+                const rawParsed = parseCreditCard(section);
+                if (rawParsed.length > 0) {
+                    const processedPromises = rawParsed.map(entry => processSingleCreditEntry(entry, replacementRules));
+                    const processedEntries = (await Promise.all(processedPromises)).filter((e): e is CreditData => e !== null);
+                    allCreditData.push(...processedEntries);
+                } else {
+                    // Then try as deposit account if credit parsing yields nothing
+                    const depositParsed = parseDepositAccount(section, replacementRules);
+                    if (depositParsed.length > 0) allDepositData.push(...depositParsed);
+                }
             }
         }
         

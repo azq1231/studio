@@ -1,5 +1,6 @@
 import type { ReplacementRule } from '@/app/actions';
 
+// This is the final, categorized data structure
 export type CreditData = {
   transactionDate: string;
   category: string;
@@ -7,94 +8,66 @@ export type CreditData = {
   amount: number;
 };
 
-export function parseCreditCard(text: string, rules: ReplacementRule[]): CreditData[] {
+// This is the initial raw parsed data before categorization
+export type RawCreditData = {
+  transactionDate: string;
+  postingDate: string;
+  description: string;
+  amount: number;
+};
+
+// This parser now only extracts raw data. 
+// Categorization and rule application will be handled by the server action.
+export function parseCreditCard(text: string): RawCreditData[] {
   const lines = text.split('\n');
-  const results: CreditData[] = [];
+  const results: RawCreditData[] = [];
 
   for (const line of lines) {
-    let currentLine = line.replace(/\u3000/g, ' ').trim();
+    const currentLine = line.replace(/\u3000/g, ' ').trim();
     if (!/^\d{1,2}\/\d{1,2}/.test(currentLine)) {
       continue;
     }
 
-    let shouldDeleteRow = false;
-    for (const rule of rules) {
-      if (rule.find && currentLine.includes(rule.find)) {
-        if (rule.deleteRow) {
-          shouldDeleteRow = true;
-          break;
-        }
-        currentLine = currentLine.replace(new RegExp(rule.find, 'g'), rule.replace);
-      }
-    }
-
-    if (shouldDeleteRow) {
-      continue;
-    }
-
     const parts = currentLine.split(/\s+/);
+    if (parts.length < 2) continue;
     
-    if (parts.length >= 2) {
-      const transactionDate = parts[0];
-      let category = '';
-      let descriptionStartIndex = 1;
+    const transactionDate = parts[0];
+    let postingDate = '';
+    let descriptionStartIndex = 1;
 
-      // Check if the second part is a custom category or a posting date
-      if (parts.length > 1 && !/^\d{1,2}\/\d{1,2}/.test(parts[1])) {
-        // It's a custom category (like '吃', '家')
-        category = parts[1];
-        descriptionStartIndex = 2;
-      } else if (parts.length > 1 && /^\d{1,2}\/\d{1,2}/.test(parts[1])) {
-        // It's a posting date, so we skip it and category remains empty.
-        descriptionStartIndex = 2;
-      }
+    // Check if the second part is a posting date
+    if (/^\d{1,2}\/\d{1,2}/.test(parts[1])) {
+      postingDate = parts[1];
+      descriptionStartIndex = 2;
+    }
 
-      const amountMatch = currentLine.match(/(-?[\d,]+(\.\d+)?)$/);
-      let amount = 0;
-      let description = '';
+    // The rest of the line is the description and amount
+    const remainingLine = parts.slice(descriptionStartIndex).join(' ');
+    
+    const amountMatch = remainingLine.match(/(-?[\d,]+(\.\d+)?)$/);
+    let amount = 0;
+    let description = remainingLine;
 
-      if (amountMatch) {
+    if (amountMatch) {
         amount = parseFloat(amountMatch[0].replace(/,/g, ''));
-        // Get description by removing the amount from the end
-        const amountEndIndex = currentLine.lastIndexOf(amountMatch[0]);
-        description = currentLine.substring(0, amountEndIndex).trim();
-      } else {
-        // If no amount is found at the end, assume last part is amount if it's a number
+        const amountEndIndex = remainingLine.lastIndexOf(amountMatch[0]);
+        description = remainingLine.substring(0, amountEndIndex).trim();
+    } else {
         const lastPart = parts[parts.length - 1];
         const parsedAmount = parseFloat(lastPart.replace(/,/g, ''));
         if (!isNaN(parsedAmount)) {
-          amount = parsedAmount;
-          // Join all parts except the last one for the description
-          description = parts.slice(0, -1).join(' ');
-        } else {
-          // No amount found, so the whole line is the description
-          amount = 0;
-          description = currentLine;
+            amount = parsedAmount;
+            description = parts.slice(descriptionStartIndex, -1).join(' ');
         }
-      }
-      
-      // Clean up the start of the description
-      let tempDesc = description;
-      if (tempDesc.startsWith(transactionDate)) {
-        tempDesc = tempDesc.substring(transactionDate.length).trim();
-      }
-      // If the second part was a posting date or a category, remove it as well.
-      if (descriptionStartIndex === 2 && parts.length > 1) {
-         if (tempDesc.startsWith(parts[1])) {
-             tempDesc = tempDesc.substring(parts[1].length).trim();
-         }
-      }
-      
-      description = tempDesc;
+    }
 
-      if (description) {
-        results.push({
-          transactionDate,
-          category,
-          description,
-          amount,
-        });
-      }
+    if (description) {
+      results.push({
+        transactionDate,
+        postingDate,
+        description,
+        amount,
+      });
     }
   }
   return results;
