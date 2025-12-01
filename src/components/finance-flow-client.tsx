@@ -356,7 +356,7 @@ export function FinanceFlowClient() {
                           {creditData.map((row, i) => (
                             <TableRow key={i}>
                               <TableCell className="font-mono">{row.transactionDate}</TableCell>
-                              <TableCell className="font-mono text-center">{row.category}</TableCell>
+                              <TableCell>{row.category}</TableCell>
                               <TableCell>{row.description}</TableCell>
                               <TableCell className={`text-right font-mono ${row.amount < 0 ? 'text-destructive' : ''}`}>{row.amount.toLocaleString()}</TableCell>
                             </TableRow>
