@@ -1,0 +1,201 @@
+{
+  "entities": {
+    "CreditCardTransaction": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "CreditCardTransaction",
+      "type": "object",
+      "description": "Represents a single credit card transaction.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the CreditCardTransaction entity."
+        },
+        "transactionDate": {
+          "type": "string",
+          "description": "The date when the transaction occurred.",
+          "format": "date"
+        },
+        "postingDate": {
+          "type": "string",
+          "description": "The date when the transaction was posted to the account.",
+          "format": "date"
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the transaction."
+        },
+        "amount": {
+          "type": "number",
+          "description": "The amount of the transaction."
+        },
+        "categoryId": {
+          "type": "string",
+          "description": "Reference to Category. (Relationship: Category 1:N CreditCardTransaction)"
+        }
+      },
+      "required": [
+        "id",
+        "transactionDate",
+        "postingDate",
+        "description",
+        "amount",
+        "categoryId"
+      ]
+    },
+    "DepositAccountTransaction": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "DepositAccountTransaction",
+      "type": "object",
+      "description": "Represents a single deposit account transaction.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the DepositAccountTransaction entity."
+        },
+        "transactionDate": {
+          "type": "string",
+          "description": "The date when the transaction occurred.",
+          "format": "date"
+        },
+        "transactionTime": {
+          "type": "string",
+          "description": "The time when the transaction occurred."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the transaction."
+        },
+        "amount": {
+          "type": "number",
+          "description": "The amount of the transaction (positive for withdrawal, negative for deposit)."
+        },
+        "counterpartyBankCode": {
+          "type": "string",
+          "description": "The bank code of the counterparty (if applicable)."
+        },
+        "counterpartyAccountNumber": {
+          "type": "string",
+          "description": "The account number of the counterparty (if applicable)."
+        }
+      },
+      "required": [
+        "id",
+        "transactionDate",
+        "transactionTime",
+        "description",
+        "amount"
+      ]
+    },
+    "Category": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Category",
+      "type": "object",
+      "description": "Represents a category for classifying transactions (e.g., Food, Travel, Utilities).",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Category entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the category."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the category."
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "user",
+          "schema": {
+            "$ref": "#/backend/entities/user"
+          },
+          "description": "Root collection for user data. This path exists implicitly through the user's authentication and doesn't require a specific entity definition. It serves as the parent for all user-owned data.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user, obtained from Firebase Authentication."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/credit_card_transactions/{transactionId}",
+        "definition": {
+          "entityName": "CreditCardTransaction",
+          "schema": {
+            "$ref": "#/backend/entities/CreditCardTransaction"
+          },
+          "description": "Stores credit card transaction data for each user. Each document represents a single transaction. The transaction is owned by the user identified by {userId}.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user who owns the transaction."
+            },
+            {
+              "name": "transactionId",
+              "description": "The unique identifier for the credit card transaction."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/deposit_account_transactions/{transactionId}",
+        "definition": {
+          "entityName": "DepositAccountTransaction",
+          "schema": {
+            "$ref": "#/backend/entities/DepositAccountTransaction"
+          },
+          "description": "Stores deposit account transaction data for each user. Each document represents a single transaction. The transaction is owned by the user identified by {userId}.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user who owns the transaction."
+            },
+            {
+              "name": "transactionId",
+              "description": "The unique identifier for the deposit account transaction."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/categories/{categoryId}",
+        "definition": {
+          "entityName": "Category",
+          "schema": {
+            "$ref": "#/backend/entities/Category"
+          },
+          "description": "Stores categories for each user. Each document represents a category that the user can assign to transactions. The category is owned by the user identified by {userId}.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user who owns the category."
+            },
+            {
+              "name": "categoryId",
+              "description": "The unique identifier for the category."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed to organize credit card and deposit account transactions for individual users. Each user has their own collection of categories and transactions. This design prioritizes authorization independence by storing all data directly under the user's document, eliminating the need for complex `get()` calls in security rules. Path-based ownership (`/users/{userId}/...`) ensures that only the authenticated user can access their own data.\n\nSegregation of CreditCardTransaction and DepositAccountTransaction into separate collections allows for tailored security rules and indexing strategies specific to each transaction type. The Category entity is placed as a subcollection of users to allow filtering of transactions by category.\n\nQAPs (Rules are not Filters) are supported due to the homogeneous security posture enforced within each collection. All documents within `/users/{userId}/credit_card_transactions` share the same security requirements (owned by the user). The same principle applies to `/users/{userId}/deposit_account_transactions` and `/users/{userId}/categories`.\n\nBy using user-specific collections (`/users/{userId}/...`), we automatically scope `list` operations to the authenticated user's data, preventing unauthorized access to other users' financial information."
+  }
+}
