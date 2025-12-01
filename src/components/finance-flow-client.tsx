@@ -143,7 +143,7 @@ export function FinanceFlowClient() {
       if (creditData.length > 0) {
         const creditSheetData = creditData.map(d => ({
           '交易日期': d.transactionDate,
-          '入帳日期': d.postingDate,
+          '類型': d.category,
           '交易項目': d.description,
           '金額': d.amount,
         }));
@@ -198,7 +198,7 @@ export function FinanceFlowClient() {
                   <FormItem>
                     <FormControl>
                       <Textarea
-                        placeholder="例如：&#10;交易日期    入帳日期    交易摘要&#10;05/01       05/02       網路購物          -1,234"
+                        placeholder="例如：&#10;11/2 吃 新東陽忠孝一門市７００９ 500"
                         className="min-h-[250px] font-mono text-sm bg-background/50"
                         {...field}
                       />
@@ -347,7 +347,7 @@ export function FinanceFlowClient() {
                         <TableHeader>
                           <TableRow>
                             <TableHead>交易日期</TableHead>
-                            <TableHead>入帳日期</TableHead>
+                            <TableHead>類型</TableHead>
                             <TableHead>交易項目</TableHead>
                             <TableHead className="text-right">金額</TableHead>
                           </TableRow>
@@ -356,7 +356,7 @@ export function FinanceFlowClient() {
                           {creditData.map((row, i) => (
                             <TableRow key={i}>
                               <TableCell className="font-mono">{row.transactionDate}</TableCell>
-                              <TableCell className="font-mono">{row.postingDate}</TableCell>
+                              <TableCell className="font-mono text-center">{row.category}</TableCell>
                               <TableCell>{row.description}</TableCell>
                               <TableCell className={`text-right font-mono ${row.amount < 0 ? 'text-destructive' : ''}`}>{row.amount.toLocaleString()}</TableCell>
                             </TableRow>

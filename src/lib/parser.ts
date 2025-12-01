@@ -2,7 +2,7 @@ import type { ReplacementRule } from '@/app/actions';
 
 export type CreditData = {
   transactionDate: string;
-  postingDate: string;
+  category: string;
   description: string;
   amount: number;
 };
@@ -13,7 +13,7 @@ export function parseCreditCard(text: string, rules: ReplacementRule[]): CreditD
 
   for (const line of lines) {
     let currentLine = line.replace(/\u3000/g, ' ').trim();
-    if (!/^\d{2}\/\d{2}/.test(currentLine)) {
+    if (!/^\d{1,2}\/\d{1,2}/.test(currentLine)) {
       continue;
     }
 
@@ -24,7 +24,6 @@ export function parseCreditCard(text: string, rules: ReplacementRule[]): CreditD
           shouldDeleteRow = true;
           break;
         }
-        // Only apply replacement if not deleting the row
         currentLine = currentLine.replace(new RegExp(rule.find, 'g'), rule.replace);
       }
     }
@@ -33,10 +32,33 @@ export function parseCreditCard(text: string, rules: ReplacementRule[]): CreditD
       continue;
     }
 
-    const parts = currentLine.split(/\s{2,}|\t+/);
-    if (parts.length >= 2) {
+    const parts = currentLine.split(/\s+/); // Split by one or more spaces
+    
+    if (parts.length >= 3) {
+      const transactionDate = parts[0];
+      const category = parts[1];
+      
+      const amountMatch = currentLine.match(/(-?[\d,]+(\.\d+)?)$/);
+      const amount = amountMatch ? parseFloat(amountMatch[0].replace(/,/g, '')) : 0;
+      
+      let description = currentLine;
+      if (amountMatch) {
+          description = description.substring(0, description.lastIndexOf(amountMatch[0])).trim();
+      }
+      // Remove transactionDate and category from the beginning of the description
+      description = description.substring(transactionDate.length).trim();
+      description = description.substring(category.length).trim();
+      
+      if(description) { 
+          results.push({
+            transactionDate,
+            category,
+            description,
+            amount,
+          });
+      }
+    } else if (parts.length >= 2) { // Fallback for lines without a category
       const transactionDate = parts[0].trim();
-      const postingDate = /^\d{2}\/\d{2}/.test(parts[1]) ? parts[1].trim() : '';
       
       const amountMatch = currentLine.match(/(-?[\d,]+(\.\d+)?)$/);
       const amount = amountMatch ? parseFloat(amountMatch[0].replace(/,/g, '')) : 0;
@@ -46,14 +68,17 @@ export function parseCreditCard(text: string, rules: ReplacementRule[]): CreditD
           description = description.substring(0, description.lastIndexOf(amountMatch[0])).trim();
       }
       description = description.replace(transactionDate, '').trim();
-      if(postingDate) {
-          description = description.replace(postingDate, '').trim();
-      }
       
-      if(description) { 
+      // Check if the second part looks like a posting date and remove it
+      const potentialPostingDate = parts[1].trim();
+      if (/^\d{1,2}\/\d{1,2}/.test(potentialPostingDate)) {
+        description = description.replace(potentialPostingDate, '').trim();
+      }
+
+       if(description) { 
           results.push({
             transactionDate,
-            postingDate,
+            category: '', // No category found
             description,
             amount,
           });
@@ -62,6 +87,7 @@ export function parseCreditCard(text: string, rules: ReplacementRule[]): CreditD
   }
   return results;
 }
+
 
 export type DepositData = {
   date: string;
