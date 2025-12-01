@@ -90,7 +90,7 @@ export async function processBankStatement(
                 allCreditData.push(...processedEntries);
 
             } else if (reportType === 'deposit_account') {
-                const parsed = parseDepositAccount(section, replacementRules);
+                const parsed = parseDepositAccount(section, replacementRules, categoryRules);
                 allDepositData.push(...parsed);
             } else { 
                 // Fallback: try parsing as credit card first
@@ -101,7 +101,7 @@ export async function processBankStatement(
                     allCreditData.push(...processedEntries);
                 } else {
                     // Then try as deposit account if credit parsing yields nothing
-                    const depositParsed = parseDepositAccount(section, replacementRules);
+                    const depositParsed = parseDepositAccount(section, replacementRules, categoryRules);
                     if (depositParsed.length > 0) allDepositData.push(...depositParsed);
                 }
             }

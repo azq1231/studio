@@ -1,4 +1,4 @@
-import type { ReplacementRule } from '@/app/actions';
+import type { ReplacementRule, CategoryRule } from '@/app/actions';
 
 // This is the final, categorized data structure
 export type CreditData = {
@@ -91,7 +91,7 @@ export function parseCreditCard(text: string): RawCreditData[] {
 
 export type DepositData = {
   date: string;
-  time: string;
+  category: string;
   description: string;
   amount: number;
   blank: string;
@@ -108,7 +108,16 @@ const special_rules: Record<string, SpecialRule> = {
   "國保保費": { merge_remark: false, remark_col: 5 },
 };
 
-export function parseDepositAccount(text: string, rules: ReplacementRule[]): DepositData[] {
+function applyCategoryRules(description: string, rules: CategoryRule[]): string {
+    for (const rule of rules) {
+        if (rule.keyword && description.includes(rule.keyword)) {
+            return rule.category;
+        }
+    }
+    return '未分類';
+}
+
+export function parseDepositAccount(text: string, replacementRules: ReplacementRule[], categoryRules: CategoryRule[]): DepositData[] {
   const lines = text.split('\n').map(l => l.trim()).filter(l => l);
   const results: (string|number)[][] = [];
   let currentDate = '';
@@ -117,7 +126,7 @@ export function parseDepositAccount(text: string, rules: ReplacementRule[]): Dep
   const applyRules = (text: string) => {
     let processedText = text;
     let shouldDelete = false;
-    for (const rule of rules) {
+    for (const rule of replacementRules) {
         if(rule.find && processedText.includes(rule.find)) {
             if(rule.deleteRow) {
                 shouldDelete = true;
@@ -141,7 +150,6 @@ export function parseDepositAccount(text: string, rules: ReplacementRule[]): Dep
       }
 
       const parts = line.split('\t');
-      let time = parts[0]?.trim() ?? '';
       let desc = parts[1]?.trim() ?? '';
       const withdraw = parts[2]?.replace(/,/g, '').trim() ?? '';
       const deposit = parts[3]?.replace(/,/g, '').trim() ?? '';
@@ -163,9 +171,11 @@ export function parseDepositAccount(text: string, rules: ReplacementRule[]): Dep
         continue;
       }
       finalDescription = processedText;
+      
+      const category = applyCategoryRules(finalDescription, categoryRules);
 
-
-      temp = [currentDate, time, finalDescription, amount, '', '', ''];
+      // [date, category, description, amount, blank, bankCode, accountNumber]
+      temp = [currentDate, category, finalDescription, amount, '', '', ''];
       
       if (!rule.merge_remark && rule.remark_col !== null && temp.length > rule.remark_col) {
         temp[rule.remark_col] = remark;
@@ -177,8 +187,8 @@ export function parseDepositAccount(text: string, rules: ReplacementRule[]): Dep
     if (temp && line) {
       const match = line.match(/^([\d/]+)/);
       if (match) {
-        if(temp.length > 5) temp[5] = match[1];
-        if(temp.length > 6) temp[6] = '';
+        if(temp.length > 5) temp[5] = match[1]; // bankCode
+        if(temp.length > 6) temp[6] = ''; // accountNumber
       }
     }
   }
@@ -189,7 +199,7 @@ export function parseDepositAccount(text: string, rules: ReplacementRule[]): Dep
 
   return results.map(r => ({
     date: r[0] as string,
-    time: r[1] as string,
+    category: r[1] as string,
     description: r[2] as string,
     amount: r[3] as number,
     blank: r[4] as string,

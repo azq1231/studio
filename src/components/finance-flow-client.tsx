@@ -366,7 +366,7 @@ export function FinanceFlowClient() {
       if (depositData.length > 0) {
         const depositSheetData = depositData.map(d => ({
           '交易日期': d.date,
-          '時間': d.time,
+          '類型': d.category,
           '摘要＋存摺備註': d.description,
           '金額（支出正、存入負）': d.amount,
           '空白': d.blank,
@@ -963,7 +963,7 @@ export function FinanceFlowClient() {
                             <TableHeader>
                               <TableRow>
                                 <TableHead>交易日期</TableHead>
-                                <TableHead>時間</TableHead>
+                                <TableHead>類型</TableHead>
                                 <TableHead>摘要</TableHead>
                                 <TableHead>銀行代碼</TableHead>
                                 <TableHead className="text-right">金額</TableHead>
@@ -973,7 +973,7 @@ export function FinanceFlowClient() {
                               {depositData.map((row, i) => (
                                 <TableRow key={i}>
                                   <TableCell className="font-mono">{row.date}</TableCell>
-                                  <TableCell className="font-mono">{row.time}</TableCell>
+                                  <TableCell>{row.category}</TableCell>
                                   <TableCell>{row.description}</TableCell>
                                   <TableCell className="font-mono">{row.bankCode}</TableCell>
                                   <TableCell className={`text-right font-mono ${row.amount < 0 ? 'text-green-600' : 'text-destructive'}`}>{row.amount.toLocaleString()}</TableCell>
@@ -1055,5 +1055,3 @@ export function FinanceFlowClient() {
     </div>
   );
 }
-
-    
