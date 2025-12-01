@@ -59,6 +59,8 @@ type StatementFormData = z.infer<typeof statementFormSchema>;
 type SettingsFormData = z.infer<typeof settingsFormSchema>;
 type SortKey = 'keyword' | 'category';
 type SortDirection = 'asc' | 'desc';
+type CreditSortKey = 'transactionDate' | 'category' | 'description' | 'amount';
+
 
 export function FinanceFlowClient() {
   const { user, isUserLoading } = useUser();
@@ -80,6 +82,9 @@ export function FinanceFlowClient() {
 
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+  const [creditSortKey, setCreditSortKey] = useState<CreditSortKey | null>('transactionDate');
+  const [creditSortDirection, setCreditSortDirection] = useState<SortDirection>('desc');
 
   const transactionsQuery = useMemoFirebase(
     () => (user && firestore ? collection(firestore, 'users', user.uid, 'creditCardTransactions') : null),
@@ -118,21 +123,9 @@ export function FinanceFlowClient() {
         const savedIds = new Set(savedTransactions?.map(t => t.id));
         const localOnlyData = creditData.filter(t => !savedIds.has(t.id));
         mergedData.push(...localOnlyData);
-
-        // Sort by date as a default
-        mergedData.sort((a, b) => {
-             try {
-                const dateA = parse(a.transactionDate, 'MM/dd', new Date());
-                const dateB = parse(b.transactionDate, 'MM/dd', new Date());
-                return dateB.getTime() - dateA.getTime();
-            } catch(e) {
-                return 0;
-            }
-        });
-        
         setCreditData(mergedData);
     } else if (!isUserLoading && !user) {
-        setCreditData([]);
+        setCreditData(creditData);
     }
   }, [user, isUserLoading, savedTransactions]);
 
@@ -405,6 +398,15 @@ export function FinanceFlowClient() {
     }
   };
 
+  const handleCreditSort = (key: CreditSortKey) => {
+    if (creditSortKey === key) {
+        setCreditSortDirection(creditSortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+        setCreditSortKey(key);
+        setCreditSortDirection('asc');
+    }
+  };
+
     const handleUpdateCategory = async (transactionId: string, newCategory: string) => {
         setCreditData(prevData =>
             prevData.map(item =>
@@ -458,6 +460,34 @@ export function FinanceFlowClient() {
       return sortDirection === 'asc' ? comparison : -comparison;
     });
   }, [categoryFields, sortKey, sortDirection])
+
+  const sortedCreditData = useMemo(() => {
+    if (!creditSortKey) return creditData;
+
+    return [...creditData].sort((a, b) => {
+        const aValue = a[creditSortKey];
+        const bValue = b[creditSortKey];
+
+        let comparison = 0;
+        if (creditSortKey === 'transactionDate') {
+            try {
+                const dateA = parse(aValue, 'MM/dd', new Date());
+                const dateB = parse(bValue, 'MM/dd', new Date());
+                comparison = dateA.getTime() - dateB.getTime();
+            } catch {
+                comparison = (aValue || '').localeCompare(bValue || '');
+            }
+        } else if (typeof aValue === 'string' && typeof bValue === 'string') {
+            comparison = aValue.localeCompare(bValue, 'zh-Hant');
+        } else if (typeof aValue === 'number' && typeof bValue === 'number') {
+            comparison = aValue - bValue;
+        } else {
+            comparison = String(aValue).localeCompare(String(bValue), 'zh-Hant');
+        }
+
+        return creditSortDirection === 'asc' ? comparison : -comparison;
+    });
+}, [creditData, creditSortKey, creditSortDirection]);
 
 
   const categoryChartData = useMemo(() => {
@@ -556,6 +586,23 @@ export function FinanceFlowClient() {
       </TableHead>
     );
   };
+
+  const SortableCreditHeader = ({ sortKey: key, children, className }: { sortKey: CreditSortKey, children: React.ReactNode, className?: string }) => {
+    const isSorted = creditSortKey === key;
+    return (
+      <TableHead className={className}>
+        <Button variant="ghost" onClick={() => handleCreditSort(key)} className="px-2 py-1 h-auto -ml-2">
+          {children}
+          {isSorted ? (
+            creditSortDirection === 'asc' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />
+          ) : (
+            <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
+          )}
+        </Button>
+      </TableHead>
+    );
+};
+
 
   return (
     <div className="space-y-4">
@@ -863,15 +910,15 @@ export function FinanceFlowClient() {
                           <Table>
                             <TableHeader>
                               <TableRow>
-                                <TableHead>交易日期</TableHead>
-                                <TableHead className="w-[120px]">類型</TableHead>
+                                <SortableCreditHeader sortKey="transactionDate">交易日期</SortableCreditHeader>
+                                <SortableCreditHeader sortKey="category" className="w-[120px]">類型</SortableCreditHeader>
                                 <TableHead>交易項目</TableHead>
-                                <TableHead className="text-right">金額</TableHead>
+                                <SortableCreditHeader sortKey="amount" className="text-right">金額</SortableCreditHeader>
                                 <TableHead className="w-[80px] text-center">操作</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {creditData.map((row) => (
+                              {sortedCreditData.map((row) => (
                                 <TableRow key={row.id}>
                                   <TableCell className="font-mono">{row.transactionDate}</TableCell>
                                   <TableCell>
@@ -1008,3 +1055,5 @@ export function FinanceFlowClient() {
     </div>
   );
 }
+
+    
