@@ -138,7 +138,7 @@ export function FinanceFlowClient() {
       if (savedCategories) {
         setAvailableCategories(JSON.parse(savedCategories));
       } else {
-        const defaultCategories = ['方', '吃', '家', '固定', '蘇', '秀', '弟', '玩', '姊'];
+        const defaultCategories = ['方', '吃', '家', '固定', '蘇', '秀', '弟', '玩', '姊', '收入', '華'];
         setAvailableCategories(defaultCategories);
         localStorage.setItem('availableCategories', JSON.stringify(defaultCategories));
       }
@@ -245,6 +245,15 @@ export function FinanceFlowClient() {
           { keyword: '春水堂', category: '吃' },
           { keyword: '台灣小米', category: '家' },
           { keyword: '上島珈琲店', category: '吃' },
+          { keyword: '悠勢科技股份有限公司', category: '收入' },
+          { keyword: 'linePay繳好市多', category: '家' },
+          { keyword: '國保保費', category: '固定' },
+          { keyword: '怡秀跆拳道', category: '華' },
+          { keyword: '行政院發', category: '收入' },
+          { keyword: 'iPassMoney儲值', category: '方' },
+          { keyword: '逸安中醫', category: '蘇' },
+          { keyword: '連結帳戶交易', category: '家' },
+          { keyword: '花都管理費', category: '固定' },
         ]);
       }
     } catch (e) {
@@ -625,7 +634,8 @@ export function FinanceFlowClient() {
                   <FormItem>
                     <FormControl>
                       <Textarea
-                        placeholder="例如：&#10;11/02	吃	新東陽忠孝一門市	500"
+                        placeholder="例如：
+11/02	吃	新東陽忠孝一門市	500"
                         className="min-h-[250px] font-mono text-sm bg-background/50"
                         {...field}
                         disabled={isLoading}
@@ -939,6 +949,7 @@ export function FinanceFlowClient() {
                                   </TableCell>
                                   <TableCell>{row.description}</TableCell>
                                   <TableCell className={`text-right font-mono ${row.amount < 0 ? 'text-green-600' : ''}`}>{row.amount.toLocaleString()}</TableCell>
+
                                   <TableCell className="text-center">
                                      <Button
                                         variant="ghost"
@@ -1055,3 +1066,5 @@ export function FinanceFlowClient() {
     </div>
   );
 }
+
+    
