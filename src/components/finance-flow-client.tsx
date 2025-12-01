@@ -89,7 +89,7 @@ export function FinanceFlowClient() {
       if (savedCategories) {
         setAvailableCategories(JSON.parse(savedCategories));
       } else {
-        const defaultCategories = ['方', '吃', '家', '固定', '蘇', '秀'];
+        const defaultCategories = ['方', '吃', '家', '固定', '蘇', '秀', '弟', '玩', '姊'];
         setAvailableCategories(defaultCategories);
         localStorage.setItem('availableCategories', JSON.stringify(defaultCategories));
       }
@@ -151,7 +151,51 @@ export function FinanceFlowClient() {
           { keyword: '金玉堂', category: '秀' },
           { keyword: '秀泰全球影城', category: '吃' },
           { keyword: '寶雅', category: '秀' },
-          { keyword: '雙月食品社', category: '吃' },
+          { keyword: '樂購蝦皮', category: '蘇' },
+          { keyword: '台灣麥當勞', category: '吃' },
+          { keyword: 'ＰＣＨＯＭＥ', category: '方' },
+          { keyword: '筷子餐廳', category: '吃' },
+          { keyword: '饗賓餐旅', category: '蘇' },
+          { keyword: 'TAOBAO.COM', category: '蘇' },
+          { keyword: '威秀影城', category: '家' },
+          { keyword: '怡客咖啡', category: '吃' },
+          { keyword: '特力屋', category: '秀' },
+          { keyword: '嘟嘟房', category: '弟' },
+          { keyword: '中油', category: '家' },
+          { keyword: '台北市自來水費', category: '固定' },
+          { keyword: '台東桂田喜來登酒店', category: '玩' },
+          { keyword: '家樂福', category: '玩' },
+          { keyword: '台東原生應用植物園', category: '玩' },
+          { keyword: '格上租車', category: '玩' },
+          { keyword: '起家雞', category: '吃' },
+          { keyword: '高鐵智慧型手機', category: '家' },
+          { keyword: '拓元票務', category: '蘇' },
+          { keyword: 'Ｍｉｓｔｅｒ　Ｄｏｎｕｔ', category: '家' },
+          { keyword: '墊腳石圖書', category: '家' },
+          { keyword: '彼得好咖啡', category: '吃' },
+          { keyword: '汽車驗車', category: '固定' },
+          { keyword: '燦坤３Ｃ', category: '家' },
+          { keyword: '三創數位', category: '蘇' },
+          { keyword: '御書園', category: '吃' },
+          { keyword: '五花馬水餃館', category: '吃' },
+          { keyword: '屈臣氏', category: '家' },
+          { keyword: 'APPLE.COM/BILL', category: '家' },
+          { keyword: '大台北瓦斯費', category: '固定' },
+          { keyword: '客美多咖啡', category: '吃' },
+          { keyword: '明曜百貨', category: '吃' },
+          { keyword: 'ＫＦＣ', category: '吃' },
+          { keyword: 'OPENAI', category: '方' },
+          { keyword: '一之軒', category: '家' },
+          { keyword: '鬥牛士經典牛排', category: '吃' },
+          { keyword: '街口電支', category: '吃' },
+          { keyword: '悠遊付－臺北市立大學', category: '秀' },
+          { keyword: '大安文山有線電視', category: '固定' },
+          { keyword: '必勝客', category: '吃' },
+          { keyword: '城市車旅', category: '家' },
+          { keyword: '丰禾', category: '吃' },
+          { keyword: '春水堂', category: '吃' },
+          { keyword: '台灣小米', category: '家' },
+          { keyword: '上島珈琲店', category: '吃' },
         ]);
       }
     } catch (e) {
