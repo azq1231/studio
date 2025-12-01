@@ -15,6 +15,7 @@ import {
   CartesianGrid,
   Legend,
 } from 'recharts';
+import { format, parse } from 'date-fns';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,7 +29,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast"
-import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2 } from 'lucide-react';
+import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2, FileText } from 'lucide-react';
 import { processBankStatement, type ReplacementRule, type CategoryRule } from '@/app/actions';
 import type { CreditData, DepositData } from '@/lib/parser';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
@@ -294,10 +295,10 @@ export function FinanceFlowClient() {
     const { replacementRules, categoryRules } = settingsForm.getValues();
     const result = await processBankStatement(values.statement, replacementRules, categoryRules);
     
-    if (result.success) {
-      setCreditData(result.creditData);
-      setDepositData(result.depositData);
+    setCreditData(result.creditData);
+    setDepositData(result.depositData);
 
+    if (result.success) {
       if (user && firestore && result.creditData.length > 0) {
         try {
           const batch = writeBatch(firestore);
@@ -449,6 +450,55 @@ export function FinanceFlowClient() {
       total,
     })).sort((a, b) => b.total - a.total);
 
+  }, [creditData]);
+
+  const summaryReportData = useMemo(() => {
+    if (!creditData || creditData.length === 0) return { headers: [], rows: [] };
+
+    const monthlyData: Record<string, Record<string, number>> = {};
+    const categories = new Set<string>();
+
+    creditData.forEach(transaction => {
+      try {
+        const { transactionDate, category, amount } = transaction;
+        if (amount <= 0) return; // Only sum expenses
+
+        // Assuming current year if year is not present
+        const date = parse(transactionDate, 'MM/dd', new Date());
+        const monthKey = format(date, 'yyyy年M月');
+        
+        categories.add(category);
+
+        if (!monthlyData[monthKey]) {
+          monthlyData[monthKey] = {};
+        }
+        if (!monthlyData[monthKey][category]) {
+          monthlyData[monthKey][category] = 0;
+        }
+        monthlyData[monthKey][category] += amount;
+      } catch(e) {
+        // Ignore parsing errors for dates that are not in MM/dd format
+      }
+    });
+
+    const sortedCategories = Array.from(categories).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    const headers = ['日期（年月）', ...sortedCategories, '總計'];
+
+    const rows = Object.entries(monthlyData).map(([month, categoryData]) => {
+      let total = 0;
+      const row: Record<string, string | number> = { '日期（年月）': month };
+
+      sortedCategories.forEach(cat => {
+        const value = categoryData[cat] || 0;
+        row[cat] = value;
+        total += value;
+      });
+      row['總計'] = total;
+      
+      return row;
+    }).sort((a, b) => (a['日期（年月）'] as string).localeCompare(b['日期（年月）'] as string));
+    
+    return { headers, rows };
   }, [creditData]);
 
 
@@ -771,6 +821,7 @@ export function FinanceFlowClient() {
                       <TabsList>
                         {creditData.length > 0 && <TabsTrigger value="credit">信用卡 ({creditData.length})</TabsTrigger>}
                         {depositData.length > 0 && <TabsTrigger value="deposit">活存帳戶 ({depositData.length})</TabsTrigger>}
+                        {creditData.length > 0 && <TabsTrigger value="summary"><FileText className="w-4 h-4 mr-2"/>彙總報表</TabsTrigger>}
                         {creditData.length > 0 && <TabsTrigger value="chart"><BarChart2 className="w-4 h-4 mr-2"/>統計圖表</TabsTrigger>}
                       </TabsList>
                       {creditData.length > 0 && (
@@ -825,6 +876,32 @@ export function FinanceFlowClient() {
                         </TabsContent>
                       )}
                        {creditData.length > 0 && (
+                        <TabsContent value="summary">
+                           <div className="rounded-md border mt-4">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  {summaryReportData.headers.map(header => (
+                                    <TableHead key={header} className={header !== '日期（年月）' ? 'text-right' : ''}>{header}</TableHead>
+                                  ))}
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {summaryReportData.rows.map((row, i) => (
+                                  <TableRow key={i}>
+                                    {summaryReportData.headers.map(header => (
+                                      <TableCell key={header} className={`font-mono ${header !== '日期（年月）' ? 'text-right' : ''}`}>
+                                        {typeof row[header] === 'number' ? (row[header] as number).toLocaleString() : row[header]}
+                                      </TableCell>
+                                    ))}
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </TabsContent>
+                      )}
+                       {creditData.length > 0 && (
                         <TabsContent value="chart">
                            <div className="h-[400px] w-full mt-4">
                             <ResponsiveContainer width="100%" height="100%">
@@ -870,3 +947,5 @@ export function FinanceFlowClient() {
     </div>
   );
 }
+
+    
