@@ -195,12 +195,20 @@ export function FinanceFlowClient() {
   const [creditSortKey, setCreditSortKey] = useState<CreditSortKey | null>('transactionDate');
   const [creditSortDirection, setCreditSortDirection] = useState<SortDirection>('desc');
 
-  const transactionsQuery = useMemoFirebase(
+  const creditTransactionsQuery = useMemoFirebase(
     () => (user && firestore ? collection(firestore, 'users', user.uid, 'creditCardTransactions') : null),
     [user, firestore]
   );
   
-  const { data: savedTransactions, isLoading: isLoadingTransactions } = useCollection<CreditData>(transactionsQuery);
+  const { data: savedCreditTransactions, isLoading: isLoadingCreditTransactions } = useCollection<CreditData>(creditTransactionsQuery);
+
+  const depositTransactionsQuery = useMemoFirebase(
+    () => (user && firestore ? collection(firestore, 'users', user.uid, 'depositAccountTransactions') : null),
+    [user, firestore]
+  );
+
+  const { data: savedDepositTransactions, isLoading: isLoadingDepositTransactions } = useCollection<DepositData>(depositTransactionsQuery);
+
 
   const statementForm = useForm<StatementFormData>({
     resolver: zodResolver(statementFormSchema),
@@ -227,13 +235,13 @@ export function FinanceFlowClient() {
   });
 
   useEffect(() => {
-    if (isUserLoading || !savedTransactions) return;
+    if (isUserLoading || !savedCreditTransactions) return;
 
     setCreditData(prevData => {
         const existingIds = new Set(prevData.map(d => d.id));
-        const newSaved = savedTransactions.filter(t => !existingIds.has(t.id));
+        const newSaved = savedCreditTransactions.filter(t => !existingIds.has(t.id));
         
-        if (newSaved.length === 0 && prevData.length === savedTransactions.length) {
+        if (newSaved.length === 0 && prevData.length === savedCreditTransactions.length) {
             return prevData;
         }
         
@@ -243,7 +251,26 @@ export function FinanceFlowClient() {
         return uniqueData;
     });
 
-  }, [isUserLoading, savedTransactions]);
+  }, [isUserLoading, savedCreditTransactions]);
+
+  useEffect(() => {
+    if (isUserLoading || !savedDepositTransactions) return;
+
+    setDepositData(prevData => {
+        const existingIds = new Set(prevData.map(d => d.id));
+        const newSaved = savedDepositTransactions.filter(t => !existingIds.has(t.id));
+        
+        if (newSaved.length === 0 && prevData.length === savedDepositTransactions.length) {
+            return prevData;
+        }
+        
+        const mergedData = [...prevData, ...newSaved];
+        const uniqueData = Array.from(new Map(mergedData.map(item => [item.id, item])).values());
+        
+        return uniqueData;
+    });
+
+  }, [isUserLoading, savedDepositTransactions]);
 
 
   const resetReplacementRules = () => {
@@ -367,37 +394,58 @@ export function FinanceFlowClient() {
     const result = await processBankStatement(values.statement, replacementRules, categoryRules);
     
     if (result.success) {
-      setCreditData(prevData => {
-        const combined = [...prevData, ...result.creditData];
-        return Array.from(new Map(combined.map(item => [item.id, item])).values());
-      });
-      setDepositData(prevData => {
-        const combined = [...prevData, ...result.depositData];
-        return Array.from(new Map(combined.map(item => [item.id, item])).values());
-      });
+      if (result.creditData.length > 0) {
+        setCreditData(prevData => {
+          const combined = [...prevData, ...result.creditData];
+          return Array.from(new Map(combined.map(item => [item.id, item])).values());
+        });
+      }
+      if (result.depositData.length > 0) {
+        setDepositData(prevData => {
+          const combined = [...prevData, ...result.depositData];
+          return Array.from(new Map(combined.map(item => [item.id, item])).values());
+        });
+      }
+      
+      if (user && firestore) {
+        const batch = writeBatch(firestore);
+        let transactionsSaved = 0;
 
-      if (user && firestore && result.creditData.length > 0) {
-        try {
-          const batch = writeBatch(firestore);
-          const transactionsCollection = collection(firestore, 'users', user.uid, 'creditCardTransactions');
+        if (result.creditData.length > 0) {
+          const creditCollection = collection(firestore, 'users', user.uid, 'creditCardTransactions');
           result.creditData.forEach(transaction => {
-            const docRef = doc(transactionsCollection, transaction.id);
+            const docRef = doc(creditCollection, transaction.id);
             batch.set(docRef, transaction, { merge: true });
           });
-          await batch.commit();
-          toast({
-            title: "儲存成功",
-            description: `${result.creditData.length} 筆新資料已自動儲存到您的帳戶。`
-          });
-        } catch (e: any) {
-          console.error("Error saving to Firestore:", e);
-          toast({
-            variant: "destructive",
-            title: "儲存失敗",
-            description: e.message || "無法將資料儲存到資料庫。",
-          });
+          transactionsSaved += result.creditData.length;
         }
-      } 
+
+        if (result.depositData.length > 0) {
+          const depositCollection = collection(firestore, 'users', user.uid, 'depositAccountTransactions');
+          result.depositData.forEach(transaction => {
+            const docRef = doc(depositCollection, transaction.id);
+            batch.set(docRef, transaction, { merge: true });
+          });
+          transactionsSaved += result.depositData.length;
+        }
+        
+        if (transactionsSaved > 0) {
+          try {
+            await batch.commit();
+            toast({
+              title: "儲存成功",
+              description: `${transactionsSaved} 筆新資料已自動儲存到您的帳戶。`
+            });
+          } catch (e: any) {
+            console.error("Error saving to Firestore:", e);
+            toast({
+              variant: "destructive",
+              title: "儲存失敗",
+              description: e.message || "無法將資料儲存到資料庫。",
+            });
+          }
+        }
+      }
 
       if (result.creditData.length === 0 && result.depositData.length === 0) {
         toast({
@@ -496,8 +544,8 @@ export function FinanceFlowClient() {
                     title: "更新失敗",
                     description: "無法將類型變更儲存到資料庫。",
                 });
-                if (savedTransactions) {
-                   const originalItem = savedTransactions.find(t => t.id === transactionId);
+                if (savedCreditTransactions) {
+                   const originalItem = savedCreditTransactions.find(t => t.id === transactionId);
                    if (originalItem) {
                        setCreditData(prevData => prevData.map(item => item.id === transactionId ? originalItem : item));
                    }
@@ -651,6 +699,7 @@ export function FinanceFlowClient() {
     ? (creditData.length > 0 ? "credit" : "deposit")
     : "statement";
 
+  const isLoadingTransactions = isLoadingCreditTransactions || isLoadingDepositTransactions;
   const showResults = (hasProcessed && hasData) || (!isUserLoading && !hasProcessed && hasData && !isLoadingTransactions);
 
 

@@ -12,13 +12,11 @@
         },
         "transactionDate": {
           "type": "string",
-          "description": "The date the transaction occurred.",
-          "format": "date-time"
+          "description": "The date the transaction occurred."
         },
-        "postingDate": {
+        "category": {
           "type": "string",
-          "description": "The date the transaction was posted to the account.",
-          "format": "date-time"
+          "description": "The category of the transaction."
         },
         "description": {
           "type": "string",
@@ -32,7 +30,7 @@
       "required": [
         "id",
         "transactionDate",
-        "postingDate",
+        "category",
         "description",
         "amount"
       ]
@@ -47,14 +45,13 @@
           "type": "string",
           "description": "Unique identifier for the deposit account transaction."
         },
-        "transactionDate": {
+        "date": {
           "type": "string",
-          "description": "The date the transaction occurred.",
-          "format": "date-time"
+          "description": "The date the transaction occurred."
         },
-        "transactionTime": {
+        "category": {
           "type": "string",
-          "description": "The time the transaction occurred."
+          "description": "The category of the transaction."
         },
         "description": {
           "type": "string",
@@ -64,19 +61,19 @@
           "type": "number",
           "description": "The amount of the transaction. Positive values are debits, negative values are credits."
         },
-        "otherPartyBankCode": {
+        "bankCode": {
           "type": "string",
           "description": "The bank code of the other party involved in the transaction, if applicable."
         },
-        "otherPartyAccountNumber": {
+        "accountNumber": {
           "type": "string",
           "description": "The account number of the other party involved in the transaction, if applicable."
         }
       },
       "required": [
         "id",
-        "transactionDate",
-        "transactionTime",
+        "date",
+        "category",
         "description",
         "amount"
       ]
