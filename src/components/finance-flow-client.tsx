@@ -118,24 +118,26 @@ export function FinanceFlowClient() {
   });
 
   useEffect(() => {
-    let mergedData: CreditData[] = [];
-    if (savedTransactions) {
-      mergedData = [...savedTransactions];
-    }
-  
-    const savedIds = new Set(savedTransactions?.map(t => t.id) || []);
-    const localOnlyData = creditData.filter(t => !savedIds.has(t.id));
-    mergedData.push(...localOnlyData);
+    if (isUserLoading) return; // Wait until user status is resolved
 
-    // Filter out duplicates that might come from local state after processing
-    const uniqueData = Array.from(new Map(mergedData.map(item => [item.id, item])).values());
-  
-    if (!isUserLoading && user) {
-      setCreditData(uniqueData);
-    } else if (!isUserLoading && !user) {
-      // If logged out, only show the non-saved (local) data.
-      setCreditData(creditData);
+    let mergedData: CreditData[] = [];
+
+    // 1. Add saved transactions if user is logged in
+    if (user && savedTransactions) {
+        mergedData = [...savedTransactions];
     }
+
+    // 2. Add local data that hasn't been saved yet
+    const savedIds = new Set(savedTransactions?.map(t => t.id) || []);
+    const localUnsavedData = creditData.filter(t => !savedIds.has(t.id));
+    mergedData.push(...localUnsavedData);
+
+    // 3. Create a unique list based on ID
+    const uniqueData = Array.from(new Map(mergedData.map(item => [item.id, item])).values());
+    
+    // Set the final state
+    setCreditData(uniqueData);
+
   }, [user, isUserLoading, savedTransactions]);
 
 
@@ -345,7 +347,10 @@ export function FinanceFlowClient() {
             description: "無法將資料儲存到資料庫。",
           });
         }
+      } else if (!user && result.creditData.length > 0) {
+        // Data is processed locally but not saved.
       }
+
 
       if (result.creditData.length === 0 && result.depositData.length === 0) {
         toast({
@@ -443,12 +448,16 @@ export function FinanceFlowClient() {
                     title: "更新失敗",
                     description: "無法將類型變更儲存到資料庫。",
                 });
-                setCreditData(savedTransactions || []);
+                // Revert UI change on failure
+                if (savedTransactions) {
+                   setCreditData(savedTransactions);
+                }
             }
         }
     };
 
     const handleDeleteTransaction = async (transactionId: string) => {
+        const originalData = [...creditData];
         setCreditData(prevData => prevData.filter(item => item.id !== transactionId));
 
         if (user && firestore) {
@@ -462,7 +471,8 @@ export function FinanceFlowClient() {
                     title: "刪除失敗",
                     description: "無法從資料庫中刪除此筆交易。",
                 });
-                setCreditData(savedTransactions || []);
+                // Revert UI change on failure
+                setCreditData(originalData);
             }
         }
     };
@@ -489,10 +499,12 @@ export function FinanceFlowClient() {
         let comparison = 0;
         if (creditSortKey === 'transactionDate') {
             try {
+                // Assuming format is MM/DD
                 const dateA = parse(aValue, 'MM/dd', new Date());
                 const dateB = parse(bValue, 'MM/dd', new Date());
                 comparison = dateA.getTime() - dateB.getTime();
             } catch {
+                // Fallback for invalid date formats
                 comparison = (aValue || '').localeCompare(bValue || '');
             }
         } else if (typeof aValue === 'string' && typeof bValue === 'string') {
@@ -500,6 +512,7 @@ export function FinanceFlowClient() {
         } else if (typeof aValue === 'number' && typeof bValue === 'number') {
             comparison = aValue - bValue;
         } else {
+            // Fallback for mixed types
             comparison = String(aValue).localeCompare(String(bValue), 'zh-Hant');
         }
 
@@ -542,6 +555,7 @@ export function FinanceFlowClient() {
         if (amount <= 0) return; // Only sum expenses
 
         const date = parse(transactionDate, 'MM/dd', new Date());
+        // Assuming current year if year is not present. This might need adjustment.
         const monthKey = format(date, 'yyyy年M月');
         
         categories.add(category);
@@ -584,7 +598,7 @@ export function FinanceFlowClient() {
   
   const defaultTab = hasProcessed
     ? (creditData.length > 0 ? "credit" : "deposit")
-    : (savedTransactions && savedTransactions.length > 0 ? "credit" : "deposit");
+    : (savedTransactions && savedTransactions.length > 0 ? "credit" : "statement");
 
   const showResults = (hasProcessed && hasData) || (!isUserLoading && !hasProcessed && hasData);
 
@@ -1075,7 +1089,3 @@ export function FinanceFlowClient() {
     </div>
   );
 }
-
-    
-
-    
