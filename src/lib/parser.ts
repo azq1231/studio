@@ -32,19 +32,32 @@ export function parseCreditCard(text: string, rules: ReplacementRule[]): CreditD
       continue;
     }
 
-    const parts = currentLine.split(/\s+/); // Split by one or more spaces
+    const parts = currentLine.split(/\s+/);
     
     if (parts.length >= 3) {
       const transactionDate = parts[0];
       const category = parts[1];
       
       const amountMatch = currentLine.match(/(-?[\d,]+(\.\d+)?)$/);
-      const amount = amountMatch ? parseFloat(amountMatch[0].replace(/,/g, '')) : 0;
+      let amount = 0;
+      if (amountMatch) {
+          amount = parseFloat(amountMatch[0].replace(/,/g, ''));
+      } else {
+         const lastPart = parts[parts.length -1];
+         const parsedAmount = parseFloat(lastPart.replace(/,/g, ''));
+         if(!isNaN(parsedAmount)) {
+            amount = parsedAmount;
+         }
+      }
       
       let description = currentLine;
-      if (amountMatch) {
-          description = description.substring(0, description.lastIndexOf(amountMatch[0])).trim();
+      
+      // Attempt to remove amount from the end of the description
+      const amountString = amount.toLocaleString().replace(/,/g, '');
+      if (description.endsWith(amountString)) {
+          description = description.substring(0, description.length - amountString.length).trim();
       }
+
       // Remove transactionDate and category from the beginning of the description
       description = description.substring(transactionDate.length).trim();
       description = description.substring(category.length).trim();
@@ -61,15 +74,27 @@ export function parseCreditCard(text: string, rules: ReplacementRule[]): CreditD
       const transactionDate = parts[0].trim();
       
       const amountMatch = currentLine.match(/(-?[\d,]+(\.\d+)?)$/);
-      const amount = amountMatch ? parseFloat(amountMatch[0].replace(/,/g, '')) : 0;
+      let amount = 0;
+      if (amountMatch) {
+          amount = parseFloat(amountMatch[0].replace(/,/g, ''));
+      } else {
+         const lastPart = parts[parts.length -1];
+         const parsedAmount = parseFloat(lastPart.replace(/,/g, ''));
+         if(!isNaN(parsedAmount)) {
+            amount = parsedAmount;
+         }
+      }
       
       let description = currentLine;
-      if (amountMatch) {
-          description = description.substring(0, description.lastIndexOf(amountMatch[0])).trim();
+
+      // Attempt to remove amount from the end of the description
+      const amountString = amount.toLocaleString().replace(/,/g, '');
+      if (description.endsWith(amountString)) {
+          description = description.substring(0, description.length - amountString.length).trim();
       }
+
       description = description.replace(transactionDate, '').trim();
       
-      // Check if the second part looks like a posting date and remove it
       const potentialPostingDate = parts[1].trim();
       if (/^\d{1,2}\/\d{1,2}/.test(potentialPostingDate)) {
         description = description.replace(potentialPostingDate, '').trim();
@@ -197,3 +222,5 @@ export function parseDepositAccount(text: string, rules: ReplacementRule[]): Dep
     accountNumber: r[6] as string,
   }));
 }
+
+    
