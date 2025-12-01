@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { User, onAuthStateChanged, getRedirectResult } from 'firebase/auth';
+import { User, onAuthStateChanged } from 'firebase/auth';
 import { useAuth } from '@/firebase/provider';
 
 /**
@@ -31,43 +31,23 @@ export function useUser(): UserHookResult {
       return;
     }
 
-    // Set loading to true when starting any auth state check.
-    setIsUserLoading(true);
-
-    // First, check for a redirect result.
-    getRedirectResult(auth)
-      .then((result) => {
-        if (result) {
-          // User successfully signed in via redirect.
-          // onAuthStateChanged will handle setting the user.
-        }
-      })
-      .catch((error) => {
-        // Handle errors from getRedirectResult.
-        console.error("Error from getRedirectResult: ", error);
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      (firebaseUser) => {
+        setUser(firebaseUser);
+        setIsUserLoading(false);
+        setUserError(null);
+      },
+      (error) => {
+        console.error("Error in onAuthStateChanged: ", error);
         setUserError(error);
-      })
-      .finally(() => {
-        // After checking for redirect, set up the normal auth state listener.
-        // This handles all other cases (already logged in, logged out, etc.).
-        const unsubscribe = onAuthStateChanged(
-          auth,
-          (firebaseUser) => {
-            setUser(firebaseUser);
-            setIsUserLoading(false);
-            setUserError(null);
-          },
-          (error) => {
-            console.error("Error in onAuthStateChanged: ", error);
-            setUserError(error);
-            setUser(null);
-            setIsUserLoading(false);
-          }
-        );
-        // Return the unsubscribe function for cleanup.
-        return () => unsubscribe();
-      });
-
+        setUser(null);
+        setIsUserLoading(false);
+      }
+    );
+    // Return the unsubscribe function for cleanup.
+    return () => unsubscribe();
+      
   }, [auth]); // Rerun the effect if the auth instance changes.
 
   return { user, isUserLoading, userError };
