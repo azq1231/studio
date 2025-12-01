@@ -6,19 +6,13 @@
       "type": "object",
       "description": "Represents a single credit card transaction.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the CreditCardTransaction entity."
-        },
         "transactionDate": {
           "type": "string",
-          "description": "The date when the transaction occurred.",
-          "format": "date"
+          "description": "The date when the transaction occurred."
         },
-        "postingDate": {
+        "category": {
           "type": "string",
-          "description": "The date when the transaction was posted to the account.",
-          "format": "date"
+          "description": "The category of the transaction."
         },
         "description": {
           "type": "string",
@@ -28,18 +22,17 @@
           "type": "number",
           "description": "The amount of the transaction."
         },
-        "categoryId": {
+        "userId": {
           "type": "string",
-          "description": "Reference to Category. (Relationship: Category 1:N CreditCardTransaction)"
+          "description": "The ID of the user who owns this transaction."
         }
       },
       "required": [
-        "id",
         "transactionDate",
-        "postingDate",
+        "category",
         "description",
         "amount",
-        "categoryId"
+        "userId"
       ]
     },
     "DepositAccountTransaction": {
@@ -114,27 +107,12 @@
   "auth": {
     "providers": [
       "password",
-      "anonymous"
+      "anonymous",
+      "google.com"
     ]
   },
   "firestore": {
     "structure": [
-      {
-        "path": "/users/{userId}",
-        "definition": {
-          "entityName": "user",
-          "schema": {
-            "$ref": "#/backend/entities/user"
-          },
-          "description": "Root collection for user data. This path exists implicitly through the user's authentication and doesn't require a specific entity definition. It serves as the parent for all user-owned data.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier for the user, obtained from Firebase Authentication."
-            }
-          ]
-        }
-      },
       {
         "path": "/users/{userId}/credit_card_transactions/{transactionId}",
         "definition": {

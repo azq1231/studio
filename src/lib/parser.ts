@@ -31,22 +31,26 @@ export function parseCreditCard(text: string): RawCreditData[] {
     const parts = currentLine.split(/\s+/);
     if (parts.length < 2) continue;
     
-    const transactionDate = parts[0];
+    let transactionDate = parts[0];
     let postingDate = '';
     let descriptionStartIndex = 1;
 
-    // Check if the second part is a posting date (e.g., "11/02" or just a word like "吃")
+    // Check if the second part is a posting date (MM/DD format)
     if (/^\d{1,2}\/\d{1,2}$/.test(parts[1])) {
-      postingDate = parts[1];
-      descriptionStartIndex = 2;
+        postingDate = parts[1];
+        descriptionStartIndex = 2;
     } else {
-      // If it's not a date, it might be the start of the description or a manual category
-      // We will treat it as the posting date for now, and let the rules engine decide.
-      postingDate = parts[1];
-      descriptionStartIndex = 2;
+        // If not, it's part of the description, and postingDate is unknown
+        postingDate = ''; // Or some other placeholder
+        descriptionStartIndex = 1;
     }
 
-    // The rest of the line is the description and amount
+    // Sometimes transaction date and posting date are merged, e.g., 11/0211/02
+    if (transactionDate.length > 5 && /^\d{1,2}\/\d{1,2}\d{1,2}\/\d{1,2}/.test(transactionDate)) {
+        postingDate = transactionDate.slice(transactionDate.length / 2);
+        transactionDate = transactionDate.slice(0, transactionDate.length / 2);
+    }
+    
     const remainingLine = parts.slice(descriptionStartIndex).join(' ');
     
     const amountMatch = remainingLine.match(/(-?[\d,]+(\.\d+)?)$/);
@@ -66,7 +70,6 @@ export function parseCreditCard(text: string): RawCreditData[] {
         }
     }
 
-    // If description from parts is empty, it means the structure was likely [date] [posting_date/category] [description_and_amount]
     if (!description && parts.length > descriptionStartIndex) {
         description = parts.slice(descriptionStartIndex).join(' ');
     }
@@ -75,7 +78,7 @@ export function parseCreditCard(text: string): RawCreditData[] {
     if (description) {
       results.push({
         transactionDate,
-        postingDate, // Pass the original second column value
+        postingDate,
         description,
         amount,
       });

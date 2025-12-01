@@ -5,6 +5,16 @@ import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as XLSX from 'xlsx';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+  Legend,
+} from 'recharts';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,10 +28,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast"
-import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings, ChevronsUpDown, ArrowDown, ArrowUp } from 'lucide-react';
+import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2 } from 'lucide-react';
 import { processBankStatement, type ReplacementRule, type CategoryRule } from '@/app/actions';
 import type { CreditData, DepositData } from '@/lib/parser';
-
+import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, doc, writeBatch } from 'firebase/firestore';
 
 const statementFormSchema = z.object({
   statement: z.string().min(10, { message: '報表內容至少需要10個字元。' }),
@@ -49,6 +60,9 @@ type SortKey = 'keyword' | 'category';
 type SortDirection = 'asc' | 'desc';
 
 export function FinanceFlowClient() {
+  const { user, isUserLoading } = useUser();
+  const firestore = useFirestore();
+
   const [isLoading, setIsLoading] = useState(false);
   const [hasProcessed, setHasProcessed] = useState(false);
   const [creditData, setCreditData] = useState<CreditData[]>([]);
@@ -60,6 +74,13 @@ export function FinanceFlowClient() {
 
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+  const transactionsQuery = useMemoFirebase(
+    () => (user ? collection(firestore, 'users', user.uid, 'credit_card_transactions') : null),
+    [user, firestore]
+  );
+  
+  const { data: savedTransactions, isLoading: isLoadingTransactions } = useCollection<CreditData>(transactionsQuery);
 
   const statementForm = useForm<StatementFormData>({
     resolver: zodResolver(statementFormSchema),
@@ -84,6 +105,14 @@ export function FinanceFlowClient() {
     control: settingsForm.control,
     name: 'categoryRules',
   });
+
+  useEffect(() => {
+    if (!isUserLoading && user) {
+        setCreditData(savedTransactions || []);
+    } else if (!isUserLoading && !user) {
+        setCreditData([]);
+    }
+  }, [user, isUserLoading, savedTransactions])
 
 
   useEffect(() => {
@@ -251,17 +280,51 @@ export function FinanceFlowClient() {
 
 
   async function onSubmit(values: StatementFormData) {
+    if (!user) {
+      toast({
+        variant: "destructive",
+        title: "請先登入",
+        description: "您需要登入才能處理並儲存您的報表。",
+      });
+      return;
+    }
+
     setIsLoading(true);
     setHasProcessed(false);
-    setCreditData([]);
+    // setCreditData([]); // Don't clear local data, it will be replaced by Firestore data on save
     setDepositData([]);
 
     const { replacementRules, categoryRules } = settingsForm.getValues();
     const result = await processBankStatement(values.statement, replacementRules, categoryRules);
     
     if (result.success) {
-      setCreditData(result.creditData);
+      // Don't set credit data here directly, it will be updated by the useCollection hook
+      // setCreditData(result.creditData); 
       setDepositData(result.depositData);
+
+      if (result.creditData.length > 0 && firestore && user) {
+        try {
+          const batch = writeBatch(firestore);
+          const transactionsCollection = collection(firestore, 'users', user.uid, 'credit_card_transactions');
+          result.creditData.forEach(transaction => {
+            const docRef = doc(transactionsCollection); // Create a new doc with a unique ID
+            batch.set(docRef, transaction);
+          });
+          await batch.commit();
+          toast({
+            title: "儲存成功",
+            description: `${result.creditData.length} 筆信用卡資料已儲存到您的帳戶。`
+          });
+        } catch (e) {
+          console.error("Error saving to Firestore:", e);
+          toast({
+            variant: "destructive",
+            title: "儲存失敗",
+            description: "無法將資料儲存到資料庫。",
+          });
+        }
+      }
+
       if (result.creditData.length === 0 && result.depositData.length === 0) {
         toast({
           variant: "default",
@@ -370,9 +433,34 @@ export function FinanceFlowClient() {
   }, [categoryFields, sortKey, sortDirection])
 
 
+  const categoryChartData = useMemo(() => {
+    if (!creditData || creditData.length === 0) return [];
+    
+    const categoryTotals = creditData.reduce((acc, transaction) => {
+      const category = transaction.category || '未分類';
+      const amount = transaction.amount || 0;
+      if (amount > 0) { // Only count expenses
+        if (!acc[category]) {
+          acc[category] = 0;
+        }
+        acc[category] += amount;
+      }
+      return acc;
+    }, {} as Record<string, number>);
+
+    return Object.entries(categoryTotals).map(([name, total]) => ({
+      name,
+      total,
+    })).sort((a, b) => b.total - a.total);
+
+  }, [creditData]);
+
+
   const noDataFound = hasProcessed && !isLoading && creditData.length === 0 && depositData.length === 0;
   const hasData = creditData.length > 0 || depositData.length > 0;
   const defaultTab = creditData.length > 0 ? "credit" : "deposit";
+  const showResults = hasProcessed || (savedTransactions && savedTransactions.length > 0) || depositData.length > 0;
+
 
   const SortableHeader = ({ sortKey: key, children }: { sortKey: SortKey, children: React.ReactNode }) => {
     const isSorted = sortKey === key;
@@ -396,7 +484,11 @@ export function FinanceFlowClient() {
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle>貼上報表內容</CardTitle>
-          <CardDescription>將您的網路銀行報表內容直接複製並貼到下方文字框中，然後點擊「處理報表」。</CardDescription>
+          <CardDescription>
+            {user
+              ? "將您的網路銀行報表內容直接複製並貼到下方文字框中，處理後的資料將會自動儲存到您的帳戶。"
+              : "請先登入。登入後，將報表內容貼入下方，處理後的資料將會自動儲存。"}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...statementForm}>
@@ -411,6 +503,7 @@ export function FinanceFlowClient() {
                         placeholder="例如：&#10;11/02	吃	新東陽忠孝一門市	500"
                         className="min-h-[250px] font-mono text-sm bg-background/50"
                         {...field}
+                        disabled={isUserLoading || !user}
                       />
                     </FormControl>
                     <FormMessage />
@@ -418,9 +511,9 @@ export function FinanceFlowClient() {
                 )}
               />
               <div className="flex justify-end">
-                <Button type="submit" disabled={isLoading || !statementForm.formState.isValid} className="bg-accent hover:bg-accent/90 text-accent-foreground">
-                  {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  處理報表
+                <Button type="submit" disabled={isLoading || isUserLoading || !user || !statementForm.formState.isValid} className="bg-accent hover:bg-accent/90 text-accent-foreground">
+                  {(isLoading || isUserLoading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  處理並儲存報表
                 </Button>
               </div>
             </form>
@@ -653,13 +746,13 @@ export function FinanceFlowClient() {
         </AccordionItem>
       </Accordion>
 
-      {(isLoading || hasProcessed) && (
+      {(isLoading || isLoadingTransactions || showResults) && (
         <Card>
           <CardHeader>
             <h3 className="text-xl font-semibold font-headline">處理結果</h3>
           </CardHeader>
           <CardContent>
-            {isLoading && (
+            {(isLoading || isLoadingTransactions) && (
               <div className="space-y-4">
                 <div className="flex items-center space-x-4">
                   <Skeleton className="h-10 w-24 rounded-md" />
@@ -669,7 +762,7 @@ export function FinanceFlowClient() {
               </div>
             )}
             
-            {hasData && !isLoading && (
+            {hasData && !(isLoading || isLoadingTransactions) && (
               <div>
                 <div className="flex justify-end items-center mb-4">
                   <Button variant="outline" size="sm" onClick={handleDownload}>
@@ -681,6 +774,7 @@ export function FinanceFlowClient() {
                   <TabsList>
                     {creditData.length > 0 && <TabsTrigger value="credit">信用卡 ({creditData.length})</TabsTrigger>}
                     {depositData.length > 0 && <TabsTrigger value="deposit">活存帳戶 ({depositData.length})</TabsTrigger>}
+                    {creditData.length > 0 && <TabsTrigger value="chart"><BarChart2 className="w-4 h-4 mr-2"/>統計圖表</TabsTrigger>}
                   </TabsList>
                   {creditData.length > 0 && (
                     <TabsContent value="credit">
@@ -733,11 +827,38 @@ export function FinanceFlowClient() {
                       </Table>
                     </TabsContent>
                   )}
+                   {creditData.length > 0 && (
+                    <TabsContent value="chart">
+                       <div className="h-[400px] w-full mt-4">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={categoryChartData}
+                            margin={{
+                              top: 5, right: 30, left: 20, bottom: 5,
+                            }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" />
+                            <YAxis allowDecimals={false} />
+                            <Tooltip
+                              contentStyle={{ 
+                                background: "hsl(var(--background))",
+                                border: "1px solid hsl(var(--border))"
+                              }}
+                              formatter={(value: number) => value.toLocaleString()}
+                            />
+                            <Legend formatter={(value) => "總金額"}/>
+                            <Bar dataKey="total" fill="hsl(var(--primary))" name="總金額"/>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </TabsContent>
+                  )}
                 </Tabs>
               </div>
             )}
 
-            {noDataFound && (
+            {noDataFound && !(isLoading || isLoadingTransactions) && (
               <div className="text-center text-muted-foreground p-8 border-2 border-dashed rounded-lg">
                 <AlertCircle className="mx-auto h-12 w-12" />
                 <p className="mt-4 text-lg">無有效資料</p>
