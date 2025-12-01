@@ -23,9 +23,6 @@ export function AuthButton() {
 
   const handleLogin = async () => {
     const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({
-      login_hint: 'user@example.com'
-    });
     try {
       await signInWithPopup(auth, provider);
     } catch (error) {

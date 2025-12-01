@@ -75,6 +75,12 @@ export function FinanceFlowClient() {
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
   const transactionsQuery = useMemoFirebase(
     () => (user ? collection(firestore, 'users', user.uid, 'credit_card_transactions') : null),
     [user, firestore]
@@ -116,6 +122,7 @@ export function FinanceFlowClient() {
 
 
   useEffect(() => {
+    if (!isClient) return;
     try {
       // Load available categories
       const savedCategories = localStorage.getItem('availableCategories');
@@ -234,7 +241,7 @@ export function FinanceFlowClient() {
     } catch (e) {
       console.error("Failed to load settings from localStorage", e);
     }
-  }, [settingsForm]);
+  }, [settingsForm, isClient]);
 
   const handleSaveSettings = (data: SettingsFormData) => {
     try {
@@ -521,230 +528,233 @@ export function FinanceFlowClient() {
         </CardContent>
       </Card>
       
-      <Accordion type="single" collapsible>
-        <AccordionItem value="item-1">
-          <AccordionTrigger>
-            <div className="flex items-center gap-2">
-              <Settings className="w-5 h-5" />
-              <span className="text-lg font-semibold">規則設定</span>
-            </div>
-          </AccordionTrigger>
-          <AccordionContent>
-            <Card>
-              <CardContent className="pt-6">
-                 <Form {...settingsForm}>
-                  <form onSubmit={settingsForm.handleSubmit(handleSaveSettings)} className="space-y-6">
-                    <Tabs defaultValue="category" className="w-full">
-                      <TabsList className="grid w-full grid-cols-3">
-                        <TabsTrigger value="replacement">取代規則</TabsTrigger>
-                        <TabsTrigger value="category">分類規則</TabsTrigger>
-                        <TabsTrigger value="manage-categories">管理類型</TabsTrigger>
-                      </TabsList>
-                      <TabsContent value="replacement" className="mt-4">
-                        <CardDescription className="mb-4">
-                          設定自動取代或刪除規則。勾選「刪除整筆資料」後，符合條件的資料將被整筆移除。
-                        </CardDescription>
-                        <div className="rounded-md border">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead className="w-2/5">尋找文字</TableHead>
-                                <TableHead className="w-2/5">取代為</TableHead>
-                                <TableHead className="w-1/5 text-center">刪除整筆資料</TableHead>
-                                <TableHead className="w-[50px]">操作</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {replacementFields.map((field, index) => (
-                                <TableRow key={field.id}>
-                                  <TableCell className="p-1">
-                                    <FormField
-                                      control={settingsForm.control}
-                                      name={`replacementRules.${index}.find`}
-                                      render={({ field }) => (
-                                        <FormItem>
-                                          <FormControl>
-                                            <Input placeholder="要被取代的文字" {...field} className="h-9"/>
-                                          </FormControl>
-                                          <FormMessage className="text-xs px-2"/>
-                                        </FormItem>
-                                      )}
-                                    />
-                                  </TableCell>
-                                  <TableCell className="p-1">
-                                    <FormField
-                                      control={settingsForm.control}
-                                      name={`replacementRules.${index}.replace`}
-                                      render={({ field }) => (
-                                        <FormItem>
-                                          <FormControl>
-                                            <Input placeholder="新的文字 (留空為刪除)" {...field} className="h-9"/>
-                                          </FormControl>
-                                           <FormMessage className="text-xs px-2"/>
-                                        </FormItem>
-                                      )}
-                                    />
-                                  </TableCell>
-                                  <TableCell className="p-1 text-center">
-                                    <FormField
-                                      control={settingsForm.control}
-                                      name={`replacementRules.${index}.deleteRow`}
-                                      render={({ field }) => (
-                                        <FormItem className="flex justify-center items-center h-full">
-                                          <FormControl>
-                                            <Checkbox
-                                              checked={field.value}
-                                              onCheckedChange={field.onChange}
-                                            />
-                                          </FormControl>
-                                        </FormItem>
-                                      )}
-                                    />
-                                  </TableCell>
-                                  <TableCell className="p-1">
-                                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeReplacement(index)}>
-                                      <Trash2 className="h-4 w-4 text-destructive" />
-                                    </Button>
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </div>
-                         <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="mt-4"
-                          onClick={() => appendReplacement({ find: '', replace: '', deleteRow: false })}
-                        >
-                          <PlusCircle className="mr-2 h-4 w-4" />
-                          新增取代規則
-                        </Button>
-                      </TabsContent>
-                      <TabsContent value="category" className="mt-4">
-                        <CardDescription className="mb-4">
-                           設定交易項目關鍵字與對應的類型。處理報表時，將會自動帶入符合的第一個類型。
-                        </CardDescription>
-                        <div className="rounded-md border">
-                           <Table>
-                            <TableHeader>
+      {isClient && (
+        <Accordion type="single" collapsible>
+          <AccordionItem value="item-1">
+            <AccordionTrigger>
+              <div className="flex items-center gap-2">
+                <Settings className="w-5 h-5" />
+                <span className="text-lg font-semibold">規則設定</span>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent>
+              <Card>
+                <CardContent className="pt-6">
+                  <Form {...settingsForm}>
+                    <form onSubmit={settingsForm.handleSubmit(handleSaveSettings)} className="space-y-6">
+                      <Tabs defaultValue="category" className="w-full">
+                        <TabsList className="grid w-full grid-cols-3">
+                          <TabsTrigger value="replacement">取代規則</TabsTrigger>
+                          <TabsTrigger value="category">分類規則</TabsTrigger>
+                          <TabsTrigger value="manage-categories">管理類型</TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="replacement" className="mt-4">
+                          <CardDescription className="mb-4">
+                            設定自動取代或刪除規則。勾選「刪除整筆資料」後，符合條件的資料將被整筆移除。
+                          </CardDescription>
+                          <div className="rounded-md border">
+                            <Table>
+                              <TableHeader>
                                 <TableRow>
-                                    <SortableHeader sortKey="keyword">關鍵字</SortableHeader>
-                                    <SortableHeader sortKey="category">類型</SortableHeader>
-                                    <TableHead className="w-[50px]">操作</TableHead>
+                                  <TableHead className="w-2/5">尋找文字</TableHead>
+                                  <TableHead className="w-2/5">取代為</TableHead>
+                                  <TableHead className="w-1/5 text-center">刪除整筆資料</TableHead>
+                                  <TableHead className="w-[50px]">操作</TableHead>
                                 </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {renderSortedCategoryFields.map((field) => {
-                                  const originalIndex = categoryFields.findIndex(f => f.id === field.id);
-                                  return (
-                                    <TableRow key={field.id}>
-                                        <TableCell className="p-1">
-                                            <FormField
-                                                control={settingsForm.control}
-                                                name={`categoryRules.${originalIndex}.keyword`}
-                                                render={({ field }) => (
-                                                <FormItem>
-                                                    <FormControl>
-                                                    <Input placeholder="交易項目中的文字" {...field} className="h-9"/>
-                                                    </FormControl>
-                                                    <FormMessage className="text-xs px-2"/>
-                                                </FormItem>
-                                                )}
-                                            />
-                                        </TableCell>
-                                        <TableCell className="p-1">
-                                            <FormField
-                                                control={settingsForm.control}
-                                                name={`categoryRules.${originalIndex}.category`}
-                                                render={({ field }) => (
-                                                    <FormItem>
-                                                        <Select onValueChange={field.onChange} value={field.value}>
-                                                            <FormControl>
-                                                                <SelectTrigger className="h-9">
-                                                                    <SelectValue placeholder="選擇一個類型" />
-                                                                </SelectTrigger>
-                                                            </FormControl>
-                                                            <SelectContent>
-                                                                {availableCategories.map(cat => (
-                                                                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                        <FormMessage className="text-xs px-2"/>
-                                                    </FormItem>
-                                                )}
-                                            />
-                                        </TableCell>
-                                        <TableCell className="p-1">
-                                            <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeCategory(originalIndex)}>
-                                                <Trash2 className="h-4 w-4 text-destructive" />
-                                            </Button>
-                                        </TableCell>
-                                    </TableRow>
-                                  )
-                                })}
-                            </TableBody>
-                           </Table>
-                        </div>
-                         <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="mt-4"
-                          onClick={() => appendCategory({ keyword: '', category: '' })}
-                        >
-                          <PlusCircle className="mr-2 h-4 w-4" />
-                          新增分類規則
-                        </Button>
-                      </TabsContent>
-                       <TabsContent value="manage-categories" className="mt-4">
-                        <CardDescription className="mb-4">
-                          新增或刪除在「分類規則」下拉選單中看到的類型選項。
-                        </CardDescription>
-                        <div className="space-y-4">
-                          <div className="flex gap-2">
-                            <Input 
-                              placeholder="輸入新的類型名稱" 
-                              value={newCategory}
-                              onChange={(e) => setNewCategory(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                  handleAddCategory();
-                                }
-                              }}
-                            />
-                            <Button type="button" onClick={handleAddCategory}>新增類型</Button>
-                          </div>
-                          <div className="space-y-2 max-h-60 overflow-y-auto pr-2 rounded-md border p-2">
-                            {availableCategories.length > 0 ? (
-                                availableCategories.map(cat => (
-                                <div key={cat} className="flex items-center justify-between p-2 bg-background/50 rounded-md">
-                                    <span className="text-sm">{cat}</span>
-                                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleRemoveCategory(cat)}>
+                              </TableHeader>
+                              <TableBody>
+                                {replacementFields.map((field, index) => (
+                                  <TableRow key={field.id}>
+                                    <TableCell className="p-1">
+                                      <FormField
+                                        control={settingsForm.control}
+                                        name={`replacementRules.${index}.find`}
+                                        render={({ field }) => (
+                                          <FormItem>
+                                            <FormControl>
+                                              <Input placeholder="要被取代的文字" {...field} className="h-9"/>
+                                            </FormControl>
+                                            <FormMessage className="text-xs px-2"/>
+                                          </FormItem>
+                                        )}
+                                      />
+                                    </TableCell>
+                                    <TableCell className="p-1">
+                                      <FormField
+                                        control={settingsForm.control}
+                                        name={`replacementRules.${index}.replace`}
+                                        render={({ field }) => (
+                                          <FormItem>
+                                            <FormControl>
+                                              <Input placeholder="新的文字 (留空為刪除)" {...field} className="h-9"/>
+                                            </FormControl>
+                                            <FormMessage className="text-xs px-2"/>
+                                          </FormItem>
+                                        )}
+                                      />
+                                    </TableCell>
+                                    <TableCell className="p-1 text-center">
+                                      <FormField
+                                        control={settingsForm.control}
+                                        name={`replacementRules.${index}.deleteRow`}
+                                        render={({ field }) => (
+                                          <FormItem className="flex justify-center items-center h-full">
+                                            <FormControl>
+                                              <Checkbox
+                                                checked={field.value}
+                                                onCheckedChange={field.onChange}
+                                              />
+                                            </FormControl>
+                                          </FormItem>
+                                        )}
+                                      />
+                                    </TableCell>
+                                    <TableCell className="p-1">
+                                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeReplacement(index)}>
                                         <Trash2 className="h-4 w-4 text-destructive" />
-                                    </Button>
-                                </div>
-                                ))
-                            ) : (
-                                <p className="text-sm text-muted-foreground text-center p-4">尚未新增任何類型。</p>
-                            )}
+                                      </Button>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
                           </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="mt-4"
+                            onClick={() => appendReplacement({ find: '', replace: '', deleteRow: false })}
+                          >
+                            <PlusCircle className="mr-2 h-4 w-4" />
+                            新增取代規則
+                          </Button>
+                        </TabsContent>
+                        <TabsContent value="category" className="mt-4">
+                          <CardDescription className="mb-4">
+                            設定交易項目關鍵字與對應的類型。處理報表時，將會自動帶入符合的第一個類型。
+                          </CardDescription>
+                          <div className="rounded-md border">
+                            <Table>
+                              <TableHeader>
+                                  <TableRow>
+                                      <SortableHeader sortKey="keyword">關鍵字</SortableHeader>
+                                      <SortableHeader sortKey="category">類型</SortableHeader>
+                                      <TableHead className="w-[50px]">操作</TableHead>
+                                  </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                  {renderSortedCategoryFields.map((field) => {
+                                    const originalIndex = categoryFields.findIndex(f => f.id === field.id);
+                                    return (
+                                      <TableRow key={field.id}>
+                                          <TableCell className="p-1">
+                                              <FormField
+                                                  control={settingsForm.control}
+                                                  name={`categoryRules.${originalIndex}.keyword`}
+                                                  render={({ field }) => (
+                                                  <FormItem>
+                                                      <FormControl>
+                                                      <Input placeholder="交易項目中的文字" {...field} className="h-9"/>
+                                                      </FormControl>
+                                                      <FormMessage className="text-xs px-2"/>
+                                                  </FormItem>
+                                                  )}
+                                              />
+                                          </TableCell>
+                                          <TableCell className="p-1">
+                                              <FormField
+                                                  control={settingsForm.control}
+                                                  name={`categoryRules.${originalIndex}.category`}
+                                                  render={({ field }) => (
+                                                      <FormItem>
+                                                          <Select onValueChange={field.onChange} value={field.value}>
+                                                              <FormControl>
+                                                                  <SelectTrigger className="h-9">
+                                                                      <SelectValue placeholder="選擇一個類型" />
+                                                                  </SelectTrigger>
+                                                              </FormControl>
+                                                              <SelectContent>
+                                                                  {availableCategories.map(cat => (
+                                                                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                                                  ))}
+                                                              </SelectContent>
+                                                          </Select>
+                                                          <FormMessage className="text-xs px-2"/>
+                                                      </FormItem>
+                                                  )}
+                                              />
+                                          </TableCell>
+                                          <TableCell className="p-1">
+                                              <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeCategory(originalIndex)}>
+                                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                              </Button>
+                                          </TableCell>
+                                      </TableRow>
+                                    )
+                                  })}
+                              </TableBody>
+                            </Table>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="mt-4"
+                            onClick={() => appendCategory({ keyword: '', category: '' })}
+                          >
+                            <PlusCircle className="mr-2 h-4 w-4" />
+                            新增分類規則
+                          </Button>
+                        </TabsContent>
+                        <TabsContent value="manage-categories" className="mt-4">
+                          <CardDescription className="mb-4">
+                            新增或刪除在「分類規則」下拉選單中看到的類型選項。
+                          </CardDescription>
+                          <div className="space-y-4">
+                            <div className="flex gap-2">
+                              <Input 
+                                placeholder="輸入新的類型名稱" 
+                                value={newCategory}
+                                onChange={(e) => setNewCategory(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleAddCategory();
+                                  }
+                                }}
+                              />
+                              <Button type="button" onClick={handleAddCategory}>新增類型</Button>
+                            </div>
+                            <div className="space-y-2 max-h-60 overflow-y-auto pr-2 rounded-md border p-2">
+                              {availableCategories.length > 0 ? (
+                                  availableCategories.map(cat => (
+                                  <div key={cat} className="flex items-center justify-between p-2 bg-background/50 rounded-md">
+                                      <span className="text-sm">{cat}</span>
+                                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleRemoveCategory(cat)}>
+                                          <Trash2 className="h-4 w-4 text-destructive" />
+                                      </Button>
+                                  </div>
+                                  ))
+                              ) : (
+                                  <p className="text-sm text-muted-foreground text-center p-4">尚未新增任何類型。</p>
+                              )}
+                            </div>
+                          </div>
+                        </TabsContent>
+                      </Tabs>
+                      <div className="flex justify-end items-center mt-6">
+                          <Button type="submit">儲存設定</Button>
                         </div>
-                      </TabsContent>
-                    </Tabs>
-                     <div className="flex justify-end items-center mt-6">
-                        <Button type="submit">儲存設定</Button>
-                      </div>
-                  </form>
-                 </Form>
-              </CardContent>
-            </Card>
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
+                    </form>
+                  </Form>
+                </CardContent>
+              </Card>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      )}
+
 
       {(isLoading || isLoadingTransactions || showResults) && (
         <Card>
