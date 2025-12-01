@@ -238,7 +238,10 @@ export function FinanceFlowClient() {
         const newSaved = savedTransactions.filter(t => !existingIds.has(t.id));
         
         if (newSaved.length === 0) {
-            return prevData;
+            // If the saved data is just a subset of what's already on screen, no need to merge
+            if (savedTransactions.every(st => existingIds.has(st.id))) {
+                return prevData;
+            }
         }
 
         const mergedData = [...prevData, ...newSaved];
@@ -388,7 +391,7 @@ export function FinanceFlowClient() {
           await batch.commit();
           toast({
             title: "儲存成功",
-            description: `${result.creditData.length} 筆新資料已儲存到您的帳戶。`
+            description: `${result.creditData.length} 筆新資料已自動儲存到您的帳戶。`
           });
         } catch (e) {
           console.error("Error saving to Firestore:", e);
@@ -717,7 +720,7 @@ export function FinanceFlowClient() {
               <div className="flex justify-end">
                 <Button type="submit" disabled={isLoading || !statementForm.formState.isValid} className="bg-accent hover:bg-accent/90 text-accent-foreground">
                   {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  { user ? "處理並儲存報表" : "處理報表" }
+                  處理報表
                 </Button>
               </div>
             </form>
@@ -751,13 +754,13 @@ export function FinanceFlowClient() {
                               <CardDescription>
                                 設定自動取代或刪除規則。勾選「刪除整筆資料」後，符合條件的資料將被整筆移除。
                               </CardDescription>
-                               <AlertDialogTrigger asChild>
-                                <Button type="button" variant="outline" size="sm">
-                                  <RotateCcw className="mr-2 h-4 w-4" />
-                                  重置
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialog>
+                               <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button type="button" variant="outline" size="sm">
+                                    <RotateCcw className="mr-2 h-4 w-4" />
+                                    重置
+                                  </Button>
+                                </AlertDialogTrigger>
                                 <AlertDialogContent>
                                   <AlertDialogHeader>
                                     <AlertDialogTitle>確定要重置取代規則嗎？</AlertDialogTitle>
@@ -855,13 +858,13 @@ export function FinanceFlowClient() {
                               <CardDescription>
                                 設定交易項目關鍵字與對應的類型。處理報表時，將會自動帶入符合的第一個類型。
                               </CardDescription>
-                               <AlertDialogTrigger asChild>
-                                <Button type="button" variant="outline" size="sm">
-                                  <RotateCcw className="mr-2 h-4 w-4" />
-                                  重置
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialog>
+                               <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button type="button" variant="outline" size="sm">
+                                    <RotateCcw className="mr-2 h-4 w-4" />
+                                    重置
+                                  </Button>
+                                </AlertDialogTrigger>
                                 <AlertDialogContent>
                                   <AlertDialogHeader>
                                     <AlertDialogTitle>確定要重置分類規則嗎？</AlertDialogTitle>
