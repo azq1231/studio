@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as XLSX from 'xlsx';
@@ -16,8 +16,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCap
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from "@/components/ui/checkbox"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast"
-import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings } from 'lucide-react';
+import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings, Tags, Edit } from 'lucide-react';
 import { processBankStatement, type ReplacementRule, type CategoryRule } from '@/app/actions';
 import type { CreditData, DepositData } from '@/lib/parser';
 
@@ -34,7 +35,7 @@ const replacementRuleSchema = z.object({
 
 const categoryRuleSchema = z.object({
   keyword: z.string().min(1, { message: '請輸入關鍵字' }),
-  category: z.string().min(1, { message: '請輸入類型' }),
+  category: z.string().min(1, { message: '請選擇一個類型' }),
 });
 
 const settingsFormSchema = z.object({
@@ -52,6 +53,9 @@ export function FinanceFlowClient() {
   const [creditData, setCreditData] = useState<CreditData[]>([]);
   const [depositData, setDepositData] = useState<DepositData[]>([]);
   const { toast } = useToast();
+
+  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
+  const [newCategory, setNewCategory] = useState('');
 
   const statementForm = useForm<StatementFormData>({
     resolver: zodResolver(statementFormSchema),
@@ -80,6 +84,16 @@ export function FinanceFlowClient() {
 
   useEffect(() => {
     try {
+      // Load available categories
+      const savedCategories = localStorage.getItem('availableCategories');
+      if (savedCategories) {
+        setAvailableCategories(JSON.parse(savedCategories));
+      } else {
+        const defaultCategories = ['方', '吃', '家', '固定', '蘇', '秀'];
+        setAvailableCategories(defaultCategories);
+        localStorage.setItem('availableCategories', JSON.stringify(defaultCategories));
+      }
+
       const savedReplacementRules = localStorage.getItem('replacementRules');
       if (savedReplacementRules) {
         const parsed = JSON.parse(savedReplacementRules);
@@ -135,12 +149,13 @@ export function FinanceFlowClient() {
           { keyword: '橙印良品', category: '蘇' },
           { keyword: 'PayEasy', category: '蘇' },
           { keyword: '金玉堂', category: '秀' },
-          { keyword: '秀泰全球影城', category: '吃' }, // Per user's list
+          { keyword: '秀泰全球影城', category: '吃' },
           { keyword: '寶雅', category: '秀' },
+          { keyword: '雙月食品社', category: '吃' },
         ]);
       }
     } catch (e) {
-      console.error("Failed to load rules from localStorage", e);
+      console.error("Failed to load settings from localStorage", e);
     }
   }, [settingsForm]);
 
@@ -160,6 +175,32 @@ export function FinanceFlowClient() {
       });
     }
   };
+
+  const handleAddCategory = () => {
+    if (newCategory && !availableCategories.includes(newCategory)) {
+      const updatedCategories = [...availableCategories, newCategory];
+      setAvailableCategories(updatedCategories);
+      localStorage.setItem('availableCategories', JSON.stringify(updatedCategories));
+      setNewCategory('');
+      toast({ title: '類型已新增', description: `「${newCategory}」已成功新增。` });
+    } else if (availableCategories.includes(newCategory)) {
+      toast({ variant: 'destructive', title: '新增失敗', description: '此類型已存在。' });
+    }
+  };
+
+  const handleRemoveCategory = (categoryToRemove: string) => {
+    const updatedCategories = availableCategories.filter(c => c !== categoryToRemove);
+    setAvailableCategories(updatedCategories);
+    localStorage.setItem('availableCategories', JSON.stringify(updatedCategories));
+
+    // Also remove any rules that use this category
+    const currentRules = settingsForm.getValues('categoryRules');
+    const updatedRules = currentRules.filter(rule => rule.category !== categoryToRemove);
+    settingsForm.setValue('categoryRules', updatedRules, { shouldDirty: true, shouldValidate: true });
+
+    toast({ title: '類型已刪除', description: `「${categoryToRemove}」已被移除。` });
+  };
+
 
   async function onSubmit(values: StatementFormData) {
     setIsLoading(true);
@@ -226,7 +267,7 @@ export function FinanceFlowClient() {
     } catch(error) {
        toast({
         variant: "destructive",
-        title: "下載失敗",
+        title: "下載失败",
         description: "產生 Excel 檔案時發生錯誤。",
       });
       console.error("Failed to download Excel file:", error);
@@ -287,10 +328,11 @@ export function FinanceFlowClient() {
               <CardContent className="pt-6">
                  <Form {...settingsForm}>
                   <form onSubmit={settingsForm.handleSubmit(handleSaveSettings)} className="space-y-6">
-                    <Tabs defaultValue="category">
-                      <TabsList className="grid w-full grid-cols-2">
+                    <Tabs defaultValue="category" className="w-full">
+                      <TabsList className="grid w-full grid-cols-3">
                         <TabsTrigger value="replacement">取代規則</TabsTrigger>
                         <TabsTrigger value="category">分類規則</TabsTrigger>
+                        <TabsTrigger value="manage-categories">管理類型</TabsTrigger>
                       </TabsList>
                       <TabsContent value="replacement" className="mt-4">
                         <CardDescription className="mb-4">
@@ -370,7 +412,7 @@ export function FinanceFlowClient() {
                          <div className="space-y-4 max-h-72 overflow-y-auto pr-2">
                           {categoryFields.map((field, index) => (
                             <div key={field.id} className="p-3 border rounded-md space-y-3 bg-background/50">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
                                     <FormField
                                         control={settingsForm.control}
                                         name={`categoryRules.${index}.keyword`}
@@ -388,13 +430,22 @@ export function FinanceFlowClient() {
                                         control={settingsForm.control}
                                         name={`categoryRules.${index}.category`}
                                         render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>類型</FormLabel>
-                                            <FormControl>
-                                            <Input placeholder="要指定的類型" {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
+                                            <FormItem>
+                                                <FormLabel>類型</FormLabel>
+                                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                    <FormControl>
+                                                        <SelectTrigger>
+                                                            <SelectValue placeholder="選擇一個類型" />
+                                                        </SelectTrigger>
+                                                    </FormControl>
+                                                    <SelectContent>
+                                                        {availableCategories.map(cat => (
+                                                            <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                <FormMessage />
+                                            </FormItem>
                                         )}
                                     />
                                 </div>
@@ -416,6 +467,36 @@ export function FinanceFlowClient() {
                           <PlusCircle className="mr-2 h-4 w-4" />
                           新增分類規則
                         </Button>
+                      </TabsContent>
+                       <TabsContent value="manage-categories" className="mt-4">
+                        <CardDescription className="mb-4">
+                          新增或刪除在「分類規則」下拉選單中看到的類型選項。
+                        </CardDescription>
+                        <div className="space-y-4">
+                          <div className="flex gap-2">
+                            <Input 
+                              placeholder="輸入新的類型名稱" 
+                              value={newCategory}
+                              onChange={(e) => setNewCategory(e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
+                            />
+                            <Button onClick={handleAddCategory}>新增類型</Button>
+                          </div>
+                          <div className="space-y-2 max-h-60 overflow-y-auto pr-2 rounded-md border p-2">
+                            {availableCategories.length > 0 ? (
+                                availableCategories.map(cat => (
+                                <div key={cat} className="flex items-center justify-between p-2 bg-background/50 rounded-md">
+                                    <span className="text-sm">{cat}</span>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleRemoveCategory(cat)}>
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                </div>
+                                ))
+                            ) : (
+                                <p className="text-sm text-muted-foreground text-center p-4">尚未新增任何類型。</p>
+                            )}
+                          </div>
+                        </div>
                       </TabsContent>
                     </Tabs>
                      <div className="flex justify-end items-center mt-6">
@@ -526,5 +607,3 @@ export function FinanceFlowClient() {
     </div>
   );
 }
-
-    
