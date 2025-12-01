@@ -1,24 +1,21 @@
 {
   "entities": {
     "CreditCardTransaction": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "CreditCardTransaction",
+      "title": "Credit Card Transaction",
       "type": "object",
       "description": "Represents a single transaction from a credit card statement.",
       "properties": {
-        "id": {
+        "userId": {
           "type": "string",
-          "description": "Unique identifier for the Credit Card Transaction entity."
+          "description": "The UID of the user who owns this transaction."
         },
         "transactionDate": {
           "type": "string",
-          "description": "The date when the transaction occurred.",
-          "format": "date-time"
+          "description": "The date when the transaction occurred."
         },
-        "postingDate": {
+        "category": {
           "type": "string",
-          "description": "The date when the transaction was posted to the account.",
-          "format": "date-time"
+          "description": "The category assigned to the transaction."
         },
         "description": {
           "type": "string",
@@ -26,13 +23,13 @@
         },
         "amount": {
           "type": "number",
-          "description": "The amount of the transaction. Positive values indicate charges, negative values indicate credits."
+          "description": "The amount of the transaction."
         }
       },
       "required": [
-        "id",
+        "userId",
         "transactionDate",
-        "postingDate",
+        "category",
         "description",
         "amount"
       ]
@@ -84,53 +81,15 @@
   },
   "auth": {
     "providers": [
-      "password",
-      "anonymous"
+      "google.com"
     ]
   },
   "firestore": {
-    "structure": [
-      {
-        "path": "/users/{userId}/creditCardTransactions/{transactionId}",
-        "definition": {
-          "entityName": "CreditCardTransaction",
-          "schema": {
-            "$ref": "#/backend/entities/CreditCardTransaction"
-          },
-          "description": "Stores credit card transaction data for a specific user. Access is restricted to the owner of the user document based on their UID.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier of the user who owns the transaction."
-            },
-            {
-              "name": "transactionId",
-              "description": "The unique identifier of the credit card transaction."
-            }
-          ]
-        }
+    "/users/{userId}/credit_card_transactions/{transactionId}": {
+      "schema": {
+        "$ref": "#/entities/CreditCardTransaction"
       },
-      {
-        "path": "/users/{userId}/depositAccountTransactions/{transactionId}",
-        "definition": {
-          "entityName": "DepositAccountTransaction",
-          "schema": {
-            "$ref": "#/backend/entities/DepositAccountTransaction"
-          },
-          "description": "Stores deposit account transaction data for a specific user. Access is restricted to the owner of the user document based on their UID.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier of the user who owns the transaction."
-            },
-            {
-              "name": "transactionId",
-              "description": "The unique identifier of the deposit account transaction."
-            }
-          ]
-        }
-      }
-    ],
-    "reasoning": "This Firestore data structure is designed to securely store and manage financial transaction data extracted from user-provided bank statements. The structure emphasizes authorization independence, clarity, and scalability, adhering to the principles outlined in the prompt.\n\n**Authorization Independence and QAPs:**\n\n*   The primary means of ensuring authorization independence is through path-based ownership. Transactions (both CreditCardTransaction and DepositAccountTransaction) are stored as subcollections of user documents (`/users/{userId}/creditCardTransactions/{transactionId}` and `/users/{userId}/depositAccountTransactions/{transactionId}`). This eliminates the need for `get()` calls in security rules, enabling atomic operations.\n\n*   QAPs are supported through structural segregation. Each user's transactions are isolated within their user document, ensuring that listing transactions only returns data accessible to that specific user. Access is always based on `request.auth.uid`.\n\n**Data Clarity and Predictability:**\n\n*   The schema for each transaction type (`CreditCardTransaction`, `DepositAccountTransaction`) is explicitly defined, ensuring data consistency and predictability.\n*   Field names are semantically clear (e.g., `transactionDate`, `amount`).\n\n**Denormalization Strategy:**\n\n*   In this specific structure, explicit denormalization of user data into each transaction document is not required since path-based ownership implicitly grants access via `request.auth.uid == userId`.\n\nThis structure facilitates robust and easily debuggable security rules, as access control is directly tied to the user's ID and the path of the data."
+      "description": "Stores credit card transaction data for a specific user. Access is restricted to the owner of the user document based on their UID."
+    }
   }
 }
