@@ -288,48 +288,37 @@ export function FinanceFlowClient() {
   async function onSubmit(values: StatementFormData) {
     setIsLoading(true);
     setHasProcessed(false);
-    
-    if (user) {
-      // If user is logged in, don't clear local data, it will be replaced by Firestore data on save
-    } else {
-      setCreditData([]);
-    }
+    setCreditData([]);
     setDepositData([]);
 
     const { replacementRules, categoryRules } = settingsForm.getValues();
     const result = await processBankStatement(values.statement, replacementRules, categoryRules);
     
     if (result.success) {
-      if (user && firestore) {
-        // User is logged in, save to Firestore. `useCollection` will update the UI.
-        if (result.creditData.length > 0) {
-          try {
-            const batch = writeBatch(firestore);
-            const transactionsCollection = collection(firestore, 'users', user.uid, 'creditCardTransactions');
-            result.creditData.forEach(transaction => {
-              const docRef = doc(transactionsCollection); // Create a new doc with a unique ID
-              batch.set(docRef, transaction);
-            });
-            await batch.commit();
-            toast({
-              title: "儲存成功",
-              description: `${result.creditData.length} 筆信用卡資料已儲存到您的帳戶。`
-            });
-          } catch (e) {
-            console.error("Error saving to Firestore:", e);
-            toast({
-              variant: "destructive",
-              title: "儲存失敗",
-              description: "無法將資料儲存到資料庫。",
-            });
-          }
+      setCreditData(result.creditData);
+      setDepositData(result.depositData);
+
+      if (user && firestore && result.creditData.length > 0) {
+        try {
+          const batch = writeBatch(firestore);
+          const transactionsCollection = collection(firestore, 'users', user.uid, 'creditCardTransactions');
+          result.creditData.forEach(transaction => {
+            const docRef = doc(transactionsCollection); // Create a new doc with a unique ID
+            batch.set(docRef, transaction);
+          });
+          await batch.commit();
+          toast({
+            title: "儲存成功",
+            description: `${result.creditData.length} 筆信用卡資料已儲存到您的帳戶。`
+          });
+        } catch (e) {
+          console.error("Error saving to Firestore:", e);
+          toast({
+            variant: "destructive",
+            title: "儲存失敗",
+            description: "無法將資料儲存到資料庫。",
+          });
         }
-         // Set deposit data locally as it's not saved to firestore
-        setDepositData(result.depositData);
-      } else {
-        // User is not logged in, just update the local state to show results.
-        setCreditData(result.creditData);
-        setDepositData(result.depositData);
       }
 
       if (result.creditData.length === 0 && result.depositData.length === 0) {
@@ -517,8 +506,8 @@ export function FinanceFlowClient() {
                 )}
               />
               <div className="flex justify-end">
-                <Button type="submit" disabled={isLoading || isUserLoading || !statementForm.formState.isValid} className="bg-accent hover:bg-accent/90 text-accent-foreground">
-                  {(isLoading || isUserLoading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <Button type="submit" disabled={isLoading || !statementForm.formState.isValid} className="bg-accent hover:bg-accent/90 text-accent-foreground">
+                  {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   { user ? "處理並儲存報表" : "處理報表" }
                 </Button>
               </div>
