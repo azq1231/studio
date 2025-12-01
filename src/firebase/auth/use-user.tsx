@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { User, onAuthStateChanged } from 'firebase/auth';
+import { User, onAuthStateChanged, getRedirectResult } from 'firebase/auth';
 import { useAuth } from '@/firebase/provider';
 
 /**
@@ -15,6 +15,7 @@ export interface UserHookResult {
 
 /**
  * React hook to get the current authenticated user from Firebase.
+ * Handles both initial state check and redirect results.
  *
  * @returns {UserHookResult} An object containing the user, loading state, and error.
  */
@@ -25,39 +26,48 @@ export function useUser(): UserHookResult {
   const [userError, setUserError] = useState<Error | null>(null);
 
   useEffect(() => {
-    // If there's no auth instance, we can't get a user.
     if (!auth) {
       setIsUserLoading(false);
-      // Optional: Set an error if you expect auth to always be available.
-      // setError(new Error("Firebase Auth instance not available."));
       return;
     }
 
-    // Set loading to true when starting to check for a user.
+    // Set loading to true when starting any auth state check.
     setIsUserLoading(true);
 
-    // Subscribe to Firebase's auth state changes.
-    const unsubscribe = onAuthStateChanged(
-      auth,
-      (firebaseUser) => {
-        // When the auth state is resolved, update the user state.
-        setUser(firebaseUser);
-        // We're no longer loading.
-        setIsUserLoading(false);
-        // Clear any previous errors.
-        setUserError(null);
-      },
-      (error) => {
-        // Handle any errors that occur during auth state observation.
-        console.error("Error in onAuthStateChanged: ", error);
+    // First, check for a redirect result.
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result) {
+          // User successfully signed in via redirect.
+          // onAuthStateChanged will handle setting the user.
+        }
+      })
+      .catch((error) => {
+        // Handle errors from getRedirectResult.
+        console.error("Error from getRedirectResult: ", error);
         setUserError(error);
-        setUser(null);
-        setIsUserLoading(false);
-      }
-    );
+      })
+      .finally(() => {
+        // After checking for redirect, set up the normal auth state listener.
+        // This handles all other cases (already logged in, logged out, etc.).
+        const unsubscribe = onAuthStateChanged(
+          auth,
+          (firebaseUser) => {
+            setUser(firebaseUser);
+            setIsUserLoading(false);
+            setUserError(null);
+          },
+          (error) => {
+            console.error("Error in onAuthStateChanged: ", error);
+            setUserError(error);
+            setUser(null);
+            setIsUserLoading(false);
+          }
+        );
+        // Return the unsubscribe function for cleanup.
+        return () => unsubscribe();
+      });
 
-    // Cleanup the subscription when the component unmounts.
-    return () => unsubscribe();
   }, [auth]); // Rerun the effect if the auth instance changes.
 
   return { user, isUserLoading, userError };
