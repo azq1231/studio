@@ -36,7 +36,7 @@ export function parseCreditCard(text: string): RawCreditData[] {
     let descriptionStartIndex = 1;
 
     // Check if the second part is a posting date
-    if (/^\d{1,2}\/\d{1,2}/.test(parts[1])) {
+    if (/^\d{1h,2}\/\d{1,2}/.test(parts[1])) {
       postingDate = parts[1];
       descriptionStartIndex = 2;
     }
