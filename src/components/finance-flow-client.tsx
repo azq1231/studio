@@ -227,34 +227,23 @@ export function FinanceFlowClient() {
   });
 
   useEffect(() => {
-    if (isUserLoading) return;
+    if (isUserLoading || !savedTransactions) return;
 
     setCreditData(prevData => {
-        if (!user || !savedTransactions) {
-            // No user or no saved transactions, keep the existing client-side data
-            return prevData;
-        }
-
         const existingIds = new Set(prevData.map(d => d.id));
-        // Filter out saved transactions that are already present in the local state
         const newSaved = savedTransactions.filter(t => !existingIds.has(t.id));
         
-        if (newSaved.length === 0) {
-            // Optimization: if all saved transactions are already in local state, do nothing.
-            if (savedTransactions.every(st => existingIds.has(st.id))) {
-                return prevData;
-            }
+        if (newSaved.length === 0 && prevData.length === savedTransactions.length) {
+            return prevData;
         }
         
-        // Merge local data with new data from Firestore
         const mergedData = [...prevData, ...newSaved];
-        // Ensure uniqueness just in case of any overlap
         const uniqueData = Array.from(new Map(mergedData.map(item => [item.id, item])).values());
         
         return uniqueData;
     });
 
-  }, [user, isUserLoading, savedTransactions]);
+  }, [isUserLoading, savedTransactions]);
 
 
   const resetReplacementRules = () => {
@@ -298,14 +287,18 @@ export function FinanceFlowClient() {
       let finalCategoryRules = [...DEFAULT_CATEGORY_RULES];
 
       if (savedCategoryRulesRaw) {
-        const savedRules = JSON.parse(savedCategoryRulesRaw) as CategoryRule[];
-        // Use a Map to prioritize user-saved rules over defaults.
-        // Start with defaults, then overwrite with user's saved rules.
-        const finalRulesMap = new Map(DEFAULT_CATEGORY_RULES.map(r => [r.keyword, r]));
-        savedRules.forEach(savedRule => {
-            finalRulesMap.set(savedRule.keyword, savedRule);
-        });
-        finalCategoryRules = Array.from(finalRulesMap.values());
+        try {
+            const savedRules = JSON.parse(savedCategoryRulesRaw) as CategoryRule[];
+            if (Array.isArray(savedRules)) {
+                const finalRulesMap = new Map(finalCategoryRules.map(r => [r.keyword, r]));
+                savedRules.forEach(savedRule => {
+                    finalRulesMap.set(savedRule.keyword, savedRule);
+                });
+                finalCategoryRules = Array.from(finalRulesMap.values());
+            }
+        } catch {
+            // If parsing fails, stick with defaults
+        }
       }
       
       settingsForm.setValue('categoryRules', finalCategoryRules);
@@ -389,7 +382,6 @@ export function FinanceFlowClient() {
           const transactionsCollection = collection(firestore, 'users', user.uid, 'creditCardTransactions');
           result.creditData.forEach(transaction => {
             const docRef = doc(transactionsCollection, transaction.id);
-            // Use set with merge:true to create or overwrite.
             batch.set(docRef, transaction, { merge: true });
           });
           await batch.commit();
@@ -424,7 +416,7 @@ export function FinanceFlowClient() {
     
     setIsLoading(false);
     setHasProcessed(true);
-    statementForm.reset({ statement: '' }); // Clear textarea after processing
+    statementForm.reset({ statement: '' });
   }
 
   function handleDownload() {
@@ -556,6 +548,7 @@ export function FinanceFlowClient() {
         let comparison = 0;
         if (creditSortKey === 'transactionDate') {
             try {
+                // Assuming MM/DD format, might need adjustment for YYYY/MM/DD
                 const dateA = parse(aValue, 'MM/dd', new Date());
                 const dateB = parse(bValue, 'MM/dd', new Date());
                 comparison = dateA.getTime() - dateB.getTime();
@@ -608,7 +601,12 @@ export function FinanceFlowClient() {
         const { transactionDate, category, amount } = transaction;
         if (amount <= 0) return; 
 
+        // Attempt to parse MM/DD format, but handle other formats gracefully.
         const date = parse(transactionDate, 'MM/dd', new Date());
+        // Basic validation: if the year is in the past, it's likely a valid parse.
+        // This is a simple heuristic and might need refinement.
+        if (date.getFullYear() < 1970) return;
+
         const monthKey = format(date, 'yyyy年M月');
         
         categories.add(category);
@@ -1186,5 +1184,3 @@ export function FinanceFlowClient() {
     </div>
   );
 }
-
-    
