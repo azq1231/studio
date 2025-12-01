@@ -13,23 +13,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
-import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { LogIn, LogOut } from 'lucide-react';
 import { signOut } from 'firebase/auth';
+import { useState } from 'react';
+import { AuthForm } from './auth-form';
 
 export function AuthButton() {
   const { user, isUserLoading } = useUser();
   const auth = useAuth();
-
-  const handleLogin = async () => {
-    const provider = new GoogleAuthProvider();
-    try {
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error('Error signing in with Google', error);
-    }
-  };
+  const [open, setOpen] = useState(false);
 
   const handleLogout = async () => {
     try {
@@ -45,10 +39,20 @@ export function AuthButton() {
 
   if (!user) {
     return (
-      <Button variant="outline" size="sm" onClick={handleLogin}>
-        <LogIn className="mr-2 h-4 w-4" />
-        使用 Google 登入
-      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          <Button variant="outline" size="sm">
+            <LogIn className="mr-2 h-4 w-4" />
+            登入或註冊
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>帳號</DialogTitle>
+          </DialogHeader>
+          <AuthForm onAuthSuccess={() => setOpen(false)} />
+        </DialogContent>
+      </Dialog>
     );
   }
 
@@ -62,7 +66,7 @@ export function AuthButton() {
               {user.displayName
                 ? user.displayName.charAt(0)
                 : user.email
-                ? user.email.charAt(0)
+                ? user.email.charAt(0).toUpperCase()
                 : '?'}
             </AvatarFallback>
           </Avatar>
@@ -71,10 +75,10 @@ export function AuthButton() {
       <DropdownMenuContent className="w-56" align="end" forceMount>
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">{user.displayName}</p>
-            <p className="text-xs leading-none text-muted-foreground">
+            <p className="text-sm font-medium leading-none">{user.displayName || user.email}</p>
+            {user.displayName && <p className="text-xs leading-none text-muted-foreground">
               {user.email}
-            </p>
+            </p>}
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
