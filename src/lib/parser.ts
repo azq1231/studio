@@ -34,79 +34,66 @@ export function parseCreditCard(text: string, rules: ReplacementRule[]): CreditD
 
     const parts = currentLine.split(/\s+/);
     
-    if (parts.length >= 3) {
+    if (parts.length >= 2) {
       const transactionDate = parts[0];
-      const category = parts[1];
-      
+      let category = '';
+      let descriptionStartIndex = 1;
+
+      // Check if the second part is a custom category or a posting date
+      if (parts.length > 1 && !/^\d{1,2}\/\d{1,2}/.test(parts[1])) {
+        // It's a custom category (like '吃', '家')
+        category = parts[1];
+        descriptionStartIndex = 2;
+      } else if (parts.length > 1 && /^\d{1,2}\/\d{1,2}/.test(parts[1])) {
+        // It's a posting date, so we skip it and category remains empty.
+        descriptionStartIndex = 2;
+      }
+
       const amountMatch = currentLine.match(/(-?[\d,]+(\.\d+)?)$/);
       let amount = 0;
+      let description = '';
+
       if (amountMatch) {
-          amount = parseFloat(amountMatch[0].replace(/,/g, ''));
+        amount = parseFloat(amountMatch[0].replace(/,/g, ''));
+        // Get description by removing the amount from the end
+        const amountEndIndex = currentLine.lastIndexOf(amountMatch[0]);
+        description = currentLine.substring(0, amountEndIndex).trim();
       } else {
-         const lastPart = parts[parts.length -1];
-         const parsedAmount = parseFloat(lastPart.replace(/,/g, ''));
-         if(!isNaN(parsedAmount)) {
-            amount = parsedAmount;
+        // If no amount is found at the end, assume last part is amount if it's a number
+        const lastPart = parts[parts.length - 1];
+        const parsedAmount = parseFloat(lastPart.replace(/,/g, ''));
+        if (!isNaN(parsedAmount)) {
+          amount = parsedAmount;
+          // Join all parts except the last one for the description
+          description = parts.slice(0, -1).join(' ');
+        } else {
+          // No amount found, so the whole line is the description
+          amount = 0;
+          description = currentLine;
+        }
+      }
+      
+      // Clean up the start of the description
+      let tempDesc = description;
+      if (tempDesc.startsWith(transactionDate)) {
+        tempDesc = tempDesc.substring(transactionDate.length).trim();
+      }
+      // If the second part was a posting date or a category, remove it as well.
+      if (descriptionStartIndex === 2 && parts.length > 1) {
+         if (tempDesc.startsWith(parts[1])) {
+             tempDesc = tempDesc.substring(parts[1].length).trim();
          }
       }
       
-      let description = currentLine;
-      
-      // Attempt to remove amount from the end of the description
-      const amountString = amount.toLocaleString().replace(/,/g, '');
-      if (description.endsWith(amountString)) {
-          description = description.substring(0, description.length - amountString.length).trim();
-      }
+      description = tempDesc;
 
-      // Remove transactionDate and category from the beginning of the description
-      description = description.substring(transactionDate.length).trim();
-      description = description.substring(category.length).trim();
-      
-      if(description) { 
-          results.push({
-            transactionDate,
-            category,
-            description,
-            amount,
-          });
-      }
-    } else if (parts.length >= 2) { // Fallback for lines without a category
-      const transactionDate = parts[0].trim();
-      
-      const amountMatch = currentLine.match(/(-?[\d,]+(\.\d+)?)$/);
-      let amount = 0;
-      if (amountMatch) {
-          amount = parseFloat(amountMatch[0].replace(/,/g, ''));
-      } else {
-         const lastPart = parts[parts.length -1];
-         const parsedAmount = parseFloat(lastPart.replace(/,/g, ''));
-         if(!isNaN(parsedAmount)) {
-            amount = parsedAmount;
-         }
-      }
-      
-      let description = currentLine;
-
-      // Attempt to remove amount from the end of the description
-      const amountString = amount.toLocaleString().replace(/,/g, '');
-      if (description.endsWith(amountString)) {
-          description = description.substring(0, description.length - amountString.length).trim();
-      }
-
-      description = description.replace(transactionDate, '').trim();
-      
-      const potentialPostingDate = parts[1].trim();
-      if (/^\d{1,2}\/\d{1,2}/.test(potentialPostingDate)) {
-        description = description.replace(potentialPostingDate, '').trim();
-      }
-
-       if(description) { 
-          results.push({
-            transactionDate,
-            category: '', // No category found
-            description,
-            amount,
-          });
+      if (description) {
+        results.push({
+          transactionDate,
+          category,
+          description,
+          amount,
+        });
       }
     }
   }
@@ -222,5 +209,3 @@ export function parseDepositAccount(text: string, rules: ReplacementRule[]): Dep
     accountNumber: r[6] as string,
   }));
 }
-
-    
