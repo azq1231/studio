@@ -1,21 +1,24 @@
 {
   "entities": {
     "CreditCardTransaction": {
-      "title": "Credit Card Transaction",
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "CreditCardTransaction",
       "type": "object",
-      "description": "Represents a single transaction from a credit card statement.",
+      "description": "Represents a single credit card transaction.",
       "properties": {
-        "userId": {
+        "id": {
           "type": "string",
-          "description": "The UID of the user who owns this transaction."
+          "description": "Unique identifier for the credit card transaction."
         },
         "transactionDate": {
           "type": "string",
-          "description": "The date when the transaction occurred."
+          "description": "The date the transaction occurred.",
+          "format": "date"
         },
-        "category": {
+        "postingDate": {
           "type": "string",
-          "description": "The category assigned to the transaction."
+          "description": "The date the transaction was posted to the account.",
+          "format": "date"
         },
         "description": {
           "type": "string",
@@ -27,9 +30,9 @@
         }
       },
       "required": [
-        "userId",
+        "id",
         "transactionDate",
-        "category",
+        "postingDate",
         "description",
         "amount"
       ]
@@ -38,42 +41,42 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "DepositAccountTransaction",
       "type": "object",
-      "description": "Represents a single transaction from a deposit account statement.",
+      "description": "Represents a single transaction in a deposit account.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the Deposit Account Transaction entity."
+          "description": "Unique identifier for the deposit account transaction."
         },
         "transactionDate": {
           "type": "string",
-          "description": "The date when the transaction occurred.",
-          "format": "date-time"
+          "description": "The date the transaction occurred.",
+          "format": "date"
         },
-        "transactionTime": {
+        "time": {
           "type": "string",
-          "description": "The time when the transaction occurred."
+          "description": "The time the transaction occurred."
         },
         "description": {
           "type": "string",
-          "description": "A description of the transaction, combining summary and ledger note."
+          "description": "A description of the transaction, including combined summary and passbook remarks."
         },
         "amount": {
           "type": "number",
-          "description": "The amount of the transaction. Positive values indicate withdrawals, negative values indicate deposits."
+          "description": "The amount of the transaction (positive for withdrawals, negative for deposits)."
         },
-        "otherPartyBankCode": {
+        "counterpartyBankCode": {
           "type": "string",
-          "description": "Bank code of the other party involved in the transaction."
+          "description": "The bank code of the counterparty."
         },
-        "otherPartyAccountNumber": {
+        "counterpartyAccountNumber": {
           "type": "string",
-          "description": "Account number of the other party involved in the transaction."
+          "description": "The account number of the counterparty."
         }
       },
       "required": [
         "id",
         "transactionDate",
-        "transactionTime",
+        "time",
         "description",
         "amount"
       ]
@@ -81,15 +84,53 @@
   },
   "auth": {
     "providers": [
-      "google.com"
+      "password",
+      "anonymous"
     ]
   },
   "firestore": {
-    "/users/{userId}/credit_card_transactions/{transactionId}": {
-      "schema": {
-        "$ref": "#/entities/CreditCardTransaction"
+    "structure": [
+      {
+        "path": "/users/{userId}/creditCardTransactions/{transactionId}",
+        "definition": {
+          "entityName": "CreditCardTransaction",
+          "schema": {
+            "$ref": "#/backend/entities/CreditCardTransaction"
+          },
+          "description": "Stores credit card transaction data for a specific user. The userId parameter identifies the owner of the transactions.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user who owns the transaction."
+            },
+            {
+              "name": "transactionId",
+              "description": "The unique identifier of the credit card transaction."
+            }
+          ]
+        }
       },
-      "description": "Stores credit card transaction data for a specific user. Access is restricted to the owner of the user document based on their UID."
-    }
+      {
+        "path": "/users/{userId}/depositAccountTransactions/{transactionId}",
+        "definition": {
+          "entityName": "DepositAccountTransaction",
+          "schema": {
+            "$ref": "#/backend/entities/DepositAccountTransaction"
+          },
+          "description": "Stores deposit account transaction data for a specific user. The userId parameter identifies the owner of the transactions.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user who owns the transaction."
+            },
+            {
+              "name": "transactionId",
+              "description": "The unique identifier of the deposit account transaction."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore data structure is designed to securely store and manage financial transaction data parsed from user-provided bank statements. It prioritizes authorization independence, clarity, and scalability.  Given that users parse data from their own bank statements, the primary authorization model is path-based ownership under each user's document.  This approach avoids complex authorization logic and enables atomic operations.  The structure leverages structural segregation, separating credit card transactions and deposit account transactions into distinct subcollections under each user's document to simplify security rules and improve query performance. Each document contains only the data it needs, eliminating unnecessary data transfer and reducing storage costs. Finally, the structure models data clarity through standard naming and explicit data types to improve maintainability.\n\n**Authorization Independence:** Authorization is achieved through path-based ownership under `/users/{userId}`.  No `get()` calls are needed in security rules because access control is based on the user's ID in the path. The `userId` parameter identifies the owner of the transactions.\n\n**QAPs (Rules are not Filters):** The path-based ownership structure enables secure `list` operations.  A user can only list transactions under their own `userId`, which is validated in the security rules.\n\n**Denormalization:** While not explicitly denormalizing user roles in this scenario (since access is based solely on ownership), one could extend the model to include shared accounts, in which case the `members` map and role definitions should be denormalized onto the documents."
   }
 }
