@@ -28,8 +28,19 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
-import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2, FileText } from 'lucide-react';
+import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2, FileText, RotateCcw } from 'lucide-react';
 import { processBankStatement, type ReplacementRule, type CategoryRule } from '@/app/actions';
 import type { CreditData, DepositData } from '@/lib/parser';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
@@ -61,6 +72,104 @@ type SortKey = 'keyword' | 'category';
 type SortDirection = 'asc' | 'desc';
 type CreditSortKey = 'transactionDate' | 'category' | 'description' | 'amount';
 
+
+const DEFAULT_REPLACEMENT_RULES: ReplacementRule[] = [
+  { find: '行銀非約跨優', replace: '', deleteRow: false },
+  { find: 'ＣＤＭ存款', replace: '', deleteRow: true }
+];
+
+const DEFAULT_CATEGORY_RULES: CategoryRule[] = [
+  { keyword: 'VULTR', category: '方' },
+  { keyword: '國外交易服務費', category: '方' },
+  { keyword: 'GOOGLE*CLOUD', category: '方' },
+  { keyword: '悠遊卡自動加值', category: '方' },
+  { keyword: 'REPLIT, INC.', category: '方' },
+  { keyword: '伯朗咖啡', category: '方' },
+  { keyword: '柒號洋樓', category: '方' },
+  { keyword: 'ＰＣＨＯＭＥ', category: '方' },
+  { keyword: 'OPENAI', category: '方' },
+  { keyword: 'iPassMoney儲值', category: '方' },
+  { keyword: '新東陽', category: '吃' },
+  { keyword: '全家', category: '吃' },
+  { keyword: '元心燃麻辣堂', category: '吃' },
+  { keyword: '統一超商', category: '吃' },
+  { keyword: '玉喜飯店', category: '吃' },
+  { keyword: '爭鮮', category: '吃' },
+  { keyword: '八方雲集', category: '吃' },
+  { keyword: '樂活養生健康鍋', category: '吃' },
+  { keyword: '順成西點麵包', category: '吃' },
+  { keyword: '誠品生活', category: '吃' },
+  { keyword: '星巴克－自動加值', category: '吃' },
+  { keyword: 'COMFORT BURGER', category: '吃' },
+  { keyword: '雙月食品社', category: '吃' },
+  { keyword: '秀泰全球影城', category: '吃' },
+  { keyword: '台灣麥當勞', category: '吃' },
+  { keyword: '筷子餐廳', category: '吃' },
+  { keyword: '怡客咖啡', category: '吃' },
+  { keyword: '起家雞', category: '吃' },
+  { keyword: '彼得好咖啡', category: '吃' },
+  { keyword: '御書園', category: '吃' },
+  { keyword: '五花馬水餃館', category: '吃' },
+  { keyword: '客美多咖啡', category: '吃' },
+  { keyword: '明曜百貨', category: '吃' },
+  { keyword: 'ＫＦＣ', category: '吃' },
+  { keyword: '鬥牛士經典牛排', category: '吃' },
+  { keyword: '街口電支', category: '吃' },
+  { keyword: '必勝客', category: '吃' },
+  { keyword: '丰禾', category: '吃' },
+  { keyword: '春水堂', category: '吃' },
+  { keyword: '上島珈琲店', category: '吃' },
+  { keyword: '加油站', category: '家' },
+  { keyword: '全聯', category: '家' },
+  { keyword: '55688', category: '家' },
+  { keyword: 'IKEA', category: '家' },
+  { keyword: '優步', category: '家' },
+  { keyword: 'OP錢包', category: '家' },
+  { keyword: 'NET', category: '家' },
+  { keyword: '威秀影城', category: '家' },
+  { keyword: '中油', category: '家' },
+  { keyword: '高鐵智慧型手機', category: '家' },
+  { keyword: 'Ｍｉｓｔｅｒ　Ｄｏｎｕｔ', category: '家' },
+  { keyword: '墊腳石圖書', category: '家' },
+  { keyword: '燦坤３Ｃ', category: '家' },
+  { keyword: '屈臣氏', category: '家' },
+  { keyword: 'APPLE.COM/BILL', category: '家' },
+  { keyword: '一之軒', category: '家' },
+  { keyword: '城市車旅', category: '家' },
+  { keyword: '台灣小米', category: '家' },
+  { keyword: 'linePay繳好市多', category: '家' },
+  { keyword: '連結帳戶交易', category: '家' },
+  { keyword: '麗冠有線電視', category: '固定' },
+  { keyword: '09202***01', category: '固定' },
+  { keyword: '國都汽車', category: '固定' },
+  { keyword: '台灣電力', category: '固定' },
+  { keyword: '台北市自來水費', category: '固定' },
+  { keyword: '汽車驗車', category: '固定' },
+  { keyword: '大台北瓦斯費', category: '固定' },
+  { keyword: '大安文山有線電視', category: '固定' },
+  { keyword: '國保保費', category: '固定' },
+  { keyword: '花都管理費', category: '固定' },
+  { keyword: '橙印良品', category: '蘇' },
+  { keyword: 'PayEasy', category: '蘇' },
+  { keyword: '樂購蝦皮', category: '蘇' },
+  { keyword: '饗賓餐旅', category: '蘇' },
+  { keyword: 'TAOBAO.COM', category: '蘇' },
+  { keyword: '拓元票務', category: '蘇' },
+  { keyword: '三創數位', category: '蘇' },
+  { keyword: '逸安中醫', category: '蘇' },
+  { keyword: '金玉堂', category: '秀' },
+  { keyword: '寶雅', category: '秀' },
+  { keyword: '特力屋', category: '秀' },
+  { keyword: '悠遊付－臺北市立大學', category: '秀' },
+  { keyword: '嘟嘟房', category: '弟' },
+  { keyword: '台東桂田喜來登酒店', category: '玩' },
+  { keyword: '家樂福', category: '玩' },
+  { keyword: '台東原生應用植物園', category: '玩' },
+  { keyword: '格上租車', category: '玩' },
+  { keyword: '悠勢科技股份有限公司', category: '收入' },
+  { keyword: '行政院發', category: '收入' },
+  { keyword: '怡秀跆拳道', category: '華' },
+];
 
 export function FinanceFlowClient() {
   const { user, isUserLoading } = useUser();
@@ -107,12 +216,12 @@ export function FinanceFlowClient() {
     },
   });
 
-  const { fields: replacementFields, append: appendReplacement, remove: removeReplacement } = useFieldArray({
+  const { fields: replacementFields, append: appendReplacement, remove: removeReplacement, replace: replaceReplacementRules } = useFieldArray({
     control: settingsForm.control,
     name: 'replacementRules',
   });
   
-  const { fields: categoryFields, append: appendCategory, remove: removeCategory } = useFieldArray({
+  const { fields: categoryFields, append: appendCategory, remove: removeCategory, replace: replaceCategoryRules } = useFieldArray({
     control: settingsForm.control,
     name: 'categoryRules',
   });
@@ -136,7 +245,9 @@ export function FinanceFlowClient() {
     const uniqueData = Array.from(new Map(mergedData.map(item => [item.id, item])).values());
     
     // Set the final state
-    setCreditData(uniqueData);
+    if (user) {
+        setCreditData(uniqueData);
+    }
 
   }, [user, isUserLoading, savedTransactions]);
 
@@ -161,10 +272,7 @@ export function FinanceFlowClient() {
            settingsForm.setValue('replacementRules', parsed);
         }
       } else {
-        settingsForm.setValue('replacementRules', [
-          { find: '行銀非約跨優', replace: '', deleteRow: false },
-          { find: 'ＣＤＭ存款', replace: '', deleteRow: true }
-        ]);
+        settingsForm.setValue('replacementRules', DEFAULT_REPLACEMENT_RULES);
       }
 
       const savedCategoryRules = localStorage.getItem('categoryRules');
@@ -174,98 +282,7 @@ export function FinanceFlowClient() {
            settingsForm.setValue('categoryRules', parsed);
         }
       } else {
-        settingsForm.setValue('categoryRules', [
-          { keyword: 'VULTR', category: '方' },
-          { keyword: '國外交易服務費', category: '方' },
-          { keyword: 'GOOGLE*CLOUD', category: '方' },
-          { keyword: '悠遊卡自動加值', category: '方' },
-          { keyword: 'REPLIT, INC.', category: '方' },
-          { keyword: '伯朗咖啡', category: '方' },
-          { keyword: '柒號洋樓', category: '方' },
-          { keyword: '新東陽', category: '吃' },
-          { keyword: '全家', category: '吃' },
-          { keyword: '元心燃麻辣堂', category: '吃' },
-          { keyword: '統一超商', category: '吃' },
-          { keyword: '玉喜飯店', category: '吃' },
-          { keyword: '爭鮮', category: '吃' },
-          { keyword: '八方雲集', category: '吃' },
-          { keyword: '樂活養生健康鍋', category: '吃' },
-          { keyword: '順成西點麵包', category: '吃' },
-          { keyword: '誠品生活', category: '吃' },
-          { keyword: '星巴克－自動加值', category: '吃' },
-          { keyword: 'COMFORT BURGER', category: '吃' },
-          { keyword: '雙月食品社', category: '吃' },
-          { keyword: '加油站', category: '家' },
-          { keyword: '全聯', category: '家' },
-          { keyword: '55688', category: '家' },
-          { keyword: 'IKEA', category: '家' },
-          { keyword: '優步', category: '家' },
-          { keyword: 'OP錢包', category: '家' },
-          { keyword: 'NET', category: '家' },
-          { keyword: '麗冠有線電視', category: '固定' },
-          { keyword: '09202***01', category: '固定' },
-          { keyword: '國都汽車', category: '固定' },
-          { keyword: '台灣電力', category: '固定' },
-          { keyword: '橙印良品', category: '蘇' },
-          { keyword: 'PayEasy', category: '蘇' },
-          { keyword: '金玉堂', category: '秀' },
-          { keyword: '秀泰全球影城', category: '吃' },
-          { keyword: '寶雅', category: '秀' },
-          { keyword: '樂購蝦皮', category: '蘇' },
-          { keyword: '台灣麥當勞', category: '吃' },
-          { keyword: 'ＰＣＨＯＭＥ', category: '方' },
-          { keyword: '筷子餐廳', category: '吃' },
-          { keyword: '饗賓餐旅', category: '蘇' },
-          { keyword: 'TAOBAO.COM', category: '蘇' },
-          { keyword: '威秀影城', category: '家' },
-          { keyword: '怡客咖啡', category: '吃' },
-          { keyword: '特力屋', category: '秀' },
-          { keyword: '嘟嘟房', category: '弟' },
-          { keyword: '中油', category: '家' },
-          { keyword: '台北市自來水費', category: '固定' },
-          { keyword: '台東桂田喜來登酒店', category: '玩' },
-          { keyword: '家樂福', category: '玩' },
-          { keyword: '台東原生應用植物園', category: '玩' },
-          { keyword: '格上租車', category: '玩' },
-          { keyword: '起家雞', category: '吃' },
-          { keyword: '高鐵智慧型手機', category: '家' },
-          { keyword: '拓元票務', category: '蘇' },
-          { keyword: 'Ｍｉｓｔｅｒ　Ｄｏｎｕｔ', category: '家' },
-          { keyword: '墊腳石圖書', category: '家' },
-          { keyword: '彼得好咖啡', category: '吃' },
-          { keyword: '汽車驗車', category: '固定' },
-          { keyword: '燦坤３Ｃ', category: '家' },
-          { keyword: '三創數位', category: '蘇' },
-          { keyword: '御書園', category: '吃' },
-          { keyword: '五花馬水餃館', category: '吃' },
-          { keyword: '屈臣氏', category: '家' },
-          { keyword: 'APPLE.COM/BILL', category: '家' },
-          { keyword: '大台北瓦斯費', category: '固定' },
-          { keyword: '客美多咖啡', category: '吃' },
-          { keyword: '明曜百貨', category: '吃' },
-          { keyword: 'ＫＦＣ', category: '吃' },
-          { keyword: 'OPENAI', category: '方' },
-          { keyword: '一之軒', category: '家' },
-          { keyword: '鬥牛士經典牛排', category: '吃' },
-          { keyword: '街口電支', category: '吃' },
-          { keyword: '悠遊付－臺北市立大學', category: '秀' },
-          { keyword: '大安文山有線電視', category: '固定' },
-          { keyword: '必勝客', category: '吃' },
-          { keyword: '城市車旅', category: '家' },
-          { keyword: '丰禾', category: '吃' },
-          { keyword: '春水堂', category: '吃' },
-          { keyword: '台灣小米', category: '家' },
-          { keyword: '上島珈琲店', category: '吃' },
-          { keyword: '悠勢科技股份有限公司', category: '收入' },
-          { keyword: 'linePay繳好市多', category: '家' },
-          { keyword: '國保保費', category: '固定' },
-          { keyword: '怡秀跆拳道', category: '華' },
-          { keyword: '行政院發', category: '收入' },
-          { keyword: 'iPassMoney儲值', category: '方' },
-          { keyword: '逸安中醫', category: '蘇' },
-          { keyword: '連結帳戶交易', category: '家' },
-          { keyword: '花都管理費', category: '固定' },
-        ]);
+        settingsForm.setValue('categoryRules', DEFAULT_CATEGORY_RULES);
       }
     } catch (e) {
       console.error("Failed to load settings from localStorage", e);
@@ -288,6 +305,17 @@ export function FinanceFlowClient() {
       });
     }
   };
+
+  const handleResetRules = (ruleType: 'replacement' | 'category') => {
+    if (ruleType === 'replacement') {
+      replaceReplacementRules(DEFAULT_REPLACEMENT_RULES);
+      toast({ title: '取代規則已重置', description: '已恢復為預設規則。' });
+    } else {
+      replaceCategoryRules(DEFAULT_CATEGORY_RULES);
+      toast({ title: '分類規則已重置', description: '已恢復為預設規則。' });
+    }
+  };
+
 
   const handleAddCategory = () => {
     if (newCategory && !availableCategories.includes(newCategory)) {
@@ -347,9 +375,7 @@ export function FinanceFlowClient() {
             description: "無法將資料儲存到資料庫。",
           });
         }
-      } else if (!user && result.creditData.length > 0) {
-        // Data is processed locally but not saved.
-      }
+      } 
 
 
       if (result.creditData.length === 0 && result.depositData.length === 0) {
@@ -701,9 +727,31 @@ export function FinanceFlowClient() {
                             <TabsTrigger value="manage-categories">管理類型</TabsTrigger>
                           </TabsList>
                           <TabsContent value="replacement" className="mt-4">
-                            <CardDescription className="mb-4">
-                              設定自動取代或刪除規則。勾選「刪除整筆資料」後，符合條件的資料將被整筆移除。
-                            </CardDescription>
+                            <div className="flex justify-between items-center mb-4">
+                              <CardDescription>
+                                設定自動取代或刪除規則。勾選「刪除整筆資料」後，符合條件的資料將被整筆移除。
+                              </CardDescription>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="outline" size="sm">
+                                    <RotateCcw className="mr-2 h-4 w-4" />
+                                    重置
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>確定要重置嗎？</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      這將會捨棄所有您自訂的取代規則，並還原為系統預設值。此操作無法復原。
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>取消</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => handleResetRules('replacement')}>確定重置</AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
                             <div className="rounded-md border">
                               <Table>
                                 <TableHeader>
@@ -783,9 +831,31 @@ export function FinanceFlowClient() {
                             </Button>
                           </TabsContent>
                           <TabsContent value="category" className="mt-4">
-                            <CardDescription className="mb-4">
-                              設定交易項目關鍵字與對應的類型。處理報表時，將會自動帶入符合的第一個類型。
-                            </CardDescription>
+                            <div className="flex justify-between items-center mb-4">
+                              <CardDescription>
+                                設定交易項目關鍵字與對應的類型。處理報表時，將會自動帶入符合的第一個類型。
+                              </CardDescription>
+                               <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="outline" size="sm">
+                                    <RotateCcw className="mr-2 h-4 w-4" />
+                                    重置
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>確定要重置嗎？</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      這將會捨棄所有您自訂的分類規則，並還原為系統預設值。此操作無法復原。
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>取消</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => handleResetRules('category')}>確定重置</AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
                             <div className="rounded-md border">
                               <Table>
                                 <TableHeader>
