@@ -34,13 +34,17 @@ const detectReportTypePrompt = ai.definePrompt({
   output: {schema: DetectReportTypeOutputSchema},
   prompt: `You are an expert in financial document analysis.
   Your task is to determine whether the provided text is a credit card statement or a deposit account statement.
-  If you cannot determine the type of statement, return \"unknown\".
+  If you cannot determine the type of statement, return "unknown".
+  Analyze the following text and determine if it looks more like a credit card statement or a deposit account statement.
+
+  Credit card statements usually have columns like "Transaction Date", "Posting Date", "Description", and "Amount".
+  Deposit account statements usually have columns like "Date", "Time", "Withdrawal", "Deposit", and "Balance".
 
   Analyze the following text:
   {{text}}
 
-  Return the \"reportType\" field as either \"credit_card\" or \"deposit_account\" or \"unknown\". Do not return any other fields.
-  Ensure that the reportType is one of the enum values.
+  Return the "reportType" field as "credit_card", "deposit_account", or "unknown".
+  If there is any ambiguity, default to "credit_card".
   `,
 });
 

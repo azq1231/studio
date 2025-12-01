@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -18,7 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast"
-import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings } from 'lucide-react';
+import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings, ChevronsUpDown, ArrowDown, ArrowUp } from 'lucide-react';
 import { processBankStatement, type ReplacementRule, type CategoryRule } from '@/app/actions';
 import type { CreditData, DepositData } from '@/lib/parser';
 
@@ -45,7 +45,8 @@ const settingsFormSchema = z.object({
 
 type StatementFormData = z.infer<typeof statementFormSchema>;
 type SettingsFormData = z.infer<typeof settingsFormSchema>;
-
+type SortKey = 'keyword' | 'category';
+type SortDirection = 'asc' | 'desc';
 
 export function FinanceFlowClient() {
   const [isLoading, setIsLoading] = useState(false);
@@ -56,6 +57,9 @@ export function FinanceFlowClient() {
 
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
   const [newCategory, setNewCategory] = useState('');
+
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
   const statementForm = useForm<StatementFormData>({
     resolver: zodResolver(statementFormSchema),
@@ -318,9 +322,74 @@ export function FinanceFlowClient() {
     }
   }
 
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDirection('asc');
+    }
+  };
+
+  const sortedCategoryFields = useMemo(() => {
+    if (!sortKey) {
+      return categoryFields;
+    }
+    
+    const sorted = [...categoryFields].sort((a, b) => {
+      const valA = a[sortKey]?.toLowerCase() || '';
+      const valB = b[sortKey]?.toLowerCase() || '';
+      if (valA < valB) {
+        return sortDirection === 'asc' ? -1 : 1;
+      }
+      if (valA > valB) {
+        return sortDirection === 'asc' ? 1 : -1;
+      }
+      return 0;
+    });
+
+    // To properly work with useFieldArray, we need to return a sorted list of original indices
+    return categoryFields.map(field => {
+        const findIndex = sorted.findIndex(sortedField => sortedField.id === field.id)
+        return { ...field, sortedIndex: findIndex }
+    }).sort((a, b) => a.sortedIndex - b.sortedIndex)
+
+  }, [categoryFields, sortKey, sortDirection]);
+
+  // A bit of a hack to re-render sorted fields correctly
+  const renderSortedCategoryFields = useMemo(() => {
+     if (!sortKey) {
+      return categoryFields;
+    }
+    return [...categoryFields].sort((a, b) => {
+      const aValue = a[sortKey] || '';
+      const bValue = b[sortKey] || '';
+      const comparison = aValue.localeCompare(bValue, 'zh-Hant');
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [categoryFields, sortKey, sortDirection])
+
+
   const noDataFound = hasProcessed && !isLoading && creditData.length === 0 && depositData.length === 0;
   const hasData = creditData.length > 0 || depositData.length > 0;
   const defaultTab = creditData.length > 0 ? "credit" : "deposit";
+
+  const SortableHeader = ({ sortKey: key, children }: { sortKey: SortKey, children: React.ReactNode }) => {
+    const isSorted = sortKey === key;
+    return (
+      <TableHead className="w-1/2">
+        <Button variant="ghost" onClick={() => handleSort(key)} className="px-2 py-1 h-auto">
+          {children}
+          {isSorted ? (
+            sortDirection === 'asc' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />
+          ) : (
+            <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
+          )}
+        </Button>
+      </TableHead>
+    );
+  };
+
 
   return (
     <div className="space-y-4">
@@ -388,7 +457,7 @@ export function FinanceFlowClient() {
                               <TableRow>
                                 <TableHead className="w-2/5">尋找文字</TableHead>
                                 <TableHead className="w-2/5">取代為</TableHead>
-                                <TableHead className="w-1/5">刪除整筆資料</TableHead>
+                                <TableHead className="w-1/5 text-center">刪除整筆資料</TableHead>
                                 <TableHead className="w-[50px]">操作</TableHead>
                               </TableRow>
                             </TableHeader>
@@ -428,7 +497,7 @@ export function FinanceFlowClient() {
                                       control={settingsForm.control}
                                       name={`replacementRules.${index}.deleteRow`}
                                       render={({ field }) => (
-                                        <FormItem className="flex justify-center items-center">
+                                        <FormItem className="flex justify-center items-center h-full">
                                           <FormControl>
                                             <Checkbox
                                               checked={field.value}
@@ -465,63 +534,66 @@ export function FinanceFlowClient() {
                            設定交易項目關鍵字與對應的類型。處理報表時，將會自動帶入符合的第一個類型。
                         </CardDescription>
                         <div className="rounded-md border">
-                          <Table>
+                           <Table>
                             <TableHeader>
-                              <TableRow>
-                                <TableHead className="w-1/2">關鍵字</TableHead>
-                                <TableHead className="w-1/2">類型</TableHead>
-                                <TableHead className="w-[50px]">操作</TableHead>
-                              </TableRow>
+                                <TableRow>
+                                    <SortableHeader sortKey="keyword">關鍵字</SortableHeader>
+                                    <SortableHeader sortKey="category">類型</SortableHeader>
+                                    <TableHead className="w-[50px]">操作</TableHead>
+                                </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {categoryFields.map((field, index) => (
-                                <TableRow key={field.id}>
-                                  <TableCell className="p-1">
-                                      <FormField
-                                        control={settingsForm.control}
-                                        name={`categoryRules.${index}.keyword`}
-                                        render={({ field }) => (
-                                        <FormItem>
-                                            <FormControl>
-                                            <Input placeholder="交易項目中的文字" {...field} className="h-9"/>
-                                            </FormControl>
-                                            <FormMessage className="text-xs px-2"/>
-                                        </FormItem>
-                                        )}
-                                    />
-                                  </TableCell>
-                                   <TableCell className="p-1">
-                                     <FormField
-                                        control={settingsForm.control}
-                                        name={`categoryRules.${index}.category`}
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                {renderSortedCategoryFields.map((field) => {
+                                  const originalIndex = categoryFields.findIndex(f => f.id === field.id);
+                                  return (
+                                    <TableRow key={field.id}>
+                                        <TableCell className="p-1">
+                                            <FormField
+                                                control={settingsForm.control}
+                                                name={`categoryRules.${originalIndex}.keyword`}
+                                                render={({ field }) => (
+                                                <FormItem>
                                                     <FormControl>
-                                                        <SelectTrigger className="h-9">
-                                                            <SelectValue placeholder="選擇一個類型" />
-                                                        </SelectTrigger>
+                                                    <Input placeholder="交易項目中的文字" {...field} className="h-9"/>
                                                     </FormControl>
-                                                    <SelectContent>
-                                                        {availableCategories.map(cat => (
-                                                            <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                                <FormMessage className="text-xs px-2"/>
-                                            </FormItem>
-                                        )}
-                                    />
-                                   </TableCell>
-                                  <TableCell className="p-1">
-                                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeCategory(index)}>
-                                          <Trash2 className="h-4 w-4 text-destructive" />
-                                      </Button>
-                                  </TableCell>
-                                </TableRow>
-                              ))}
+                                                    <FormMessage className="text-xs px-2"/>
+                                                </FormItem>
+                                                )}
+                                            />
+                                        </TableCell>
+                                        <TableCell className="p-1">
+                                            <FormField
+                                                control={settingsForm.control}
+                                                name={`categoryRules.${originalIndex}.category`}
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <Select onValueChange={field.onChange} value={field.value}>
+                                                            <FormControl>
+                                                                <SelectTrigger className="h-9">
+                                                                    <SelectValue placeholder="選擇一個類型" />
+                                                                </SelectTrigger>
+                                                            </FormControl>
+                                                            <SelectContent>
+                                                                {availableCategories.map(cat => (
+                                                                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                        <FormMessage className="text-xs px-2"/>
+                                                    </FormItem>
+                                                )}
+                                            />
+                                        </TableCell>
+                                        <TableCell className="p-1">
+                                            <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeCategory(originalIndex)}>
+                                                <Trash2 className="h-4 w-4 text-destructive" />
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                  )
+                                })}
                             </TableBody>
-                          </Table>
+                           </Table>
                         </div>
                          <Button
                           type="button"
@@ -544,9 +616,14 @@ export function FinanceFlowClient() {
                               placeholder="輸入新的類型名稱" 
                               value={newCategory}
                               onChange={(e) => setNewCategory(e.target.value)}
-                              onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleAddCategory();
+                                }
+                              }}
                             />
-                            <Button onClick={handleAddCategory}>新增類型</Button>
+                            <Button type="button" onClick={handleAddCategory}>新增類型</Button>
                           </div>
                           <div className="space-y-2 max-h-60 overflow-y-auto pr-2 rounded-md border p-2">
                             {availableCategories.length > 0 ? (
