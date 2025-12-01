@@ -2,6 +2,7 @@
 
 import { detectReportType } from '@/ai/flows/detect-report-type';
 import { parseCreditCard, parseDepositAccount, type CreditData, type DepositData, type RawCreditData } from '@/lib/parser';
+import { randomUUID } from 'crypto';
 
 export type ReplacementRule = {
     find: string;
@@ -37,8 +38,8 @@ function applyCategoryRules(description: string, postingDate: string, rules: Cat
             return rule.category;
         }
     }
-    // If no rules match, return the original posting date
-    return postingDate;
+    // If no rules match, return a default or empty category
+    return '未分類';
 }
 
 async function processSingleCreditEntry(entry: RawCreditData, replacementRules: ReplacementRule[], categoryRules: CategoryRule[]): Promise<CreditData | null> {
@@ -51,6 +52,7 @@ async function processSingleCreditEntry(entry: RawCreditData, replacementRules: 
     const category = applyCategoryRules(description, entry.postingDate, categoryRules);
 
     return {
+        id: randomUUID(),
         transactionDate: entry.transactionDate,
         category: category,
         description: description,

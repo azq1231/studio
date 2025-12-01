@@ -2,6 +2,7 @@ import type { ReplacementRule } from '@/app/actions';
 
 // This is the final, categorized data structure
 export type CreditData = {
+  id: string; // Added for unique identification
   transactionDate: string;
   category: string; // This will hold either the rule-based category or the original posting date
   description: string;

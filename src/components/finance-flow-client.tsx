@@ -33,7 +33,7 @@ import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings, ChevronsU
 import { processBankStatement, type ReplacementRule, type CategoryRule } from '@/app/actions';
 import type { CreditData, DepositData } from '@/lib/parser';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, doc, writeBatch } from 'firebase/firestore';
+import { collection, doc, writeBatch, updateDoc, deleteDoc } from 'firebase/firestore';
 
 const statementFormSchema = z.object({
   statement: z.string().min(10, { message: '報表內容至少需要10個字元。' }),
@@ -289,9 +289,7 @@ export function FinanceFlowClient() {
   async function onSubmit(values: StatementFormData) {
     setIsLoading(true);
     setHasProcessed(false);
-    setCreditData([]);
-    setDepositData([]);
-
+    
     const { replacementRules, categoryRules } = settingsForm.getValues();
     const result = await processBankStatement(values.statement, replacementRules, categoryRules);
     
@@ -390,6 +388,50 @@ export function FinanceFlowClient() {
       setSortDirection('asc');
     }
   };
+
+    const handleUpdateCategory = async (transactionId: string, newCategory: string) => {
+        setCreditData(prevData =>
+            prevData.map(item =>
+                item.id === transactionId ? { ...item, category: newCategory } : item
+            )
+        );
+
+        if (user && firestore) {
+            try {
+                const docRef = doc(firestore, 'users', user.uid, 'creditCardTransactions', transactionId);
+                await updateDoc(docRef, { category: newCategory });
+            } catch (error) {
+                console.error("Error updating category in Firestore:", error);
+                toast({
+                    variant: "destructive",
+                    title: "更新失敗",
+                    description: "無法將類型變更儲存到資料庫。",
+                });
+                // Optional: Revert UI change
+                setCreditData(savedTransactions || []);
+            }
+        }
+    };
+
+    const handleDeleteTransaction = async (transactionId: string) => {
+        setCreditData(prevData => prevData.filter(item => item.id !== transactionId));
+
+        if (user && firestore) {
+            try {
+                const docRef = doc(firestore, 'users', user.uid, 'creditCardTransactions', transactionId);
+                await deleteDoc(docRef);
+            } catch (error) {
+                console.error("Error deleting transaction from Firestore:", error);
+                toast({
+                    variant: "destructive",
+                    title: "刪除失敗",
+                    description: "無法從資料庫中刪除此筆交易。",
+                });
+                // Optional: Revert UI change
+                setCreditData(savedTransactions || []);
+            }
+        }
+    };
 
   const sortedCategoryFields = useMemo(() => {
     if (!sortKey) {
@@ -830,18 +872,45 @@ export function FinanceFlowClient() {
                             <TableHeader>
                               <TableRow>
                                 <TableHead>交易日期</TableHead>
-                                <TableHead>類型</TableHead>
+                                <TableHead className="w-[120px]">類型</TableHead>
                                 <TableHead>交易項目</TableHead>
                                 <TableHead className="text-right">金額</TableHead>
+                                <TableHead className="w-[80px] text-center">操作</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {creditData.map((row, i) => (
-                                <TableRow key={i}>
+                              {creditData.map((row) => (
+                                <TableRow key={row.id}>
                                   <TableCell className="font-mono">{row.transactionDate}</TableCell>
-                                  <TableCell>{row.category}</TableCell>
+                                  <TableCell>
+                                    <Select
+                                        value={row.category}
+                                        onValueChange={(newCategory) => handleUpdateCategory(row.id, newCategory)}
+                                        disabled={!user}
+                                    >
+                                        <SelectTrigger className="h-8 w-full">
+                                            <SelectValue placeholder="選擇類型" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {availableCategories.map(cat => (
+                                                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                  </TableCell>
                                   <TableCell>{row.description}</TableCell>
                                   <TableCell className={`text-right font-mono ${row.amount < 0 ? 'text-destructive' : ''}`}>{row.amount.toLocaleString()}</TableCell>
+                                  <TableCell className="text-center">
+                                     <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => handleDeleteTransaction(row.id)}
+                                        disabled={!user}
+                                        className="h-8 w-8"
+                                    >
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                     </Button>
+                                  </TableCell>
                                 </TableRow>
                               ))}
                             </TableBody>
@@ -947,5 +1016,3 @@ export function FinanceFlowClient() {
     </div>
   );
 }
-
-    
