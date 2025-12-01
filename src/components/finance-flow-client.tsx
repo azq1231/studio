@@ -114,11 +114,27 @@ export function FinanceFlowClient() {
 
   useEffect(() => {
     if (!isUserLoading && user) {
-        setCreditData(savedTransactions || []);
+        const mergedData = [...(savedTransactions || [])];
+        const savedIds = new Set(savedTransactions?.map(t => t.id));
+        const localOnlyData = creditData.filter(t => !savedIds.has(t.id));
+        mergedData.push(...localOnlyData);
+
+        // Sort by date as a default
+        mergedData.sort((a, b) => {
+             try {
+                const dateA = parse(a.transactionDate, 'MM/dd', new Date());
+                const dateB = parse(b.transactionDate, 'MM/dd', new Date());
+                return dateB.getTime() - dateA.getTime();
+            } catch(e) {
+                return 0;
+            }
+        });
+        
+        setCreditData(mergedData);
     } else if (!isUserLoading && !user) {
         setCreditData([]);
     }
-  }, [user, isUserLoading, savedTransactions])
+  }, [user, isUserLoading, savedTransactions]);
 
 
   useEffect(() => {
@@ -302,7 +318,7 @@ export function FinanceFlowClient() {
           const batch = writeBatch(firestore);
           const transactionsCollection = collection(firestore, 'users', user.uid, 'creditCardTransactions');
           result.creditData.forEach(transaction => {
-            const docRef = doc(transactionsCollection); // Create a new doc with a unique ID
+            const docRef = doc(transactionsCollection, transaction.id);
             batch.set(docRef, transaction);
           });
           await batch.commit();
@@ -407,7 +423,6 @@ export function FinanceFlowClient() {
                     title: "更新失敗",
                     description: "無法將類型變更儲存到資料庫。",
                 });
-                // Optional: Revert UI change
                 setCreditData(savedTransactions || []);
             }
         }
@@ -427,38 +442,11 @@ export function FinanceFlowClient() {
                     title: "刪除失敗",
                     description: "無法從資料庫中刪除此筆交易。",
                 });
-                // Optional: Revert UI change
                 setCreditData(savedTransactions || []);
             }
         }
     };
 
-  const sortedCategoryFields = useMemo(() => {
-    if (!sortKey) {
-      return categoryFields;
-    }
-    
-    const sorted = [...categoryFields].sort((a, b) => {
-      const valA = a[sortKey]?.toLowerCase() || '';
-      const valB = b[sortKey]?.toLowerCase() || '';
-      if (valA < valB) {
-        return sortDirection === 'asc' ? -1 : 1;
-      }
-      if (valA > valB) {
-        return sortDirection === 'asc' ? 1 : -1;
-      }
-      return 0;
-    });
-
-    // To properly work with useFieldArray, we need to return a sorted list of original indices
-    return categoryFields.map(field => {
-        const findIndex = sorted.findIndex(sortedField => sortedField.id === field.id)
-        return { ...field, sortedIndex: findIndex }
-    }).sort((a, b) => a.sortedIndex - b.sortedIndex)
-
-  }, [categoryFields, sortKey, sortDirection]);
-
-  // A bit of a hack to re-render sorted fields correctly
   const renderSortedCategoryFields = useMemo(() => {
      if (!sortKey) {
       return categoryFields;
@@ -505,7 +493,6 @@ export function FinanceFlowClient() {
         const { transactionDate, category, amount } = transaction;
         if (amount <= 0) return; // Only sum expenses
 
-        // Assuming current year if year is not present
         const date = parse(transactionDate, 'MM/dd', new Date());
         const monthKey = format(date, 'yyyy年M月');
         
@@ -546,15 +533,19 @@ export function FinanceFlowClient() {
 
   const noDataFound = hasProcessed && !isLoading && creditData.length === 0 && depositData.length === 0;
   const hasData = creditData.length > 0 || depositData.length > 0;
-  const defaultTab = creditData.length > 0 ? "credit" : "deposit";
-  const showResults = hasProcessed || (savedTransactions && savedTransactions.length > 0) || depositData.length > 0;
+  
+  const defaultTab = hasProcessed
+    ? (creditData.length > 0 ? "credit" : "deposit")
+    : (savedTransactions && savedTransactions.length > 0 ? "credit" : "deposit");
+
+  const showResults = (hasProcessed && hasData) || (!isUserLoading && !hasProcessed && hasData);
 
 
   const SortableHeader = ({ sortKey: key, children }: { sortKey: SortKey, children: React.ReactNode }) => {
     const isSorted = sortKey === key;
     return (
-      <TableHead className="w-1/2">
-        <Button variant="ghost" onClick={() => handleSort(key)} className="px-2 py-1 h-auto">
+      <TableHead>
+        <Button variant="ghost" onClick={() => handleSort(key)} className="px-2 py-1 h-auto -ml-2">
           {children}
           {isSorted ? (
             sortDirection === 'asc' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />
@@ -721,15 +712,16 @@ export function FinanceFlowClient() {
                                     <TableRow>
                                         <SortableHeader sortKey="keyword">關鍵字</SortableHeader>
                                         <SortableHeader sortKey="category">類型</SortableHeader>
-                                        <TableHead className="w-[50px]">操作</TableHead>
+                                        <TableHead className="w-[50px] text-right">操作</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {renderSortedCategoryFields.map((field) => {
                                       const originalIndex = categoryFields.findIndex(f => f.id === field.id);
+                                      if (originalIndex === -1) return null;
                                       return (
                                         <TableRow key={field.id}>
-                                            <TableCell className="p-1">
+                                            <TableCell className="p-1 w-1/2">
                                                 <FormField
                                                     control={settingsForm.control}
                                                     name={`categoryRules.${originalIndex}.keyword`}
@@ -743,7 +735,7 @@ export function FinanceFlowClient() {
                                                     )}
                                                 />
                                             </TableCell>
-                                            <TableCell className="p-1">
+                                            <TableCell className="p-1 w-1/2">
                                                 <FormField
                                                     control={settingsForm.control}
                                                     name={`categoryRules.${originalIndex}.category`}
@@ -766,7 +758,7 @@ export function FinanceFlowClient() {
                                                     )}
                                                 />
                                             </TableCell>
-                                            <TableCell className="p-1">
+                                            <TableCell className="p-1 text-right">
                                                 <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeCategory(originalIndex)}>
                                                     <Trash2 className="h-4 w-4 text-destructive" />
                                                 </Button>
@@ -809,7 +801,7 @@ export function FinanceFlowClient() {
                               </div>
                               <div className="space-y-2 max-h-60 overflow-y-auto pr-2 rounded-md border p-2">
                                 {availableCategories.length > 0 ? (
-                                    availableCategories.map(cat => (
+                                    availableCategories.sort((a,b) => a.localeCompare(b, 'zh-Hant')).map(cat => (
                                     <div key={cat} className="flex items-center justify-between p-2 bg-background/50 rounded-md">
                                         <span className="text-sm">{cat}</span>
                                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleRemoveCategory(cat)}>
@@ -899,7 +891,7 @@ export function FinanceFlowClient() {
                                     </Select>
                                   </TableCell>
                                   <TableCell>{row.description}</TableCell>
-                                  <TableCell className={`text-right font-mono ${row.amount < 0 ? 'text-destructive' : ''}`}>{row.amount.toLocaleString()}</TableCell>
+                                  <TableCell className={`text-right font-mono ${row.amount < 0 ? 'text-green-600' : ''}`}>{row.amount.toLocaleString()}</TableCell>
                                   <TableCell className="text-center">
                                      <Button
                                         variant="ghost"
