@@ -110,28 +110,23 @@
     ]
   },
   "firestore": {
-    "structure": [
-      {
-        "path": "/users/{userId}/credit_card_transactions/{transactionId}",
-        "schema": {
-          "$ref": "#/backend/entities/CreditCardTransaction"
-        },
-        "description": "Stores credit card transaction data for each user. Each document represents a single transaction. The transaction is owned by the user identified by {userId}."
+    "/users/{userId}/credit_card_transactions/{transactionId}": {
+      "schema": {
+        "$ref": "#/backend/entities/CreditCardTransaction"
       },
-      {
-        "path": "/users/{userId}/deposit_account_transactions/{transactionId}",
-        "schema": {
-          "$ref": "#/backend/entities/DepositAccountTransaction"
-        },
-        "description": "Stores deposit account transaction data for each user. Each document represents a single transaction. The transaction is owned by the user identified by {userId}."
+      "description": "Stores credit card transaction data for each user. Each document represents a single transaction. The transaction is owned by the user identified by {userId}."
+    },
+    "/users/{userId}/deposit_account_transactions/{transactionId}": {
+      "schema": {
+        "$ref": "#/backend/entities/DepositAccountTransaction"
       },
-      {
-        "path": "/users/{userId}/categories/{categoryId}",
-        "schema": {
-          "$ref": "#/backend/entities/Category"
-        },
-        "description": "Stores categories for each user. Each document represents a category that the user can assign to transactions. The category is owned by the user identified by {userId}."
-      }
-    ]
+      "description": "Stores deposit account transaction data for each user. Each document represents a single transaction. The transaction is owned by the user identified by {userId}."
+    },
+    "/users/{userId}/categories/{categoryId}": {
+      "schema": {
+        "$ref": "#/backend/entities/Category"
+      },
+      "description": "Stores categories for each user. Each document represents a category that the user can assign to transactions. The category is owned by the user identified by {userId}."
+    }
   }
 }
