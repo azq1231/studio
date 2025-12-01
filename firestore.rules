@@ -1,85 +1,109 @@
 /**
- * Core Philosophy: This ruleset enforces a strict user-ownership model where all data is private to the user who created it.
- * Data Structure: All application data, including financial transactions and categories, is hierarchically organized and nested under the `/users/{userId}` path. This structure ensures that a user's data is isolated and cannot be accessed by others.
+ * Core Philosophy: This ruleset enforces a strict user-ownership model where all
+ * user-generated data is private. Access control is based on the user's
+ * unique ID (UID) present in the document path.
+ *
+ * Data Structure: All data is organized hierarchically under a top-level `users`
+ * collection. Each user's data, such as financial transactions, is stored in
+ * subcollections within their own user document (e.g., /users/{userId}/creditCardTransactions/{transactionId}).
+ * This structure provides strong, inherent security boundaries.
+ *
  * Key Security Decisions:
- *  - User Isolation: A user can only access documents located within their own data tree (i.e., under their own `/users/{userId}` path).
- *  - No Public Data: There are no publicly readable collections. All access requires authentication.
- *  - No User Listing: The rules do not allow for querying or listing the top-level `/users` collection.
- *  - Default Deny: Any access not explicitly granted is denied.
- * Denormalization for Authorization: The data structure itself acts as a form of denormalization for authorization. By placing all of a user's data in a subcollection under their unique user ID, we can write simple, fast, and secure rules based on the document path without needing extra database reads (`get()`) to check for ownership.
- * Structural Segregation: Credit card transactions, deposit account transactions, and categories are stored in separate, dedicated subcollections. This allows for clear, specific rules for each data type and improves query performance.
+ * - User data is strictly private. A user can only access documents under their own path (`/users/{their_uid}`).
+ * - Listing all users is explicitly disallowed to protect user privacy and prevent enumeration attacks.
+ * - A user is permitted to create their own root document (`/users/{userId}`), enabling profile creation.
+ * - All write operations (create, update, delete) are restricted to the document owner.
+ *
+ * Denormalization for Authorization: The path-based security model (`/users/{userId}/...`)
+ * is a form of denormalization where the user's ID is part of the path itself. This
+ * avoids the need for extra `get()` calls to check ownership, resulting in faster,
+ * more scalable, and more secure rules.
+ *
+ * Structural Segregation: User data is naturally segregated into separate document
+ * trees. This is the most secure and performant way to manage private, user-specific
+ * data, as queries for one user's data can never accidentally leak data from another.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions for reusable logic
+    // ------------------------------------------------------------------------
+    // Helper Functions
+    // ------------------------------------------------------------------------
+
+    /**
+     * Checks if the user is authenticated.
+     */
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // Checks if the requesting user is the owner of the document based on the path.
+    /**
+     * Validates if the requesting user is the owner of the document based on the userId in the path.
+     */
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    // Checks for ownership on an existing document. Used for safe updates and deletes.
+    /**
+     * Validates ownership for an existing resource. Used for update/delete operations.
+     */
     function isExistingOwner(userId) {
       return isOwner(userId) && resource != null;
     }
 
-    /**
-     * @description Secures the user's private credit card transactions.
-     * @path /users/{userId}/credit_card_transactions/{transactionId}
-     * @allow A user (UID 'user123') can (create) their own transaction at `/users/user123/credit_card_transactions/tx_abc`.
-     * @deny A different user (UID 'user456') is blocked from trying to (get) a transaction at `/users/user123/credit_card_transactions/tx_abc`.
-     * @principle Restricts access to a user's own data tree, ensuring financial privacy.
-     */
-    match /users/{userId}/credit_card_transactions/{transactionId} {
-      // READ: Only the owner can read their own transaction documents.
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
+    // ------------------------------------------------------------------------
+    // Collection Rules
+    // ------------------------------------------------------------------------
 
-      // WRITE: Only the owner can create, update, or delete their own transactions.
+    /**
+     * @description Controls access to a user's root document.
+     * @path /users/{userId}
+     * @allow (create) An authenticated user creating their own document: `create /users/user_abc` (auth.uid: 'user_abc').
+     * @deny (list) Any user attempting to list all user documents: `list /users`.
+     * @deny (get) A user trying to read another user's document: `get /users/user_xyz` (auth.uid: 'user_abc').
+     * @principle Restricts access to a user's own data tree and prevents user enumeration.
+     */
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false;
       allow create: if isOwner(userId);
       allow update: if isExistingOwner(userId);
       allow delete: if isExistingOwner(userId);
-    }
 
-    /**
-     * @description Secures the user's private deposit account transactions.
-     * @path /users/{userId}/deposit_account_transactions/{transactionId}
-     * @allow A user (UID 'user123') can (list) all transactions at `/users/user123/deposit_account_transactions`.
-     * @deny An anonymous user is blocked from trying to (create) a transaction at `/users/user123/deposit_account_transactions/tx_def`.
-     * @principle Restricts access to a user's own data tree, ensuring financial privacy.
-     */
-    match /users/{userId}/deposit_account_transactions/{transactionId} {
-      // READ: Only the owner can read their own transaction documents.
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
+      /**
+       * @description Controls access to a user's private credit card transactions.
+       * @path /users/{userId}/creditCardTransactions/{transactionId}
+       * @allow (create) An owner creating a transaction in their own collection: `create /users/user_abc/creditCardTransactions/txn_123` (auth.uid: 'user_abc').
+       * @allow (list) An owner listing their own transactions: `list /users/user_abc/creditCardTransactions` (auth.uid: 'user_abc').
+       * @deny (get) A user trying to read another user's transaction: `get /users/user_xyz/creditCardTransactions/txn_123` (auth.uid: 'user_abc').
+       * @deny (create) An owner creating a transaction with a mismatched internal ID: `create /users/user_abc/creditCardTransactions/txn_123` with data `{ "id": "txn_999" }`.
+       * @principle Enforces document ownership and validates relational integrity between the document ID and its internal `id` field.
+       */
+      match /creditCardTransactions/{transactionId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.id == transactionId;
+        allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+        allow delete: if isExistingOwner(userId);
+      }
 
-      // WRITE: Only the owner can create, update, or delete their own transactions.
-      allow create: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
-    }
-
-    /**
-     * @description Secures the user's private transaction categories.
-     * @path /users/{userId}/categories/{categoryId}
-     * @allow A user (UID 'user123') can (update) their own category at `/users/user123/categories/cat_food`.
-     * @deny A user (UID 'user123') is blocked from trying to (delete) another user's category at `/users/user456/categories/cat_travel`.
-     * @principle Restricts access to a user's own data tree, ensuring that personalization data remains private.
-     */
-    match /users/{userId}/categories/{categoryId} {
-      // READ: Only the owner can read their own category documents.
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-
-      // WRITE: Only the owner can create, update, or delete their own categories.
-      allow create: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
+      /**
+       * @description Controls access to a user's private deposit account transactions.
+       * @path /users/{userId}/depositAccountTransactions/{transactionId}
+       * @allow (create) An owner creating a transaction in their own collection: `create /users/user_abc/depositAccountTransactions/txn_123` (auth.uid: 'user_abc').
+       * @allow (list) An owner listing their own transactions: `list /users/user_abc/depositAccountTransactions` (auth.uid: 'user_abc').
+       * @deny (get) A user trying to read another user's transaction: `get /users/user_xyz/depositAccountTransactions/txn_123` (auth.uid: 'user_abc').
+       * @deny (create) An owner creating a transaction with a mismatched internal ID: `create /users/user_abc/depositAccountTransactions/txn_123` with data `{ "id": "txn_999" }`.
+       * @principle Enforces document ownership and validates relational integrity between the document ID and its internal `id` field.
+       */
+      match /depositAccountTransactions/{transactionId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.id == transactionId;
+        allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+        allow delete: if isExistingOwner(userId);
+      }
     }
   }
 }
