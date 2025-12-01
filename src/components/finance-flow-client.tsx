@@ -88,7 +88,6 @@ const DEFAULT_CATEGORY_RULES: CategoryRule[] = [
   { keyword: '柒號洋樓', category: '方' },
   { keyword: 'ＰＣＨＯＭＥ', category: '方' },
   { keyword: 'OPENAI', category: '方' },
-  { keyword: 'iPassMoney儲值', category: '方' },
   { keyword: '新東陽', category: '吃' },
   { keyword: '全家', category: '吃' },
   { keyword: '元心燃麻辣堂', category: '吃' },
@@ -137,8 +136,6 @@ const DEFAULT_CATEGORY_RULES: CategoryRule[] = [
   { keyword: '一之軒', category: '家' },
   { keyword: '城市車旅', category: '家' },
   { keyword: '台灣小米', category: '家' },
-  { keyword: 'linePay繳好市多', category: '家' },
-  { keyword: '連結帳戶交易', category: '家' },
   { keyword: '麗冠有線電視', category: '固定' },
   { keyword: '09202***01', category: '固定' },
   { keyword: '國都汽車', category: '固定' },
@@ -147,8 +144,6 @@ const DEFAULT_CATEGORY_RULES: CategoryRule[] = [
   { keyword: '汽車驗車', category: '固定' },
   { keyword: '大台北瓦斯費', category: '固定' },
   { keyword: '大安文山有線電視', category: '固定' },
-  { keyword: '國保保費', category: '固定' },
-  { keyword: '花都管理費', category: '固定' },
   { keyword: '橙印良品', category: '蘇' },
   { keyword: 'PayEasy', category: '蘇' },
   { keyword: '樂購蝦皮', category: '蘇' },
@@ -156,7 +151,6 @@ const DEFAULT_CATEGORY_RULES: CategoryRule[] = [
   { keyword: 'TAOBAO.COM', category: '蘇' },
   { keyword: '拓元票務', category: '蘇' },
   { keyword: '三創數位', category: '蘇' },
-  { keyword: '逸安中醫', category: '蘇' },
   { keyword: '金玉堂', category: '秀' },
   { keyword: '寶雅', category: '秀' },
   { keyword: '特力屋', category: '秀' },
@@ -168,7 +162,13 @@ const DEFAULT_CATEGORY_RULES: CategoryRule[] = [
   { keyword: '格上租車', category: '玩' },
   { keyword: '悠勢科技股份有限公司', category: '收入' },
   { keyword: '行政院發', category: '收入' },
+  { keyword: 'linePay繳好市多', category: '家' },
+  { keyword: '國保保費', category: '固定' },
   { keyword: '怡秀跆拳道', category: '華' },
+  { keyword: 'iPassMoney儲值', category: '方' },
+  { keyword: '逸安中醫', category: '蘇' },
+  { keyword: '連結帳戶交易', category: '家' },
+  { keyword: '花都管理費', category: '固定' },
 ];
 
 export function FinanceFlowClient() {
@@ -216,12 +216,12 @@ export function FinanceFlowClient() {
     },
   });
 
-  const { fields: replacementFields, append: appendReplacement, remove: removeReplacement, replace: replaceReplacementRules } = useFieldArray({
+  const { fields: replacementFields, append: appendReplacement, remove: removeReplacement } = useFieldArray({
     control: settingsForm.control,
     name: 'replacementRules',
   });
   
-  const { fields: categoryFields, append: appendCategory, remove: removeCategory, replace: replaceCategoryRules } = useFieldArray({
+  const { fields: categoryFields, append: appendCategory, remove: removeCategory } = useFieldArray({
     control: settingsForm.control,
     name: 'categoryRules',
   });
@@ -265,6 +265,7 @@ export function FinanceFlowClient() {
         localStorage.setItem('availableCategories', JSON.stringify(defaultCategories));
       }
 
+      // Replacement Rules
       const savedReplacementRules = localStorage.getItem('replacementRules');
       if (savedReplacementRules) {
         const parsed = JSON.parse(savedReplacementRules);
@@ -275,15 +276,32 @@ export function FinanceFlowClient() {
         settingsForm.setValue('replacementRules', DEFAULT_REPLACEMENT_RULES);
       }
 
-      const savedCategoryRules = localStorage.getItem('categoryRules');
-       if (savedCategoryRules) {
-        const parsed = JSON.parse(savedCategoryRules);
-        if (Array.isArray(parsed)) {
-           settingsForm.setValue('categoryRules', parsed);
-        }
-      } else {
-        settingsForm.setValue('categoryRules', DEFAULT_CATEGORY_RULES);
+      // Category Rules - Smart Merging
+      const savedCategoryRulesRaw = localStorage.getItem('categoryRules');
+      let finalCategoryRules = [...DEFAULT_CATEGORY_RULES];
+
+      if (savedCategoryRulesRaw) {
+        const savedRules = JSON.parse(savedCategoryRulesRaw) as CategoryRule[];
+        const defaultKeywords = new Set(DEFAULT_CATEGORY_RULES.map(r => r.keyword));
+        
+        // Add saved rules that are not in the new default list
+        savedRules.forEach(savedRule => {
+          if (!defaultKeywords.has(savedRule.keyword)) {
+            finalCategoryRules.push(savedRule);
+          }
+        });
+        
+        // Prioritize saved rules over default ones if keyword is the same
+        const savedRulesMap = new Map(savedRules.map(r => [r.keyword, r]));
+        finalCategoryRules = finalCategoryRules.map(rule => savedRulesMap.get(rule.keyword) || rule);
       }
+
+      // Remove duplicates just in case
+      const uniqueRules = Array.from(new Map(finalCategoryRules.map(r => [r.keyword, r])).values());
+      
+      settingsForm.setValue('categoryRules', uniqueRules);
+      localStorage.setItem('categoryRules', JSON.stringify(uniqueRules));
+
     } catch (e) {
       console.error("Failed to load settings from localStorage", e);
     }
@@ -291,8 +309,16 @@ export function FinanceFlowClient() {
 
   const handleSaveSettings = (data: SettingsFormData) => {
     try {
-      localStorage.setItem('replacementRules', JSON.stringify(data.replacementRules));
-      localStorage.setItem('categoryRules', JSON.stringify(data.categoryRules));
+      // Ensure we don't save duplicate keywords
+      const uniqueReplacementRules = Array.from(new Map(data.replacementRules.map(r => [r.find, r])).values());
+      const uniqueCategoryRules = Array.from(new Map(data.categoryRules.map(r => [r.keyword, r])).values());
+
+      localStorage.setItem('replacementRules', JSON.stringify(uniqueReplacementRules));
+      localStorage.setItem('categoryRules', JSON.stringify(uniqueCategoryRules));
+      
+      settingsForm.setValue('replacementRules', uniqueReplacementRules);
+      settingsForm.setValue('categoryRules', uniqueCategoryRules);
+
       toast({
         title: "設定已儲存",
         description: "您的規則已成功儲存。",
@@ -303,16 +329,6 @@ export function FinanceFlowClient() {
         title: "儲存失敗",
         description: "無法儲存設定到您的瀏覽器。",
       });
-    }
-  };
-
-  const handleResetRules = (ruleType: 'replacement' | 'category') => {
-    if (ruleType === 'replacement') {
-      replaceReplacementRules(DEFAULT_REPLACEMENT_RULES);
-      toast({ title: '取代規則已重置', description: '已恢復為預設規則。' });
-    } else {
-      replaceCategoryRules(DEFAULT_CATEGORY_RULES);
-      toast({ title: '分類規則已重置', description: '已恢復為預設規則。' });
     }
   };
 
@@ -731,26 +747,6 @@ export function FinanceFlowClient() {
                               <CardDescription>
                                 設定自動取代或刪除規則。勾選「刪除整筆資料」後，符合條件的資料將被整筆移除。
                               </CardDescription>
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button variant="outline" size="sm">
-                                    <RotateCcw className="mr-2 h-4 w-4" />
-                                    重置
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>確定要重置嗎？</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      這將會捨棄所有您自訂的取代規則，並還原為系統預設值。此操作無法復原。
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>取消</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => handleResetRules('replacement')}>確定重置</AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
                             </div>
                             <div className="rounded-md border">
                               <Table>
@@ -835,26 +831,6 @@ export function FinanceFlowClient() {
                               <CardDescription>
                                 設定交易項目關鍵字與對應的類型。處理報表時，將會自動帶入符合的第一個類型。
                               </CardDescription>
-                               <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button variant="outline" size="sm">
-                                    <RotateCcw className="mr-2 h-4 w-4" />
-                                    重置
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>確定要重置嗎？</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      這將會捨棄所有您自訂的分類規則，並還原為系統預設值。此操作無法復原。
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>取消</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => handleResetRules('category')}>確定重置</AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
                             </div>
                             <div className="rounded-md border">
                               <Table>
@@ -1159,3 +1135,5 @@ export function FinanceFlowClient() {
     </div>
   );
 }
+
+    
