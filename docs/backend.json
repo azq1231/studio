@@ -113,65 +113,25 @@
     "structure": [
       {
         "path": "/users/{userId}/credit_card_transactions/{transactionId}",
-        "definition": {
-          "entityName": "CreditCardTransaction",
-          "schema": {
-            "$ref": "#/backend/entities/CreditCardTransaction"
-          },
-          "description": "Stores credit card transaction data for each user. Each document represents a single transaction. The transaction is owned by the user identified by {userId}.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier for the user who owns the transaction."
-            },
-            {
-              "name": "transactionId",
-              "description": "The unique identifier for the credit card transaction."
-            }
-          ]
-        }
+        "schema": {
+          "$ref": "#/backend/entities/CreditCardTransaction"
+        },
+        "description": "Stores credit card transaction data for each user. Each document represents a single transaction. The transaction is owned by the user identified by {userId}."
       },
       {
         "path": "/users/{userId}/deposit_account_transactions/{transactionId}",
-        "definition": {
-          "entityName": "DepositAccountTransaction",
-          "schema": {
-            "$ref": "#/backend/entities/DepositAccountTransaction"
-          },
-          "description": "Stores deposit account transaction data for each user. Each document represents a single transaction. The transaction is owned by the user identified by {userId}.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier for the user who owns the transaction."
-            },
-            {
-              "name": "transactionId",
-              "description": "The unique identifier for the deposit account transaction."
-            }
-          ]
-        }
+        "schema": {
+          "$ref": "#/backend/entities/DepositAccountTransaction"
+        },
+        "description": "Stores deposit account transaction data for each user. Each document represents a single transaction. The transaction is owned by the user identified by {userId}."
       },
       {
         "path": "/users/{userId}/categories/{categoryId}",
-        "definition": {
-          "entityName": "Category",
-          "schema": {
-            "$ref": "#/backend/entities/Category"
-          },
-          "description": "Stores categories for each user. Each document represents a category that the user can assign to transactions. The category is owned by the user identified by {userId}.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier for the user who owns the category."
-            },
-            {
-              "name": "categoryId",
-              "description": "The unique identifier for the category."
-            }
-          ]
-        }
+        "schema": {
+          "$ref": "#/backend/entities/Category"
+        },
+        "description": "Stores categories for each user. Each document represents a category that the user can assign to transactions. The category is owned by the user identified by {userId}."
       }
-    ],
-    "reasoning": "The Firestore structure is designed to organize credit card and deposit account transactions for individual users. Each user has their own collection of categories and transactions. This design prioritizes authorization independence by storing all data directly under the user's document, eliminating the need for complex `get()` calls in security rules. Path-based ownership (`/users/{userId}/...`) ensures that only the authenticated user can access their own data.\n\nSegregation of CreditCardTransaction and DepositAccountTransaction into separate collections allows for tailored security rules and indexing strategies specific to each transaction type. The Category entity is placed as a subcollection of users to allow filtering of transactions by category.\n\nQAPs (Rules are not Filters) are supported due to the homogeneous security posture enforced within each collection. All documents within `/users/{userId}/credit_card_transactions` share the same security requirements (owned by the user). The same principle applies to `/users/{userId}/deposit_account_transactions` and `/users/{userId}/categories`.\n\nBy using user-specific collections (`/users/{userId}/...`), we automatically scope `list` operations to the authenticated user's data, preventing unauthorized access to other users' financial information."
+    ]
   }
 }
