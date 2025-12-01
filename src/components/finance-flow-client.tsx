@@ -79,96 +79,96 @@ const DEFAULT_REPLACEMENT_RULES: ReplacementRule[] = [
 ];
 
 const DEFAULT_CATEGORY_RULES: CategoryRule[] = [
-  { keyword: 'VULTR', category: '方' },
-  { keyword: '國外交易服務費', category: '方' },
-  { keyword: 'GOOGLE*CLOUD', category: '方' },
-  { keyword: '悠遊卡自動加值', category: '方' },
-  { keyword: 'REPLIT, INC.', category: '方' },
-  { keyword: '伯朗咖啡', category: '方' },
-  { keyword: '柒號洋樓', category: '方' },
-  { keyword: 'ＰＣＨＯＭＥ', category: '方' },
-  { keyword: 'OPENAI', category: '方' },
-  { keyword: '新東陽', category: '吃' },
-  { keyword: '全家', category: '吃' },
-  { keyword: '元心燃麻辣堂', category: '吃' },
-  { keyword: '統一超商', category: '吃' },
-  { keyword: '玉喜飯店', category: '吃' },
-  { keyword: '爭鮮', category: '吃' },
-  { keyword: '八方雲集', category: '吃' },
-  { keyword: '樂活養生健康鍋', category: '吃' },
-  { keyword: '順成西點麵包', category: '吃' },
-  { keyword: '誠品生活', category: '吃' },
-  { keyword: '星巴克－自動加值', category: '吃' },
-  { keyword: 'COMFORT BURGER', category: '吃' },
-  { keyword: '雙月食品社', category: '吃' },
-  { keyword: '秀泰全球影城', category: '吃' },
-  { keyword: '台灣麥當勞', category: '吃' },
-  { keyword: '筷子餐廳', category: '吃' },
-  { keyword: '怡客咖啡', category: '吃' },
-  { keyword: '起家雞', category: '吃' },
-  { keyword: '彼得好咖啡', category: '吃' },
-  { keyword: '御書園', category: '吃' },
-  { keyword: '五花馬水餃館', category: '吃' },
-  { keyword: '客美多咖啡', category: '吃' },
-  { keyword: '明曜百貨', category: '吃' },
-  { keyword: 'ＫＦＣ', category: '吃' },
-  { keyword: '鬥牛士經典牛排', category: '吃' },
-  { keyword: '街口電支', category: '吃' },
-  { keyword: '必勝客', category: '吃' },
-  { keyword: '丰禾', category: '吃' },
-  { keyword: '春水堂', category: '吃' },
-  { keyword: '上島珈琲店', category: '吃' },
-  { keyword: '加油站', category: '家' },
-  { keyword: '全聯', category: '家' },
-  { keyword: '55688', category: '家' },
-  { keyword: 'IKEA', category: '家' },
-  { keyword: '優步', category: '家' },
-  { keyword: 'OP錢包', category: '家' },
-  { keyword: 'NET', category: '家' },
-  { keyword: '威秀影城', category: '家' },
-  { keyword: '中油', category: '家' },
-  { keyword: '高鐵智慧型手機', category: '家' },
-  { keyword: 'Ｍｉｓｔｅｒ　Ｄｏｎｕｔ', category: '家' },
-  { keyword: '墊腳石圖書', category: '家' },
-  { keyword: '燦坤３Ｃ', category: '家' },
-  { keyword: '屈臣氏', category: '家' },
-  { keyword: 'APPLE.COM/BILL', category: '家' },
-  { keyword: '一之軒', category: '家' },
-  { keyword: '城市車旅', category: '家' },
-  { keyword: '台灣小米', category: '家' },
-  { keyword: '麗冠有線電視', category: '固定' },
-  { keyword: '09202***01', category: '固定' },
-  { keyword: '國都汽車', category: '固定' },
-  { keyword: '台灣電力', category: '固定' },
-  { keyword: '台北市自來水費', category: '固定' },
-  { keyword: '汽車驗車', category: '固定' },
-  { keyword: '大台北瓦斯費', category: '固定' },
-  { keyword: '大安文山有線電視', category: '固定' },
-  { keyword: '橙印良品', category: '蘇' },
-  { keyword: 'PayEasy', category: '蘇' },
-  { keyword: '樂購蝦皮', category: '蘇' },
-  { keyword: '饗賓餐旅', category: '蘇' },
-  { keyword: 'TAOBAO.COM', category: '蘇' },
-  { keyword: '拓元票務', category: '蘇' },
-  { keyword: '三創數位', category: '蘇' },
-  { keyword: '金玉堂', category: '秀' },
-  { keyword: '寶雅', category: '秀' },
-  { keyword: '特力屋', category: '秀' },
-  { keyword: '悠遊付－臺北市立大學', category: '秀' },
-  { keyword: '嘟嘟房', category: '弟' },
-  { keyword: '台東桂田喜來登酒店', category: '玩' },
-  { keyword: '家樂福', category: '玩' },
-  { keyword: '台東原生應用植物園', category: '玩' },
-  { keyword: '格上租車', category: '玩' },
-  { keyword: '悠勢科技股份有限公司', category: '收入' },
-  { keyword: '行政院發', category: '收入' },
-  { keyword: 'linePay繳好市多', category: '家' },
-  { keyword: '國保保費', category: '固定' },
-  { keyword: '怡秀跆拳道', category: '華' },
-  { keyword: 'iPassMoney儲值', category: '方' },
-  { keyword: '逸安中醫', category: '蘇' },
-  { keyword: '連結帳戶交易', category: '家' },
-  { keyword: '花都管理費', category: '固定' },
+    { keyword: 'VULTR', category: '方' },
+    { keyword: '國外交易服務費', category: '方' },
+    { keyword: 'GOOGLE*CLOUD', category: '方' },
+    { keyword: '悠遊卡自動加值', category: '方' },
+    { keyword: 'REPLIT, INC.', category: '方' },
+    { keyword: '伯朗咖啡', category: '方' },
+    { keyword: '柒號洋樓', category: '方' },
+    { keyword: 'ＰＣＨＯＭＥ', category: '方' },
+    { keyword: 'OPENAI', category: '方' },
+    { keyword: '新東陽', category: '吃' },
+    { keyword: '全家', category: '吃' },
+    { keyword: '元心燃麻辣堂', category: '吃' },
+    { keyword: '統一超商', category: '吃' },
+    { keyword: '玉喜飯店', category: '吃' },
+    { keyword: '爭鮮', category: '吃' },
+    { keyword: '八方雲集', category: '吃' },
+    { keyword: '樂活養生健康鍋', category: '吃' },
+    { keyword: '順成西點麵包', category: '吃' },
+    { keyword: '誠品生活', category: '吃' },
+    { keyword: '星巴克－自動加值', category: '吃' },
+    { keyword: 'COMFORT BURGER', category: '吃' },
+    { keyword: '雙月食品社', category: '吃' },
+    { keyword: '秀泰全球影城', category: '吃' },
+    { keyword: '台灣麥當勞', category: '吃' },
+    { keyword: '筷子餐廳', category: '吃' },
+    { keyword: '怡客咖啡', category: '吃' },
+    { keyword: '起家雞', category: '吃' },
+    { keyword: '彼得好咖啡', category: '吃' },
+    { keyword: '御書園', category: '吃' },
+    { keyword: '五花馬水餃館', category: '吃' },
+    { keyword: '客美多咖啡', category: '吃' },
+    { keyword: '明曜百貨', category: '吃' },
+    { keyword: 'ＫＦＣ', category: '吃' },
+    { keyword: '鬥牛士經典牛排', category: '吃' },
+    { keyword: '街口電支', category: '吃' },
+    { keyword: '必勝客', category: '吃' },
+    { keyword: '丰禾', category: '吃' },
+    { keyword: '春水堂', category: '吃' },
+    { keyword: '上島珈琲店', category: '吃' },
+    { keyword: '加油站', category: '家' },
+    { keyword: '全聯', category: '家' },
+    { keyword: '55688', category: '家' },
+    { keyword: 'IKEA', category: '家' },
+    { keyword: '優步', category: '家' },
+    { keyword: 'OP錢包', category: '家' },
+    { keyword: 'NET', category: '家' },
+    { keyword: '威秀影城', category: '家' },
+    { keyword: '中油', category: '家' },
+    { keyword: '高鐵智慧型手機', category: '家' },
+    { keyword: 'Ｍｉｓｔｅｒ　Ｄｏｎｕｔ', category: '家' },
+    { keyword: '墊腳石圖書', category: '家' },
+    { keyword: '燦坤３Ｃ', category: '家' },
+    { keyword: '屈臣氏', category: '家' },
+    { keyword: 'APPLE.COM/BILL', category: '家' },
+    { keyword: '一之軒', category: '家' },
+    { keyword: '城市車旅', category: '家' },
+    { keyword: '台灣小米', category: '家' },
+    { keyword: '麗冠有線電視', category: '固定' },
+    { keyword: '09202***01', category: '固定' },
+    { keyword: '國都汽車', category: '固定' },
+    { keyword: '台灣電力', category: '固定' },
+    { keyword: '台北市自來水費', category: '固定' },
+    { keyword: '汽車驗車', category: '固定' },
+    { keyword: '大台北瓦斯費', category: '固定' },
+    { keyword: '大安文山有線電視', category: '固定' },
+    { keyword: '橙印良品', category: '蘇' },
+    { keyword: 'PayEasy', category: '蘇' },
+    { keyword: '樂購蝦皮', category: '蘇' },
+    { keyword: '饗賓餐旅', category: '蘇' },
+    { keyword: 'TAOBAO.COM', category: '蘇' },
+    { keyword: '拓元票務', category: '蘇' },
+    { keyword: '三創數位', category: '蘇' },
+    { keyword: '金玉堂', category: '秀' },
+    { keyword: '寶雅', category: '秀' },
+    { keyword: '特力屋', category: '秀' },
+    { keyword: '悠遊付－臺北市立大學', category: '秀' },
+    { keyword: '嘟嘟房', category: '弟' },
+    { keyword: '台東桂田喜來登酒店', category: '玩' },
+    { keyword: '家樂福', category: '玩' },
+    { keyword: '台東原生應用植物園', category: '玩' },
+    { keyword: '格上租車', category: '玩' },
+    { keyword: '悠勢科技股份有限公司', category: '收入' },
+    { keyword: '行政院發', category: '收入' },
+    { keyword: 'linePay繳好市多', category: '家' },
+    { keyword: '國保保費', category: '固定' },
+    { keyword: '怡秀跆拳道', category: '華' },
+    { keyword: 'iPassMoney儲值', category: '方' },
+    { keyword: '逸安中醫', category: '蘇' },
+    { keyword: '連結帳戶交易', category: '家' },
+    { keyword: '花都管理費', category: '固定' },
 ];
 
 export function FinanceFlowClient() {
@@ -216,35 +216,51 @@ export function FinanceFlowClient() {
     },
   });
 
-  const { fields: replacementFields, append: appendReplacement, remove: removeReplacement } = useFieldArray({
+  const { fields: replacementFields, append: appendReplacement, remove: removeReplacement, replace: replaceReplacementRules } = useFieldArray({
     control: settingsForm.control,
     name: 'replacementRules',
   });
   
-  const { fields: categoryFields, append: appendCategory, remove: removeCategory } = useFieldArray({
+  const { fields: categoryFields, append: appendCategory, remove: removeCategory, replace: replaceCategoryRules } = useFieldArray({
     control: settingsForm.control,
     name: 'categoryRules',
   });
 
   useEffect(() => {
-    if (isUserLoading) return; 
+    if (isUserLoading) return;
 
-    let mergedData = [...creditData];
+    setCreditData(prevData => {
+        if (!user || !savedTransactions) {
+            return prevData;
+        }
 
-    if (user && savedTransactions) {
-      const existingIds = new Set(mergedData.map(d => d.id));
-      const newSaved = savedTransactions.filter(t => !existingIds.has(t.id));
-      mergedData.push(...newSaved);
-    }
-    
-    const uniqueData = Array.from(new Map(mergedData.map(item => [item.id, item])).values());
-    
-    if (JSON.stringify(uniqueData) !== JSON.stringify(creditData)) {
-      setCreditData(uniqueData);
-    }
+        const existingIds = new Set(prevData.map(d => d.id));
+        const newSaved = savedTransactions.filter(t => !existingIds.has(t.id));
+        
+        if (newSaved.length === 0) {
+            return prevData;
+        }
 
-  }, [user, isUserLoading, savedTransactions, creditData]);
+        const mergedData = [...prevData, ...newSaved];
+        const uniqueData = Array.from(new Map(mergedData.map(item => [item.id, item])).values());
+        
+        return uniqueData;
+    });
 
+  }, [user, isUserLoading, savedTransactions]);
+
+
+  const resetReplacementRules = () => {
+    replaceReplacementRules(DEFAULT_REPLACEMENT_RULES);
+    localStorage.setItem('replacementRules', JSON.stringify(DEFAULT_REPLACEMENT_RULES));
+    toast({ title: '取代規則已重置', description: '已恢復為預設規則。' });
+  };
+
+  const resetCategoryRules = () => {
+    replaceCategoryRules(DEFAULT_CATEGORY_RULES);
+    localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
+    toast({ title: '分類規則已重置', description: '已恢復為預設規則。' });
+  };
 
   useEffect(() => {
     if (!isClient) return;
@@ -270,21 +286,20 @@ export function FinanceFlowClient() {
         settingsForm.setValue('replacementRules', DEFAULT_REPLACEMENT_RULES);
       }
 
-      // Category Rules - Smart Merging
+      // Category Rules - Smart Merging on load
       const savedCategoryRulesRaw = localStorage.getItem('categoryRules');
       let finalCategoryRules = [...DEFAULT_CATEGORY_RULES];
 
       if (savedCategoryRulesRaw) {
         const savedRules = JSON.parse(savedCategoryRulesRaw) as CategoryRule[];
-        const savedRulesMap = new Map(savedRules.map(r => [r.keyword, r]));
+        const finalRulesMap = new Map(savedRules.map(r => [r.keyword, r]));
         
-        // Add new default rules that are not in saved rules
         DEFAULT_CATEGORY_RULES.forEach(defaultRule => {
-            if (!savedRulesMap.has(defaultRule.keyword)) {
-                savedRulesMap.set(defaultRule.keyword, defaultRule);
+            if (!finalRulesMap.has(defaultRule.keyword)) {
+                finalRulesMap.set(defaultRule.keyword, defaultRule);
             }
         });
-        finalCategoryRules = Array.from(savedRulesMap.values());
+        finalCategoryRules = Array.from(finalRulesMap.values());
       }
       
       settingsForm.setValue('categoryRules', finalCategoryRules);
@@ -353,14 +368,12 @@ export function FinanceFlowClient() {
     const result = await processBankStatement(values.statement, replacementRules, categoryRules);
     
     if (result.success) {
-      // Append new data and remove duplicates
       setCreditData(prevData => {
         const combined = [...prevData, ...result.creditData];
         return Array.from(new Map(combined.map(item => [item.id, item])).values());
       });
       setDepositData(prevData => {
         const combined = [...prevData, ...result.depositData];
-        // Assuming deposit data also gets a unique ID in the parser
         return Array.from(new Map(combined.map(item => [item.id, item])).values());
       });
 
@@ -738,6 +751,26 @@ export function FinanceFlowClient() {
                               <CardDescription>
                                 設定自動取代或刪除規則。勾選「刪除整筆資料」後，符合條件的資料將被整筆移除。
                               </CardDescription>
+                               <AlertDialogTrigger asChild>
+                                <Button type="button" variant="outline" size="sm">
+                                  <RotateCcw className="mr-2 h-4 w-4" />
+                                  重置
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialog>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>確定要重置取代規則嗎？</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      此操作將會清除所有您自訂的取代規則，並恢復為系統預設值。此動作無法復原。
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>取消</AlertDialogCancel>
+                                    <AlertDialogAction onClick={resetReplacementRules}>確定重置</AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
                             </div>
                             <div className="rounded-md border">
                               <Table>
@@ -822,6 +855,26 @@ export function FinanceFlowClient() {
                               <CardDescription>
                                 設定交易項目關鍵字與對應的類型。處理報表時，將會自動帶入符合的第一個類型。
                               </CardDescription>
+                               <AlertDialogTrigger asChild>
+                                <Button type="button" variant="outline" size="sm">
+                                  <RotateCcw className="mr-2 h-4 w-4" />
+                                  重置
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialog>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>確定要重置分類規則嗎？</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      此操作將會清除所有您自訂的分類規則，並恢復為系統預設值。此動作無法復原。
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>取消</AlertDialogCancel>
+                                    <AlertDialogAction onClick={resetCategoryRules}>確定重置</AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
                             </div>
                             <div className="rounded-md border">
                               <Table>
@@ -1126,3 +1179,5 @@ export function FinanceFlowClient() {
     </div>
   );
 }
+
+    
