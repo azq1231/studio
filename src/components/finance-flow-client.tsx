@@ -40,7 +40,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
-import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2, FileText, RotateCcw } from 'lucide-react';
+import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2, FileText, RotateCcw, Combine } from 'lucide-react';
 import { processBankStatement, type ReplacementRule, type CategoryRule } from '@/app/actions';
 import type { CreditData, DepositData } from '@/lib/parser';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
@@ -690,6 +690,58 @@ export function FinanceFlowClient() {
     
     return { headers, rows };
   }, [creditData]);
+  
+  type CombinedData = {
+    id: string;
+    date: string;
+    dateObj: Date;
+    category: string;
+    description: string;
+    amount: number;
+    source: '信用卡' | '活存帳戶';
+  };
+
+  const combinedData = useMemo<CombinedData[]>(() => {
+    const combined: CombinedData[] = [];
+
+    creditData.forEach(d => {
+      let dateObj;
+      try {
+        dateObj = parse(d.transactionDate, 'MM/dd', new Date());
+      } catch {
+        dateObj = new Date(0); // Invalid date
+      }
+      combined.push({
+        id: d.id,
+        date: d.transactionDate,
+        dateObj: dateObj,
+        category: d.category,
+        description: d.description,
+        amount: d.amount,
+        source: '信用卡',
+      });
+    });
+
+    depositData.forEach(d => {
+       let dateObj;
+       try {
+         dateObj = parse(d.date, 'yyyy/MM/dd', new Date());
+       } catch {
+         dateObj = new Date(0); // Invalid date
+       }
+      combined.push({
+        id: d.id,
+        date: d.date,
+        dateObj: dateObj,
+        category: d.category,
+        description: d.description,
+        amount: d.amount,
+        source: '活存帳戶',
+      });
+    });
+
+    return combined.sort((a, b) => b.dateObj.getTime() - a.dateObj.getTime());
+  }, [creditData, depositData]);
 
 
   const noDataFound = hasProcessed && !isLoading && creditData.length === 0 && depositData.length === 0;
@@ -1077,11 +1129,38 @@ export function FinanceFlowClient() {
                     </div>
                     <Tabs defaultValue={defaultTab} className="w-full">
                       <TabsList>
+                        {combinedData.length > 0 && <TabsTrigger value="combined"><Combine className="w-4 h-4 mr-2"/>合併報表</TabsTrigger>}
                         {creditData.length > 0 && <TabsTrigger value="credit">信用卡 ({creditData.length})</TabsTrigger>}
                         {depositData.length > 0 && <TabsTrigger value="deposit">活存帳戶 ({depositData.length})</TabsTrigger>}
                         {creditData.length > 0 && <TabsTrigger value="summary"><FileText className="w-4 h-4 mr-2"/>彙總報表</TabsTrigger>}
                         {creditData.length > 0 && <TabsTrigger value="chart"><BarChart2 className="w-4 h-4 mr-2"/>統計圖表</TabsTrigger>}
                       </TabsList>
+                      {combinedData.length > 0 && (
+                        <TabsContent value="combined">
+                           <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>日期</TableHead>
+                                <TableHead className="w-[120px]">類型</TableHead>
+                                <TableHead>交易項目</TableHead>
+                                <TableHead className="w-[100px]">來源</TableHead>
+                                <TableHead className="text-right">金額</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {combinedData.map((row) => (
+                                <TableRow key={row.id}>
+                                  <TableCell className="font-mono">{row.date}</TableCell>
+                                  <TableCell>{row.category}</TableCell>
+                                  <TableCell>{row.description}</TableCell>
+                                  <TableCell>{row.source}</TableCell>
+                                  <TableCell className={`text-right font-mono ${row.amount < 0 ? 'text-green-600' : ''}`}>{row.amount.toLocaleString()}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </TabsContent>
+                      )}
                       {creditData.length > 0 && (
                         <TabsContent value="credit">
                           <Table>
