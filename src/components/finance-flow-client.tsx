@@ -15,7 +15,7 @@ import {
   CartesianGrid,
   Legend,
 } from 'recharts';
-import { format, parse } from 'date-fns';
+import { format, parse, getYear, getMonth } from 'date-fns';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -703,17 +703,31 @@ export function FinanceFlowClient() {
 
   const combinedData = useMemo<CombinedData[]>(() => {
     const combined: CombinedData[] = [];
+    const now = new Date();
+    const currentYear = getYear(now);
+    const currentMonth = getMonth(now);
 
     creditData.forEach(d => {
       let dateObj;
       try {
-        dateObj = parse(d.transactionDate, 'MM/dd', new Date());
+        // Handle MM/dd format by intelligently guessing the year.
+        const parsedDate = parse(d.transactionDate, 'MM/dd', new Date());
+        const transactionMonth = getMonth(parsedDate);
+
+        // If transaction month is in the future relative to current month, assume it's from last year.
+        // e.g., current date is Jan 2024, transaction is Dec 20, assume it's Dec 20, 2023.
+        if (transactionMonth > currentMonth) {
+            dateObj = new Date(parsedDate.setFullYear(currentYear - 1));
+        } else {
+            dateObj = parsedDate;
+        }
+        
       } catch {
         dateObj = new Date(0); // Invalid date
       }
       combined.push({
         id: d.id,
-        date: d.transactionDate,
+        date: format(dateObj, 'yyyy/MM/dd'),
         dateObj: dateObj,
         category: d.category,
         description: d.description,
