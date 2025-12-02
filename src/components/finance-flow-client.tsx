@@ -29,6 +29,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -37,7 +44,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2, FileText, RotateCcw, Combine } from 'lucide-react';
@@ -194,6 +200,10 @@ export function FinanceFlowClient() {
 
   const [creditSortKey, setCreditSortKey] = useState<CreditSortKey | null>('transactionDate');
   const [creditSortDirection, setCreditSortDirection] = useState<SortDirection>('desc');
+
+  const [detailViewData, setDetailViewData] = useState<CreditData[]>([]);
+  const [isDetailViewOpen, setIsDetailViewOpen] = useState(false);
+  const [detailViewTitle, setDetailViewTitle] = useState('');
 
   const creditTransactionsQuery = useMemoFirebase(
     () => (user && firestore ? collection(firestore, 'users', user.uid, 'creditCardTransactions') : null),
@@ -740,6 +750,53 @@ export function FinanceFlowClient() {
     return { headers, rows };
   }, [creditData]);
   
+  const handleSummaryCellClick = (monthKey: string, category: string) => {
+    const [year, month] = monthKey.replace('年', '-').replace('月', '').split('-').map(Number);
+    
+    const filteredData = creditData.filter(transaction => {
+      if (transaction.amount <= 0 || transaction.category !== category) {
+        return false;
+      }
+      try {
+        const date = parse(transaction.transactionDate, 'MM/dd', new Date());
+        let transactionYear = getYear(date);
+        const transactionMonth = getMonth(date) + 1; // getMonth is 0-indexed
+
+        // If the transaction month is "in the future" compared to today, it's likely from last year
+        const now = new Date();
+        if (transactionYear === getYear(now) && getMonth(date) > getMonth(now)) {
+            transactionYear -= 1;
+        }
+
+        // Adjust year for display, assuming transactionDate has no year.
+        // This is a heuristic and might need to be smarter.
+        if (transactionYear !== year) {
+             if (year === getYear(now) && getMonth(date) > getMonth(now)) {
+                 transactionYear = year -1;
+             } else if (Math.abs(getYear(now) - year) <= 1) {
+                // It's tricky to guess the year for MM/dd format.
+                // A simple approach: assume current year, unless it creates a future date
+                let d = new Date();
+                d.setFullYear(year);
+                const a = new Date(new Date(d).setMonth(transactionMonth - 1));
+                transactionYear = getYear(a);
+             } else {
+                 transactionYear = year;
+             }
+        }
+        
+        return transactionYear === year && transactionMonth === month;
+      } catch {
+        return false;
+      }
+    });
+
+    setDetailViewData(filteredData);
+    setDetailViewTitle(`${monthKey} - ${category}`);
+    setIsDetailViewOpen(true);
+  };
+
+
   type CombinedData = {
     id: string;
     date: string;
@@ -1352,11 +1409,20 @@ export function FinanceFlowClient() {
                               <TableBody>
                                 {summaryReportData.rows.map((row, i) => (
                                   <TableRow key={i}>
-                                    {summaryReportData.headers.map(header => (
-                                      <TableCell key={header} className={`font-mono ${header !== '日期（年月）' ? 'text-right' : ''}`}>
-                                        {typeof row[header] === 'number' ? (row[header] as number).toLocaleString() : row[header]}
-                                      </TableCell>
-                                    ))}
+                                    {summaryReportData.headers.map(header => {
+                                      const isClickable = header !== '日期（年月）' && header !== '總計' && typeof row[header] === 'number' && (row[header] as number) > 0;
+                                      return (
+                                        <TableCell key={header} className={`font-mono ${header !== '日期（年月）' ? 'text-right' : ''}`}>
+                                          {isClickable ? (
+                                             <Button variant="link" className="p-0 h-auto font-mono text-base" onClick={() => handleSummaryCellClick(row['日期（年月）'] as string, header)}>
+                                                {(row[header] as number).toLocaleString()}
+                                              </Button>
+                                          ) : (
+                                            typeof row[header] === 'number' ? (row[header] as number).toLocaleString() : row[header]
+                                          )}
+                                        </TableCell>
+                                      );
+                                    })}
                                   </TableRow>
                                 ))}
                               </TableBody>
@@ -1407,6 +1473,42 @@ export function FinanceFlowClient() {
           )}
         </>
       )}
+
+      <Dialog open={isDetailViewOpen} onOpenChange={setIsDetailViewOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{detailViewTitle}</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-y-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>交易日期</TableHead>
+                  <TableHead>交易項目</TableHead>
+                  <TableHead className="text-right">金額</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {detailViewData.length > 0 ? (
+                  detailViewData.map(item => (
+                    <TableRow key={item.id}>
+                      <TableCell className="font-mono">{item.transactionDate}</TableCell>
+                      <TableCell>{item.description}</TableCell>
+                      <TableCell className="text-right font-mono">{item.amount.toLocaleString()}</TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={3} className="text-center">
+                      沒有找到相關交易紀錄。
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
