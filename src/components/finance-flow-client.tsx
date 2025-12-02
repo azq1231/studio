@@ -526,23 +526,23 @@ export function FinanceFlowClient() {
     }
   };
 
-    const handleUpdateCategory = async (transactionId: string, newCategory: string) => {
+  const handleUpdateCreditData = async (transactionId: string, field: keyof CreditData, value: string | number) => {
         setCreditData(prevData =>
             prevData.map(item =>
-                item.id === transactionId ? { ...item, category: newCategory } : item
+                item.id === transactionId ? { ...item, [field]: value } : item
             )
         );
 
         if (user && firestore) {
             try {
                 const docRef = doc(firestore, 'users', user.uid, 'creditCardTransactions', transactionId);
-                await updateDoc(docRef, { category: newCategory });
+                await updateDoc(docRef, { [field]: value });
             } catch (error) {
-                console.error("Error updating category in Firestore:", error);
+                console.error(`Error updating ${field} in Firestore:`, error);
                 toast({
                     variant: "destructive",
                     title: "更新失敗",
-                    description: "無法將類型變更儲存到資料庫。",
+                    description: `無法將變更儲存到資料庫。`,
                 });
                 if (savedCreditTransactions) {
                    const originalItem = savedCreditTransactions.find(t => t.id === transactionId);
@@ -554,7 +554,7 @@ export function FinanceFlowClient() {
         }
     };
 
-    const handleDeleteTransaction = async (transactionId: string) => {
+    const handleDeleteCreditTransaction = async (transactionId: string) => {
         const originalData = [...creditData];
         setCreditData(prevData => prevData.filter(item => item.id !== transactionId));
 
@@ -563,7 +563,7 @@ export function FinanceFlowClient() {
                 const docRef = doc(firestore, 'users', user.uid, 'creditCardTransactions', transactionId);
                 await deleteDoc(docRef);
             } catch (error) {
-                console.error("Error deleting transaction from Firestore:", error);
+                console.error("Error deleting credit transaction from Firestore:", error);
                 toast({
                     variant: "destructive",
                     title: "刪除失敗",
@@ -573,6 +573,55 @@ export function FinanceFlowClient() {
             }
         }
     };
+
+    const handleUpdateDepositData = async (transactionId: string, field: keyof DepositData, value: string | number) => {
+        setDepositData(prevData =>
+            prevData.map(item =>
+                item.id === transactionId ? { ...item, [field]: value } : item
+            )
+        );
+
+        if (user && firestore) {
+            try {
+                const docRef = doc(firestore, 'users', user.uid, 'depositAccountTransactions', transactionId);
+                await updateDoc(docRef, { [field]: value });
+            } catch (error) {
+                console.error(`Error updating ${field} in Firestore:`, error);
+                toast({
+                    variant: "destructive",
+                    title: "更新失敗",
+                    description: "無法將變更儲存到資料庫。",
+                });
+                if (savedDepositTransactions) {
+                    const originalItem = savedDepositTransactions.find(t => t.id === transactionId);
+                    if (originalItem) {
+                        setDepositData(prevData => prevData.map(item => item.id === transactionId ? originalItem : item));
+                    }
+                }
+            }
+        }
+    };
+
+    const handleDeleteDepositTransaction = async (transactionId: string) => {
+        const originalData = [...depositData];
+        setDepositData(prevData => prevData.filter(item => item.id !== transactionId));
+
+        if (user && firestore) {
+            try {
+                const docRef = doc(firestore, 'users', user.uid, 'depositAccountTransactions', transactionId);
+                await deleteDoc(docRef);
+            } catch (error) {
+                console.error("Error deleting deposit transaction from Firestore:", error);
+                toast({
+                    variant: "destructive",
+                    title: "刪除失敗",
+                    description: "無法從資料庫中刪除此筆交易。",
+                });
+                setDepositData(originalData);
+            }
+        }
+    };
+
 
   const renderSortedCategoryFields = useMemo(() => {
      if (!sortKey) {
@@ -717,9 +766,9 @@ export function FinanceFlowClient() {
         // If transaction month is in the future relative to current month, assume it's from last year.
         // e.g., current date is Jan 2024, transaction is Dec 20, assume it's Dec 20, 2023.
         if (transactionMonth > currentMonth) {
-            dateObj = new Date(parsedDate.setFullYear(currentYear - 1));
+            dateObj = new Date(new Date(parsedDate).setFullYear(currentYear - 1));
         } else {
-            dateObj = parsedDate;
+            dateObj = new Date(new Date(parsedDate).setFullYear(currentYear));
         }
         
       } catch {
@@ -1194,7 +1243,7 @@ export function FinanceFlowClient() {
                                   <TableCell>
                                     <Select
                                         value={row.category}
-                                        onValueChange={(newCategory) => handleUpdateCategory(row.id, newCategory)}
+                                        onValueChange={(newCategory) => handleUpdateCreditData(row.id, 'category', newCategory)}
                                         disabled={!user}
                                     >
                                         <SelectTrigger className="h-8 w-full">
@@ -1214,7 +1263,7 @@ export function FinanceFlowClient() {
                                      <Button
                                         variant="ghost"
                                         size="icon"
-                                        onClick={() => handleDeleteTransaction(row.id)}
+                                        onClick={() => handleDeleteCreditTransaction(row.id)}
                                         disabled={!user}
                                         className="h-8 w-8"
                                     >
@@ -1234,20 +1283,55 @@ export function FinanceFlowClient() {
                             <TableHeader>
                               <TableRow>
                                 <TableHead>交易日期</TableHead>
-                                <TableHead>類型</TableHead>
+                                <TableHead className="w-[120px]">類型</TableHead>
                                 <TableHead>摘要</TableHead>
                                 <TableHead>銀行代碼</TableHead>
                                 <TableHead className="text-right">金額</TableHead>
+                                <TableHead className="w-[80px] text-center">操作</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
                               {depositData.map((row) => (
                                 <TableRow key={row.id}>
                                   <TableCell className="font-mono">{row.date}</TableCell>
-                                  <TableCell>{row.category}</TableCell>
-                                  <TableCell>{row.description}</TableCell>
+                                  <TableCell>
+                                     <Select
+                                        value={row.category}
+                                        onValueChange={(newCategory) => handleUpdateDepositData(row.id, 'category', newCategory)}
+                                        disabled={!user}
+                                    >
+                                        <SelectTrigger className="h-8 w-full">
+                                            <SelectValue placeholder="選擇類型" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {availableCategories.map(cat => (
+                                                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Input
+                                        type="text"
+                                        defaultValue={row.description}
+                                        onBlur={(e) => handleUpdateDepositData(row.id, 'description', e.target.value)}
+                                        disabled={!user}
+                                        className="h-8"
+                                    />
+                                  </TableCell>
                                   <TableCell className="font-mono">{row.bankCode}</TableCell>
                                   <TableCell className={`text-right font-mono ${row.amount < 0 ? 'text-green-600' : 'text-destructive'}`}>{row.amount.toLocaleString()}</TableCell>
+                                   <TableCell className="text-center">
+                                     <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => handleDeleteDepositTransaction(row.id)}
+                                        disabled={!user}
+                                        className="h-8 w-8"
+                                    >
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                     </Button>
+                                  </TableCell>
                                 </TableRow>
                               ))}
                             </TableBody>
