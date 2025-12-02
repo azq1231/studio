@@ -657,11 +657,11 @@ export function FinanceFlowClient() {
         if (creditSortKey === 'transactionDate') {
             try {
                 // Assuming MM/DD format, might need adjustment for YYYY/MM/DD
-                const dateA = parse(aValue, 'MM/dd', new Date());
-                const dateB = parse(bValue, 'MM/dd', new Date());
+                const dateA = parse(aValue as string, 'MM/dd', new Date());
+                const dateB = parse(bValue as string, 'MM/dd', new Date());
                 comparison = dateA.getTime() - dateB.getTime();
             } catch {
-                comparison = (aValue || '').localeCompare(bValue || '');
+                comparison = (aValue as string || '').localeCompare(bValue as string || '');
             }
         } else if (typeof aValue === 'string' && typeof bValue === 'string') {
             comparison = aValue.localeCompare(bValue, 'zh-Hant');
@@ -763,20 +763,15 @@ export function FinanceFlowClient() {
         let transactionYear = getYear(date);
         const transactionMonth = getMonth(date) + 1; // getMonth is 0-indexed
 
-        // If the transaction month is "in the future" compared to today, it's likely from last year
         const now = new Date();
         if (transactionYear === getYear(now) && getMonth(date) > getMonth(now)) {
             transactionYear -= 1;
         }
-
-        // Adjust year for display, assuming transactionDate has no year.
-        // This is a heuristic and might need to be smarter.
+        
         if (transactionYear !== year) {
              if (year === getYear(now) && getMonth(date) > getMonth(now)) {
                  transactionYear = year -1;
              } else if (Math.abs(getYear(now) - year) <= 1) {
-                // It's tricky to guess the year for MM/dd format.
-                // A simple approach: assume current year, unless it creates a future date
                 let d = new Date();
                 d.setFullYear(year);
                 const a = new Date(new Date(d).setMonth(transactionMonth - 1));
@@ -792,7 +787,17 @@ export function FinanceFlowClient() {
       }
     });
 
-    setDetailViewData(filteredData);
+    const sortedFilteredData = filteredData.sort((a, b) => {
+        try {
+            const dateA = parse(a.transactionDate, 'MM/dd', new Date());
+            const dateB = parse(b.transactionDate, 'MM/dd', new Date());
+            return dateA.getTime() - dateB.getTime();
+        } catch {
+            return a.transactionDate.localeCompare(b.transactionDate);
+        }
+    });
+
+    setDetailViewData(sortedFilteredData);
     setDetailViewTitle(`${monthKey} - ${category}`);
     setIsDetailViewOpen(true);
   };
@@ -817,12 +822,9 @@ export function FinanceFlowClient() {
     creditData.forEach(d => {
       let dateObj;
       try {
-        // Handle MM/dd format by intelligently guessing the year.
         const parsedDate = parse(d.transactionDate, 'MM/dd', new Date());
         const transactionMonth = getMonth(parsedDate);
-
-        // If transaction month is in the future relative to current month, assume it's from last year.
-        // e.g., current date is Jan 2024, transaction is Dec 20, assume it's Dec 20, 2023.
+        
         if (transactionMonth > currentMonth) {
             dateObj = new Date(new Date(parsedDate).setFullYear(currentYear - 1));
         } else {
@@ -830,7 +832,7 @@ export function FinanceFlowClient() {
         }
         
       } catch {
-        dateObj = new Date(0); // Invalid date
+        dateObj = new Date(0);
       }
       combined.push({
         id: d.id,
@@ -848,7 +850,7 @@ export function FinanceFlowClient() {
        try {
          dateObj = parse(d.date, 'yyyy/MM/dd', new Date());
        } catch {
-         dateObj = new Date(0); // Invalid date
+         dateObj = new Date(0);
        }
       combined.push({
         id: d.id,
