@@ -78,6 +78,7 @@ type SettingsFormData = z.infer<typeof settingsFormSchema>;
 type SortKey = 'keyword' | 'category';
 type SortDirection = 'asc' | 'desc';
 type CreditSortKey = 'transactionDate' | 'category' | 'description' | 'amount';
+type DepositSortKey = 'date' | 'category' | 'description' | 'amount' | 'bankCode';
 
 
 const DEFAULT_REPLACEMENT_RULES: ReplacementRule[] = [
@@ -201,6 +202,9 @@ export function FinanceFlowClient() {
 
   const [creditSortKey, setCreditSortKey] = useState<CreditSortKey | null>('transactionDate');
   const [creditSortDirection, setCreditSortDirection] = useState<SortDirection>('desc');
+
+  const [depositSortKey, setDepositSortKey] = useState<DepositSortKey | null>('date');
+  const [depositSortDirection, setDepositSortDirection] = useState<SortDirection>('desc');
 
   const [detailViewData, setDetailViewData] = useState<CreditData[]>([]);
   const [isDetailViewOpen, setIsDetailViewOpen] = useState(false);
@@ -551,6 +555,15 @@ export function FinanceFlowClient() {
     }
   };
 
+  const handleDepositSort = (key: DepositSortKey) => {
+    if (depositSortKey === key) {
+        setDepositSortDirection(depositSortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+        setDepositSortKey(key);
+        setDepositSortDirection('asc');
+    }
+  };
+
   const handleUpdateCreditData = async (transactionId: string, field: keyof CreditData, value: string | number) => {
         setCreditData(prevData =>
             prevData.map(item =>
@@ -688,6 +701,34 @@ export function FinanceFlowClient() {
         return creditSortDirection === 'asc' ? comparison : -comparison;
     });
 }, [creditData, creditSortKey, creditSortDirection]);
+
+  const sortedDepositData = useMemo(() => {
+    if (!depositSortKey) return depositData;
+
+    return [...depositData].sort((a, b) => {
+        const aValue = a[depositSortKey];
+        const bValue = b[depositSortKey];
+
+        let comparison = 0;
+        if (depositSortKey === 'date') {
+            try {
+                const dateA = parse(aValue as string, 'yyyy/MM/dd', new Date());
+                const dateB = parse(bValue as string, 'yyyy/MM/dd', new Date());
+                comparison = dateA.getTime() - dateB.getTime();
+            } catch {
+                comparison = (aValue as string || '').localeCompare(bValue as string || '');
+            }
+        } else if (typeof aValue === 'string' && typeof bValue === 'string') {
+            comparison = aValue.localeCompare(bValue, 'zh-Hant');
+        } else if (typeof aValue === 'number' && typeof bValue === 'number') {
+            comparison = aValue - bValue;
+        } else {
+            comparison = String(aValue).localeCompare(String(bValue), 'zh-Hant');
+        }
+
+        return depositSortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [depositData, depositSortKey, depositSortDirection]);
 
 
   const categoryChartData = useMemo(() => {
@@ -923,6 +964,22 @@ export function FinanceFlowClient() {
       </TableHead>
     );
 };
+
+  const SortableDepositHeader = ({ sortKey: key, children, className }: { sortKey: DepositSortKey, children: React.ReactNode, className?: string }) => {
+    const isSorted = depositSortKey === key;
+    return (
+      <TableHead className={className}>
+        <Button variant="ghost" onClick={() => handleDepositSort(key)} className="px-2 py-1 h-auto -ml-2">
+          {children}
+          {isSorted ? (
+            depositSortDirection === 'asc' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />
+          ) : (
+            <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
+          )}
+        </Button>
+      </TableHead>
+    );
+  };
 
 
   return (
@@ -1356,16 +1413,16 @@ export function FinanceFlowClient() {
                             <TableCaption>金額：支出為正，存入為負</TableCaption>
                             <TableHeader>
                               <TableRow>
-                                <TableHead>交易日期</TableHead>
-                                <TableHead className="w-[120px]">類型</TableHead>
-                                <TableHead>摘要</TableHead>
-                                <TableHead>銀行代碼</TableHead>
-                                <TableHead className="text-right">金額</TableHead>
+                                <SortableDepositHeader sortKey="date">交易日期</SortableDepositHeader>
+                                <SortableDepositHeader sortKey="category" className="w-[120px]">類型</SortableDepositHeader>
+                                <SortableDepositHeader sortKey="description">摘要</SortableDepositHeader>
+                                <SortableDepositHeader sortKey="bankCode">銀行代碼</SortableDepositHeader>
+                                <SortableDepositHeader sortKey="amount" className="text-right">金額</SortableDepositHeader>
                                 <TableHead className="w-[80px] text-center">操作</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {depositData.map((row) => (
+                              {sortedDepositData.map((row) => (
                                 <TableRow key={row.id}>
                                   <TableCell className="font-mono">{row.date}</TableCell>
                                   <TableCell>
