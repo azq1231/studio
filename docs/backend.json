@@ -25,6 +25,10 @@
         "amount": {
           "type": "number",
           "description": "The amount of the transaction. Positive values are charges, negative values are credits."
+        },
+        "bankCode": {
+          "type": "string",
+          "description": "The bank code or any other remark for the transaction."
         }
       },
       "required": [

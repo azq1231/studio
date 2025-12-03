@@ -8,6 +8,7 @@ export type CreditData = {
   category: string; // This will hold either the rule-based category or the original posting date
   description: string;
   amount: number;
+  bankCode?: string;
 };
 
 // This is the initial raw parsed data before categorization

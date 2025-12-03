@@ -77,7 +77,7 @@ type StatementFormData = z.infer<typeof statementFormSchema>;
 type SettingsFormData = z.infer<typeof settingsFormSchema>;
 type SortKey = 'keyword' | 'category';
 type SortDirection = 'asc' | 'desc';
-type CreditSortKey = 'transactionDate' | 'category' | 'description' | 'amount';
+type CreditSortKey = 'transactionDate' | 'category' | 'description' | 'amount' | 'bankCode';
 type DepositSortKey = 'date' | 'category' | 'description' | 'amount' | 'bankCode';
 
 
@@ -506,6 +506,7 @@ export function FinanceFlowClient() {
           '類型': d.category,
           '交易項目': d.description,
           '金額': d.amount,
+          '銀行代碼/備註': d.bankCode || '',
         }));
         const ws = XLSX.utils.json_to_sheet(creditSheetData);
         XLSX.utils.book_append_sheet(wb, ws, '信用卡報表');
@@ -1364,6 +1365,7 @@ export function FinanceFlowClient() {
                                 <SortableCreditHeader sortKey="category" className="w-[120px]">類型</SortableCreditHeader>
                                 <TableHead>交易項目</TableHead>
                                 <SortableCreditHeader sortKey="amount" className="text-right">金額</SortableCreditHeader>
+                                <SortableCreditHeader sortKey="bankCode">銀行代碼/備註</SortableCreditHeader>
                                 <TableHead className="w-[80px] text-center">操作</TableHead>
                               </TableRow>
                             </TableHeader>
@@ -1387,9 +1389,25 @@ export function FinanceFlowClient() {
                                         </SelectContent>
                                     </Select>
                                   </TableCell>
-                                  <TableCell>{row.description}</TableCell>
+                                  <TableCell>
+                                    <Input
+                                        type="text"
+                                        defaultValue={row.description}
+                                        onBlur={(e) => handleUpdateCreditData(row.id, 'description', e.target.value)}
+                                        disabled={!user}
+                                        className="h-8"
+                                    />
+                                  </TableCell>
                                   <TableCell className={`text-right font-mono ${row.amount < 0 ? 'text-green-600' : ''}`}>{row.amount.toLocaleString()}</TableCell>
-
+                                  <TableCell>
+                                    <Input
+                                        type="text"
+                                        defaultValue={row.bankCode || ''}
+                                        onBlur={(e) => handleUpdateCreditData(row.id, 'bankCode', e.target.value)}
+                                        disabled={!user}
+                                        className="h-8"
+                                    />
+                                  </TableCell>
                                   <TableCell className="text-center">
                                      <Button
                                         variant="ghost"
@@ -1416,8 +1434,8 @@ export function FinanceFlowClient() {
                                 <SortableDepositHeader sortKey="date">交易日期</SortableDepositHeader>
                                 <SortableDepositHeader sortKey="category" className="w-[120px]">類型</SortableDepositHeader>
                                 <SortableDepositHeader sortKey="description">交易項目</SortableDepositHeader>
-                                <SortableDepositHeader sortKey="bankCode">銀行代碼/備註</SortableDepositHeader>
                                 <SortableDepositHeader sortKey="amount" className="text-right">金額</SortableDepositHeader>
+                                <SortableDepositHeader sortKey="bankCode">銀行代碼/備註</SortableDepositHeader>
                                 <TableHead className="w-[80px] text-center">操作</TableHead>
                               </TableRow>
                             </TableHeader>
@@ -1450,8 +1468,16 @@ export function FinanceFlowClient() {
                                         className="h-8"
                                     />
                                   </TableCell>
-                                  <TableCell className="font-mono">{row.bankCode}</TableCell>
                                   <TableCell className={`text-right font-mono ${row.amount < 0 ? 'text-green-600' : 'text-destructive'}`}>{row.amount.toLocaleString()}</TableCell>
+                                  <TableCell>
+                                      <Input
+                                        type="text"
+                                        defaultValue={row.bankCode || ''}
+                                        onBlur={(e) => handleUpdateDepositData(row.id, 'bankCode', e.target.value)}
+                                        disabled={!user}
+                                        className="h-8"
+                                    />
+                                  </TableCell>
                                    <TableCell className="text-center">
                                      <Button
                                         variant="ghost"
