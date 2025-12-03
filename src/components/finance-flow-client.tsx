@@ -1361,8 +1361,8 @@ export function FinanceFlowClient() {
                           <Table>
                             <TableHeader>
                               <TableRow>
-                                <SortableCreditHeader sortKey="transactionDate">交易日期</SortableCreditHeader>
-                                <SortableCreditHeader sortKey="category" className="w-[120px]">類型</SortableCreditHeader>
+                                <SortableCreditHeader sortKey="transactionDate" className="w-[140px]">交易日期</SortableCreditHeader>
+                                <SortableCreditHeader sortKey="category" className="w-[110px]">類型</SortableCreditHeader>
                                 <TableHead>交易項目</TableHead>
                                 <SortableCreditHeader sortKey="amount" className="text-right">金額</SortableCreditHeader>
                                 <SortableCreditHeader sortKey="bankCode">銀行代碼/備註</SortableCreditHeader>
@@ -1431,8 +1431,8 @@ export function FinanceFlowClient() {
                             <TableCaption>金額：支出為正，存入為負</TableCaption>
                             <TableHeader>
                               <TableRow>
-                                <SortableDepositHeader sortKey="date">交易日期</SortableDepositHeader>
-                                <SortableDepositHeader sortKey="category" className="w-[120px]">類型</SortableDepositHeader>
+                                <SortableDepositHeader sortKey="date" className="w-[140px]">交易日期</SortableDepositHeader>
+                                <SortableDepositHeader sortKey="category" className="w-[110px]">類型</SortableDepositHeader>
                                 <SortableDepositHeader sortKey="description">交易項目</SortableDepositHeader>
                                 <SortableDepositHeader sortKey="amount" className="text-right">金額</SortableDepositHeader>
                                 <SortableDepositHeader sortKey="bankCode">銀行代碼/備註</SortableDepositHeader>
