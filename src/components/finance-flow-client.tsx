@@ -29,6 +29,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -209,6 +214,10 @@ export function FinanceFlowClient() {
   const [detailViewData, setDetailViewData] = useState<CreditData[]>([]);
   const [isDetailViewOpen, setIsDetailViewOpen] = useState(false);
   const [detailViewTitle, setDetailViewTitle] = useState('');
+  
+  const [summarySelectedCategories, setSummarySelectedCategories] = useState<string[]>([]);
+  const [isSummaryFilterOpen, setIsSummaryFilterOpen] = useState(false);
+
 
   const creditTransactionsQuery = useMemoFirebase(
     () => (user && firestore ? collection(firestore, 'users', user.uid, 'creditCardTransactions') : null),
@@ -771,111 +780,6 @@ export function FinanceFlowClient() {
 
   }, [creditData]);
 
-  const summaryReportData = useMemo(() => {
-    if (!creditData || creditData.length === 0) return { headers: [], rows: [] };
-
-    const monthlyData: Record<string, Record<string, number>> = {};
-    const categories = new Set<string>();
-
-    creditData.forEach(transaction => {
-      try {
-        const { transactionDate, category, amount } = transaction;
-        if (amount <= 0) return; 
-
-        // Attempt to parse MM/DD format, but handle other formats gracefully.
-        const date = parse(transactionDate, 'MM/dd', new Date());
-        // Basic validation: if the year is in the past, it's likely a valid parse.
-        // This is a simple heuristic and might need refinement.
-        if (date.getFullYear() < 1970) return;
-
-        const monthKey = format(date, 'yyyy年M月');
-        
-        categories.add(category);
-
-        if (!monthlyData[monthKey]) {
-          monthlyData[monthKey] = {};
-        }
-        if (!monthlyData[monthKey][category]) {
-          monthlyData[monthKey][category] = 0;
-        }
-        monthlyData[monthKey][category] += amount;
-      } catch(e) {
-        // Ignore parsing errors for dates that are not in MM/dd format
-      }
-    });
-
-    const sortedCategories = Array.from(categories).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
-    const headers = ['日期（年月）', ...sortedCategories, '總計'];
-
-    const rows = Object.entries(monthlyData).map(([month, categoryData]) => {
-      let total = 0;
-      const row: Record<string, string | number> = { '日期（年月）': month };
-
-      sortedCategories.forEach(cat => {
-        const value = categoryData[cat] || 0;
-        row[cat] = value;
-        total += value;
-      });
-      row['總計'] = total;
-      
-      return row;
-    }).sort((a, b) => (a['日期（年月）'] as string).localeCompare(b['日期（年月）'] as string));
-    
-    return { headers, rows };
-  }, [creditData]);
-  
-  const handleSummaryCellClick = (monthKey: string, category: string) => {
-    const [year, month] = monthKey.replace('年', '-').replace('月', '').split('-').map(Number);
-    
-    const filteredData = creditData.filter(transaction => {
-      if (transaction.amount <= 0 || transaction.category !== category) {
-        return false;
-      }
-      try {
-        const date = parse(transaction.transactionDate, 'MM/dd', new Date());
-        let transactionYear = getYear(date);
-        const transactionMonth = getMonth(date) + 1; // getMonth is 0-indexed
-
-        const now = new Date();
-        if (transactionYear === getYear(now) && getMonth(date) > getMonth(now)) {
-            transactionYear -= 1;
-        }
-        
-        if (transactionYear !== year) {
-             if (year === getYear(now) && getMonth(date) > getMonth(now)) {
-                 transactionYear = year -1;
-             } else if (Math.abs(getYear(now) - year) <= 1) {
-                let d = new Date();
-                d.setFullYear(year);
-                const a = new Date(new Date(d).setMonth(transactionMonth - 1));
-                transactionYear = getYear(a);
-             } else {
-                 transactionYear = year;
-             }
-        }
-        
-        return transactionYear === year && transactionMonth === month;
-      } catch {
-        return false;
-      }
-    });
-
-    const sortedFilteredData = filteredData.sort((a, b) => {
-        try {
-            const dateA = parse(a.transactionDate, 'MM/dd', new Date());
-            const dateB = parse(b.transactionDate, 'MM/dd', new Date());
-            return dateA.getTime() - dateB.getTime();
-        } catch {
-            return a.transactionDate.localeCompare(b.transactionDate);
-        }
-    });
-
-    setDetailViewData(sortedFilteredData);
-    setDetailViewTitle(`${monthKey} - ${category}`);
-    setIsDetailViewOpen(true);
-  };
-
-
   type CombinedData = {
     id: string;
     date: string;
@@ -938,7 +842,88 @@ export function FinanceFlowClient() {
 
     return combined.sort((a, b) => b.dateObj.getTime() - a.dateObj.getTime());
   }, [creditData, depositData]);
+  
+  const summaryReportData = useMemo(() => {
+    const monthlyData: Record<string, Record<string, number>> = {};
+    const allCategories = new Set<string>();
 
+    combinedData.forEach(transaction => {
+        try {
+            const { dateObj, category, amount } = transaction;
+            
+            // Allow filtering
+            if (summarySelectedCategories.length > 0 && !summarySelectedCategories.includes(category)) {
+                return;
+            }
+
+            allCategories.add(category);
+
+            const monthKey = format(dateObj, 'yyyy年M月');
+            
+            if (!monthlyData[monthKey]) {
+                monthlyData[monthKey] = {};
+            }
+            if (!monthlyData[monthKey][category]) {
+                monthlyData[monthKey][category] = 0;
+            }
+            // Invert amount for income to subtract it from expense totals
+            monthlyData[monthKey][category] += amount;
+        } catch(e) {
+            // Ignore parsing errors
+        }
+    });
+
+    const sortedCategories = Array.from(allCategories).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    const headers = ['日期（年月）', ...sortedCategories, '總計'];
+
+    const rows = Object.entries(monthlyData).map(([month, categoryData]) => {
+      let total = 0;
+      const row: Record<string, string | number> = { '日期（年月）': month };
+
+      sortedCategories.forEach(cat => {
+        const value = categoryData[cat] || 0;
+        row[cat] = value;
+        total += value;
+      });
+      row['總計'] = total;
+      
+      return row;
+    }).sort((a, b) => (a['日期（年月）'] as string).localeCompare(b['日期（年月）'] as string, 'zh-Hant', { numeric: true }));
+    
+    return { headers, rows, allCategories: Array.from(allCategories).sort((a,b)=> a.localeCompare(b, 'zh-Hant')) };
+  }, [combinedData, summarySelectedCategories]);
+
+
+  useEffect(() => {
+    if (summaryReportData.allCategories.length > 0) {
+      setSummarySelectedCategories(summaryReportData.allCategories);
+    }
+  }, [hasProcessed, creditData, depositData]);
+
+
+  const handleSummaryCellClick = (monthKey: string, category: string) => {
+    const [year, month] = monthKey.replace('年', '-').replace('月', '').split('-').map(Number);
+    
+    const filteredData = combinedData.filter(transaction => {
+      if (transaction.category !== category) {
+        return false;
+      }
+      try {
+        const transactionYear = getYear(transaction.dateObj);
+        const transactionMonth = getMonth(transaction.dateObj) + 1;
+        
+        return transactionYear === year && transactionMonth === month;
+      } catch {
+        return false;
+      }
+    });
+
+    const sortedFilteredData = filteredData.sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
+
+    setDetailViewData(sortedFilteredData as any); // Cast is okay as we just need a few fields
+    setDetailViewTitle(`${monthKey} - ${category}`);
+    setIsDetailViewOpen(true);
+  };
 
   const noDataFound = hasProcessed && !isLoading && creditData.length === 0 && depositData.length === 0;
   const hasData = creditData.length > 0 || depositData.length > 0;
@@ -1531,9 +1516,51 @@ export function FinanceFlowClient() {
                           </Table>
                         </TabsContent>
                       )}
-                       {creditData.length > 0 && (
+                       {(creditData.length > 0 || depositData.length > 0) && (
                         <TabsContent value="summary">
-                           <div className="rounded-md border mt-4">
+                          <div className="flex items-center gap-4 my-4">
+                              <Popover open={isSummaryFilterOpen} onOpenChange={setIsSummaryFilterOpen}>
+                                <PopoverTrigger asChild>
+                                  <Button variant="outline" className="w-full md:w-auto">
+                                    篩選類型 ({summarySelectedCategories.length}/{summaryReportData.allCategories.length})
+                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[250px] p-0">
+                                   <div className="p-2 space-y-1">
+                                    <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => setSummarySelectedCategories(summaryReportData.allCategories)}>
+                                      全選
+                                    </Button>
+                                     <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => setSummarySelectedCategories([])}>
+                                      全部取消
+                                    </Button>
+                                  </div>
+                                  <div className="border-t max-h-60 overflow-y-auto p-2">
+                                  {summaryReportData.allCategories.map(category => (
+                                    <div key={category} className="flex items-center space-x-2 p-1">
+                                      <Checkbox
+                                        id={`cat-${category}`}
+                                        checked={summarySelectedCategories.includes(category)}
+                                        onCheckedChange={(checked) => {
+                                          return checked
+                                            ? setSummarySelectedCategories([...summarySelectedCategories, category])
+                                            : setSummarySelectedCategories(summarySelectedCategories.filter(c => c !== category))
+                                        }}
+                                      />
+                                      <label
+                                        htmlFor={`cat-${category}`}
+                                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                      >
+                                        {category}
+                                      </label>
+                                    </div>
+                                  ))}
+                                  </div>
+                                </PopoverContent>
+                              </Popover>
+                              <p className="text-sm text-muted-foreground hidden md:block">點擊表格中的數字可查看該月份的交易明細。</p>
+                          </div>
+                           <div className="rounded-md border">
                             <Table>
                               <TableHeader>
                                 <TableRow>
@@ -1546,11 +1573,19 @@ export function FinanceFlowClient() {
                                 {summaryReportData.rows.map((row, i) => (
                                   <TableRow key={i}>
                                     {summaryReportData.headers.map(header => {
-                                      const isClickable = header !== '日期（年月）' && header !== '總計' && typeof row[header] === 'number' && (row[header] as number) > 0;
+                                      const isClickable = header !== '日期（年月）' && header !== '總計' && typeof row[header] === 'number' && (row[header] as number) !== 0;
+                                      const value = row[header];
+                                      let textColor = '';
+                                      if (typeof value === 'number') {
+                                          if (header.includes('收入')) textColor = 'text-green-600';
+                                          else if (value < 0) textColor = 'text-green-600';
+                                          else if (value > 0) textColor = 'text-destructive';
+                                      }
+
                                       return (
-                                        <TableCell key={header} className={`font-mono ${header !== '日期（年月）' ? 'text-right' : ''}`}>
+                                        <TableCell key={header} className={`font-mono ${header !== '日期（年月）' ? 'text-right' : ''} ${textColor}`}>
                                           {isClickable ? (
-                                             <Button variant="link" className="p-0 h-auto font-mono text-base" onClick={() => handleSummaryCellClick(row['日期（年月）'] as string, header)}>
+                                             <Button variant="link" className={`p-0 h-auto font-mono text-base ${textColor}`} onClick={() => handleSummaryCellClick(row['日期（年月）'] as string, header)}>
                                                 {(row[header] as number).toLocaleString()}
                                               </Button>
                                           ) : (
@@ -1619,8 +1654,9 @@ export function FinanceFlowClient() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>交易日期</TableHead>
+                  <TableHead>日期</TableHead>
                   <TableHead>交易項目</TableHead>
+                  <TableHead>來源</TableHead>
                   <TableHead className="text-right">金額</TableHead>
                 </TableRow>
               </TableHeader>
@@ -1628,14 +1664,15 @@ export function FinanceFlowClient() {
                 {detailViewData.length > 0 ? (
                   detailViewData.map(item => (
                     <TableRow key={item.id}>
-                      <TableCell className="font-mono">{item.transactionDate}</TableCell>
+                      <TableCell className="font-mono">{item.transactionDate || item.date}</TableCell>
                       <TableCell>{item.description}</TableCell>
+                      <TableCell>{(item as any).source || '信用卡'}</TableCell>
                       <TableCell className="text-right font-mono">{item.amount.toLocaleString()}</TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={3} className="text-center">
+                    <TableCell colSpan={4} className="text-center">
                       沒有找到相關交易紀錄。
                     </TableCell>
                   </TableRow>
