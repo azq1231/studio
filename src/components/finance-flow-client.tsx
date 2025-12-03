@@ -1415,8 +1415,8 @@ export function FinanceFlowClient() {
                               <TableRow>
                                 <SortableDepositHeader sortKey="date">交易日期</SortableDepositHeader>
                                 <SortableDepositHeader sortKey="category" className="w-[120px]">類型</SortableDepositHeader>
-                                <SortableDepositHeader sortKey="description">摘要</SortableDepositHeader>
-                                <SortableDepositHeader sortKey="bankCode">銀行代碼</SortableDepositHeader>
+                                <SortableDepositHeader sortKey="description">交易項目</SortableDepositHeader>
+                                <SortableDepositHeader sortKey="bankCode">銀行代碼/備註</SortableDepositHeader>
                                 <SortableDepositHeader sortKey="amount" className="text-right">金額</SortableDepositHeader>
                                 <TableHead className="w-[80px] text-center">操作</TableHead>
                               </TableRow>
