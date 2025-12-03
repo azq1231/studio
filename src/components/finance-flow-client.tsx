@@ -1019,7 +1019,6 @@ export function FinanceFlowClient() {
     }
   };
 
-
   return (
     <div className="space-y-4">
       <Card className="shadow-lg">
@@ -1398,7 +1397,7 @@ export function FinanceFlowClient() {
                           <Table>
                             <TableHeader>
                               <TableRow>
-                                <SortableCreditHeader sortKey="transactionDate" style={{ width: '110px' }}>交易日期</SortableCreditHeader>
+                                <SortableCreditHeader sortKey="transactionDate" style={{ width: '110px' }}>日期</SortableCreditHeader>
                                 <SortableCreditHeader sortKey="category" style={{ width: '110px' }}>類型</SortableCreditHeader>
                                 <TableHead>交易項目</TableHead>
                                 <SortableCreditHeader sortKey="amount" className="text-right">金額</SortableCreditHeader>
@@ -1468,7 +1467,7 @@ export function FinanceFlowClient() {
                             <TableCaption>金額：支出為正，存入為負</TableCaption>
                             <TableHeader>
                               <TableRow>
-                                <SortableDepositHeader sortKey="date" style={{ width: '110px' }}>交易日期</SortableDepositHeader>
+                                <SortableDepositHeader sortKey="date" style={{ width: '110px' }}>日期</SortableDepositHeader>
                                 <SortableDepositHeader sortKey="category" style={{ width: '110px' }}>類型</SortableDepositHeader>
                                 <SortableDepositHeader sortKey="description">交易項目</SortableDepositHeader>
                                 <SortableDepositHeader sortKey="amount" className="text-right">金額</SortableDepositHeader>
