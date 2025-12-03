@@ -291,10 +291,11 @@ export function FinanceFlowClient() {
     name: 'categoryRules',
   });
   
-  const { fields: quickFilterFields } = useFieldArray({
+  const { fields: quickFilterFields, append: appendQuickFilter, remove: removeQuickFilter, replace: replaceQuickFilters } = useFieldArray({
     control: settingsForm.control,
-    name: 'quickFilters',
+    name: "quickFilters",
   });
+
 
   useEffect(() => {
     if (isUserLoading || !savedCreditTransactions) return;
@@ -348,7 +349,7 @@ export function FinanceFlowClient() {
   };
   
   const resetQuickFilters = () => {
-    settingsForm.setValue('quickFilters', DEFAULT_QUICK_FILTERS);
+    replaceQuickFilters(DEFAULT_QUICK_FILTERS);
     localStorage.setItem('quickFilters', JSON.stringify(DEFAULT_QUICK_FILTERS));
     toast({ title: '快速篩選已重置', description: '已恢復為預設篩選。' });
   };
@@ -403,16 +404,16 @@ export function FinanceFlowClient() {
       // Quick Filters
       const savedQuickFilters = localStorage.getItem('quickFilters');
       if (savedQuickFilters) {
-        settingsForm.setValue('quickFilters', JSON.parse(savedQuickFilters));
+        replaceQuickFilters(JSON.parse(savedQuickFilters));
       } else {
-        settingsForm.setValue('quickFilters', DEFAULT_QUICK_FILTERS);
+        replaceQuickFilters(DEFAULT_QUICK_FILTERS);
       }
 
 
     } catch (e) {
       console.error("Failed to load settings from localStorage", e);
     }
-  }, [settingsForm, isClient]);
+  }, [settingsForm, isClient, replaceQuickFilters, replaceCategoryRules, replaceReplacementRules]);
 
   const handleSaveSettings = (data: SettingsFormData) => {
     try {
@@ -476,16 +477,14 @@ export function FinanceFlowClient() {
     if (result.success) {
       // Auto-add detected categories
       if (result.detectedCategories.length > 0) {
-        setAvailableCategories(prev => {
-          const newCategories = result.detectedCategories.filter(c => !prev.includes(c));
-          if (newCategories.length > 0) {
-            const updated = [...prev, ...newCategories];
+        const currentCats = JSON.parse(localStorage.getItem('availableCategories') || '[]');
+        const newCats = result.detectedCategories.filter(c => !currentCats.includes(c));
+        if (newCats.length > 0) {
+            const updated = [...currentCats, ...newCats];
+            setAvailableCategories(updated);
             localStorage.setItem('availableCategories', JSON.stringify(updated));
-            toast({ title: '自動新增類型', description: `已新增：${newCategories.join(', ')}`})
-            return updated;
-          }
-          return prev;
-        });
+            toast({ title: '自動新增類型', description: `已新增：${newCats.join(', ')}`})
+        }
       }
 
       if (result.creditData.length > 0) {
@@ -916,10 +915,11 @@ export function FinanceFlowClient() {
 
 
   useEffect(() => {
-    if (availableCategories.length > 0) {
-      setSummarySelectedCategories(availableCategories);
+    // Only set default selection if there's data and some categories are available
+    if (hasProcessed && availableCategories.length > 0) {
+        setSummarySelectedCategories(availableCategories);
     }
-  }, [hasProcessed, creditData, depositData, availableCategories]);
+  }, [hasProcessed, availableCategories]);
 
 
   const handleSummaryCellClick = (monthKey: string, category: string) => {
@@ -1305,72 +1305,91 @@ export function FinanceFlowClient() {
                                 </AlertDialogContent>
                               </AlertDialog>
                             </div>
-                            <div className="space-y-6">
-                              {quickFilterFields.map((field, index) => (
-                                <Card key={field.id} className="p-4">
-                                  <div className="space-y-4">
-                                     <FormField
+                            <div className="space-y-4">
+                                {quickFilterFields.map((field, index) => (
+                                  <Card key={field.id} className="p-4 relative">
+                                    <div className="space-y-4">
+                                      <FormField
+                                          control={settingsForm.control}
+                                          name={`quickFilters.${index}.name`}
+                                          render={({ field }) => (
+                                            <FormItem>
+                                              <FormLabel>按鈕名稱</FormLabel>
+                                              <FormControl>
+                                                <Input {...field} className="max-w-xs" />
+                                              </FormControl>
+                                              <FormMessage />
+                                            </FormItem>
+                                          )}
+                                        />
+                                      <FormField
                                         control={settingsForm.control}
-                                        name={`quickFilters.${index}.name`}
-                                        render={({ field }) => (
+                                        name={`quickFilters.${index}.categories`}
+                                        render={() => (
                                           <FormItem>
-                                            <FormLabel>按鈕名稱</FormLabel>
-                                            <FormControl>
-                                              <Input {...field} className="max-w-xs" />
-                                            </FormControl>
+                                            <FormLabel>包含的類型</FormLabel>
+                                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 rounded-md border p-4">
+                                              {availableCategories.map((cat) => (
+                                                <FormField
+                                                  key={cat}
+                                                  control={settingsForm.control}
+                                                  name={`quickFilters.${index}.categories`}
+                                                  render={({ field }) => {
+                                                    return (
+                                                      <FormItem
+                                                        key={cat}
+                                                        className="flex flex-row items-start space-x-2 space-y-0"
+                                                      >
+                                                        <FormControl>
+                                                          <Checkbox
+                                                            checked={field.value?.includes(cat)}
+                                                            onCheckedChange={(checked) => {
+                                                              return checked
+                                                                ? field.onChange([...field.value, cat])
+                                                                : field.onChange(
+                                                                    field.value?.filter(
+                                                                      (value) => value !== cat
+                                                                    )
+                                                                  )
+                                                            }}
+                                                          />
+                                                        </FormControl>
+                                                        <FormLabel className="font-normal">
+                                                          {cat}
+                                                        </FormLabel>
+                                                      </FormItem>
+                                                    )
+                                                  }}
+                                                />
+                                              ))}
+                                            </div>
                                             <FormMessage />
                                           </FormItem>
                                         )}
                                       />
-                                    <FormField
-                                      control={settingsForm.control}
-                                      name={`quickFilters.${index}.categories`}
-                                      render={() => (
-                                         <FormItem>
-                                          <FormLabel>包含的類型</FormLabel>
-                                          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 rounded-md border p-4">
-                                            {availableCategories.map((cat) => (
-                                              <FormField
-                                                key={cat}
-                                                control={settingsForm.control}
-                                                name={`quickFilters.${index}.categories`}
-                                                render={({ field }) => {
-                                                  return (
-                                                    <FormItem
-                                                      key={cat}
-                                                      className="flex flex-row items-start space-x-2 space-y-0"
-                                                    >
-                                                      <FormControl>
-                                                        <Checkbox
-                                                          checked={field.value?.includes(cat)}
-                                                          onCheckedChange={(checked) => {
-                                                            return checked
-                                                              ? field.onChange([...field.value, cat])
-                                                              : field.onChange(
-                                                                  field.value?.filter(
-                                                                    (value) => value !== cat
-                                                                  )
-                                                                )
-                                                          }}
-                                                        />
-                                                      </FormControl>
-                                                      <FormLabel className="font-normal">
-                                                        {cat}
-                                                      </FormLabel>
-                                                    </FormItem>
-                                                  )
-                                                }}
-                                              />
-                                            ))}
-                                          </div>
-                                          <FormMessage />
-                                        </FormItem>
-                                      )}
-                                    />
-                                  </div>
-                                </Card>
-                              ))}
-                            </div>
+                                    </div>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      className="absolute top-2 right-2 h-8 w-8"
+                                      onClick={() => removeQuickFilter(index)}
+                                    >
+                                      <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                  </Card>
+                                ))}
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="mt-4"
+                                onClick={() => appendQuickFilter({ name: `篩選 ${quickFilterFields.length + 1}`, categories: [] })}
+                              >
+                                <PlusCircle className="mr-2 h-4 w-4" />
+                                新增快速篩選
+                              </Button>
                           </TabsContent>
                           <TabsContent value="manage-categories" className="mt-4">
                             <CardDescription className="mb-4">
@@ -1485,7 +1504,7 @@ export function FinanceFlowClient() {
                                 <SortableCreditHeader sortKey="date" style={{ width: '110px' }}>日期</SortableCreditHeader>
                                 <SortableCreditHeader sortKey="category" style={{ width: '110px' }}>類型</SortableCreditHeader>
                                 <TableHead>交易項目</TableHead>
-                                <SortableCreditHeader sortKey="amount" style={{ width: '100px' }} className="text-right">金額</SortableCreditHeader>
+                                <SortableCreditHeader sortKey="amount" style={{ width: '100px' }}>金額</SortableCreditHeader>
                                 <SortableCreditHeader sortKey="bankCode">銀行代碼/備註</SortableCreditHeader>
                                 <TableHead className="w-[80px] text-center">操作</TableHead>
                               </TableRow>
@@ -1557,7 +1576,7 @@ export function FinanceFlowClient() {
                                 <SortableDepositHeader sortKey="date" style={{ width: '110px' }}>日期</SortableDepositHeader>
                                 <SortableDepositHeader sortKey="category" style={{ width: '110px' }}>類型</SortableDepositHeader>
                                 <SortableDepositHeader sortKey="description">交易項目</SortableDepositHeader>
-                                <SortableDepositHeader sortKey="amount" style={{ width: '100px' }} className="text-right">金額</SortableDepositHeader>
+                                <SortableDepositHeader sortKey="amount" style={{ width: '100px' }}>金額</SortableDepositHeader>
                                 <SortableDepositHeader sortKey="bankCode">銀行代碼/備註</SortableDepositHeader>
                                 <TableHead className="w-[80px] text-center">操作</TableHead>
                               </TableRow>
