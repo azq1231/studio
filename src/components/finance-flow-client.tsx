@@ -38,7 +38,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import {
   AlertDialog,
@@ -73,9 +72,15 @@ const categoryRuleSchema = z.object({
   category: z.string().min(1, { message: '請選擇一個類型' }),
 });
 
+const quickFilterSchema = z.object({
+  name: z.string().min(1, "請輸入名稱"),
+  categories: z.array(z.string()),
+});
+
 const settingsFormSchema = z.object({
   replacementRules: z.array(replacementRuleSchema),
   categoryRules: z.array(categoryRuleSchema),
+  quickFilters: z.array(quickFilterSchema),
 });
 
 type StatementFormData = z.infer<typeof statementFormSchema>;
@@ -84,6 +89,8 @@ type SortKey = 'keyword' | 'category';
 type SortDirection = 'asc' | 'desc';
 type CreditSortKey = 'date' | 'category' | 'description' | 'amount' | 'bankCode';
 type DepositSortKey = 'date' | 'category' | 'description' | 'amount' | 'bankCode';
+
+type QuickFilter = z.infer<typeof quickFilterSchema>;
 
 
 const DEFAULT_REPLACEMENT_RULES: ReplacementRule[] = [
@@ -184,6 +191,11 @@ const DEFAULT_CATEGORY_RULES: CategoryRule[] = [
     { keyword: '花都管理費', category: '固定' },
 ];
 
+const DEFAULT_QUICK_FILTERS: QuickFilter[] = [
+  { name: '篩選一', categories: ['吃', '家', '固定', '秀', '弟', '玩', '姊', '華'] },
+  { name: '篩選二', categories: ['方', '蘇'] },
+];
+
 export function FinanceFlowClient() {
   const getCreditDisplayDate = (dateString: string) => {
     try {
@@ -265,6 +277,7 @@ export function FinanceFlowClient() {
     defaultValues: {
       replacementRules: [],
       categoryRules: [],
+      quickFilters: [],
     },
   });
 
@@ -276,6 +289,11 @@ export function FinanceFlowClient() {
   const { fields: categoryFields, append: appendCategory, remove: removeCategory, replace: replaceCategoryRules } = useFieldArray({
     control: settingsForm.control,
     name: 'categoryRules',
+  });
+  
+  const { fields: quickFilterFields } = useFieldArray({
+    control: settingsForm.control,
+    name: 'quickFilters',
   });
 
   useEffect(() => {
@@ -328,6 +346,13 @@ export function FinanceFlowClient() {
     localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
     toast({ title: '分類規則已重置', description: '已恢復為預設規則。' });
   };
+  
+  const resetQuickFilters = () => {
+    settingsForm.setValue('quickFilters', DEFAULT_QUICK_FILTERS);
+    localStorage.setItem('quickFilters', JSON.stringify(DEFAULT_QUICK_FILTERS));
+    toast({ title: '快速篩選已重置', description: '已恢復為預設篩選。' });
+  };
+
 
   useEffect(() => {
     if (!isClient) return;
@@ -375,6 +400,15 @@ export function FinanceFlowClient() {
       settingsForm.setValue('categoryRules', finalCategoryRules);
       localStorage.setItem('categoryRules', JSON.stringify(finalCategoryRules));
 
+      // Quick Filters
+      const savedQuickFilters = localStorage.getItem('quickFilters');
+      if (savedQuickFilters) {
+        settingsForm.setValue('quickFilters', JSON.parse(savedQuickFilters));
+      } else {
+        settingsForm.setValue('quickFilters', DEFAULT_QUICK_FILTERS);
+      }
+
+
     } catch (e) {
       console.error("Failed to load settings from localStorage", e);
     }
@@ -387,9 +421,11 @@ export function FinanceFlowClient() {
 
       localStorage.setItem('replacementRules', JSON.stringify(uniqueReplacementRules));
       localStorage.setItem('categoryRules', JSON.stringify(uniqueCategoryRules));
+      localStorage.setItem('quickFilters', JSON.stringify(data.quickFilters));
       
       settingsForm.setValue('replacementRules', uniqueReplacementRules);
       settingsForm.setValue('categoryRules', uniqueCategoryRules);
+      settingsForm.setValue('quickFilters', data.quickFilters);
 
       toast({
         title: "設定已儲存",
@@ -832,18 +868,17 @@ export function FinanceFlowClient() {
   
   const summaryReportData = useMemo(() => {
     const monthlyData: Record<string, Record<string, number>> = {};
-    const allCategories = new Set<string>();
+    const allCategoriesInReport = new Set<string>();
 
     combinedData.forEach(transaction => {
         try {
             const { dateObj, category, amount } = transaction;
             
-            // Allow filtering
             if (summarySelectedCategories.length > 0 && !summarySelectedCategories.includes(category)) {
                 return;
             }
 
-            allCategories.add(category);
+            allCategoriesInReport.add(category);
 
             const monthKey = format(dateObj, 'yyyy年M月');
             
@@ -853,14 +888,13 @@ export function FinanceFlowClient() {
             if (!monthlyData[monthKey][category]) {
                 monthlyData[monthKey][category] = 0;
             }
-            // Invert amount for income to subtract it from expense totals
             monthlyData[monthKey][category] += amount;
         } catch(e) {
             // Ignore parsing errors
         }
     });
 
-    const sortedCategories = Array.from(allCategories).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    const sortedCategories = Array.from(allCategoriesInReport).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
     const headers = ['日期（年月）', ...sortedCategories, '總計'];
 
     const rows = Object.entries(monthlyData).map(([month, categoryData]) => {
@@ -877,15 +911,15 @@ export function FinanceFlowClient() {
       return row;
     }).sort((a, b) => (a['日期（年月）'] as string).localeCompare(b['日期（年月）'] as string, 'zh-Hant', { numeric: true }));
     
-    return { headers, rows, allCategories: Array.from(allCategories).sort((a,b)=> a.localeCompare(b, 'zh-Hant')) };
+    return { headers, rows };
   }, [combinedData, summarySelectedCategories]);
 
 
   useEffect(() => {
-    if (summaryReportData.allCategories.length > 0) {
-      setSummarySelectedCategories(summaryReportData.allCategories);
+    if (availableCategories.length > 0) {
+      setSummarySelectedCategories(availableCategories);
     }
-  }, [hasProcessed, creditData, depositData]);
+  }, [hasProcessed, creditData, depositData, availableCategories]);
 
 
   const handleSummaryCellClick = (monthKey: string, category: string) => {
@@ -912,15 +946,8 @@ export function FinanceFlowClient() {
     setIsDetailViewOpen(true);
   };
   
-  const applyQuickFilter = (filterType: 1 | 2) => {
-    const allCats = summaryReportData.allCategories;
-    if (filterType === 1) { // 主要支出
-      const excluded = ['收入', '方', '蘇'];
-      setSummarySelectedCategories(allCats.filter(c => !excluded.includes(c)));
-    } else if (filterType === 2) { // 個人
-      const included = ['方', '蘇'];
-       setSummarySelectedCategories(allCats.filter(c => included.includes(c)));
-    }
+  const applyQuickFilter = (categories: string[]) => {
+    setSummarySelectedCategories(categories);
   }
 
 
@@ -1042,9 +1069,10 @@ export function FinanceFlowClient() {
                     <Form {...settingsForm}>
                       <form onSubmit={settingsForm.handleSubmit(handleSaveSettings)} className="space-y-6">
                         <Tabs defaultValue="category" className="w-full">
-                          <TabsList className="grid w-full grid-cols-3">
+                          <TabsList className="grid w-full grid-cols-4">
                             <TabsTrigger value="replacement">取代規則</TabsTrigger>
                             <TabsTrigger value="category">分類規則</TabsTrigger>
+                             <TabsTrigger value="quick-filters">快速篩選</TabsTrigger>
                             <TabsTrigger value="manage-categories">管理類型</TabsTrigger>
                           </TabsList>
                           <TabsContent value="replacement" className="mt-4">
@@ -1251,6 +1279,99 @@ export function FinanceFlowClient() {
                               新增分類規則
                             </Button>
                           </TabsContent>
+                          <TabsContent value="quick-filters" className="mt-4">
+                             <div className="flex justify-between items-center mb-4">
+                              <CardDescription>
+                                自訂彙總報表中的快速篩選按鈕，方便您一鍵切換常用的類別組合。
+                              </CardDescription>
+                               <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button type="button" variant="outline" size="sm">
+                                    <RotateCcw className="mr-2 h-4 w-4" />
+                                    重置
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>確定要重置快速篩選嗎？</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      此操作將會清除所有您自訂的快速篩選，並恢復為系統預設值。此動作無法復原。
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>取消</AlertDialogCancel>
+                                    <AlertDialogAction onClick={resetQuickFilters}>確定重置</AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
+                            <div className="space-y-6">
+                              {quickFilterFields.map((field, index) => (
+                                <Card key={field.id} className="p-4">
+                                  <div className="space-y-4">
+                                     <FormField
+                                        control={settingsForm.control}
+                                        name={`quickFilters.${index}.name`}
+                                        render={({ field }) => (
+                                          <FormItem>
+                                            <FormLabel>按鈕名稱</FormLabel>
+                                            <FormControl>
+                                              <Input {...field} className="max-w-xs" />
+                                            </FormControl>
+                                            <FormMessage />
+                                          </FormItem>
+                                        )}
+                                      />
+                                    <FormField
+                                      control={settingsForm.control}
+                                      name={`quickFilters.${index}.categories`}
+                                      render={() => (
+                                         <FormItem>
+                                          <FormLabel>包含的類型</FormLabel>
+                                          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 rounded-md border p-4">
+                                            {availableCategories.map((cat) => (
+                                              <FormField
+                                                key={cat}
+                                                control={settingsForm.control}
+                                                name={`quickFilters.${index}.categories`}
+                                                render={({ field }) => {
+                                                  return (
+                                                    <FormItem
+                                                      key={cat}
+                                                      className="flex flex-row items-start space-x-2 space-y-0"
+                                                    >
+                                                      <FormControl>
+                                                        <Checkbox
+                                                          checked={field.value?.includes(cat)}
+                                                          onCheckedChange={(checked) => {
+                                                            return checked
+                                                              ? field.onChange([...field.value, cat])
+                                                              : field.onChange(
+                                                                  field.value?.filter(
+                                                                    (value) => value !== cat
+                                                                  )
+                                                                )
+                                                          }}
+                                                        />
+                                                      </FormControl>
+                                                      <FormLabel className="font-normal">
+                                                        {cat}
+                                                      </FormLabel>
+                                                    </FormItem>
+                                                  )
+                                                }}
+                                              />
+                                            ))}
+                                          </div>
+                                          <FormMessage />
+                                        </FormItem>
+                                      )}
+                                    />
+                                  </div>
+                                </Card>
+                              ))}
+                            </div>
+                          </TabsContent>
                           <TabsContent value="manage-categories" className="mt-4">
                             <CardDescription className="mb-4">
                               新增或刪除在「分類規則」下拉選單中看到的類型選項。
@@ -1364,7 +1485,7 @@ export function FinanceFlowClient() {
                                 <SortableCreditHeader sortKey="date" style={{ width: '110px' }}>日期</SortableCreditHeader>
                                 <SortableCreditHeader sortKey="category" style={{ width: '110px' }}>類型</SortableCreditHeader>
                                 <TableHead>交易項目</TableHead>
-                                <SortableCreditHeader sortKey="amount" className="text-right">金額</SortableCreditHeader>
+                                <SortableCreditHeader sortKey="amount" style={{ width: '100px' }} className="text-right">金額</SortableCreditHeader>
                                 <SortableCreditHeader sortKey="bankCode">銀行代碼/備註</SortableCreditHeader>
                                 <TableHead className="w-[80px] text-center">操作</TableHead>
                               </TableRow>
@@ -1400,7 +1521,7 @@ export function FinanceFlowClient() {
                                         className="h-8"
                                     />
                                   </TableCell>
-                                  <TableCell className={`text-right font-mono ${row.amount < 0 ? 'text-green-600' : ''}`}>{row.amount.toLocaleString()}</TableCell>
+                                  <TableCell style={{ width: '100px' }} className={`text-right font-mono ${row.amount < 0 ? 'text-green-600' : ''}`}>{row.amount.toLocaleString()}</TableCell>
                                   <TableCell>
                                     <Input
                                         type="text"
@@ -1436,7 +1557,7 @@ export function FinanceFlowClient() {
                                 <SortableDepositHeader sortKey="date" style={{ width: '110px' }}>日期</SortableDepositHeader>
                                 <SortableDepositHeader sortKey="category" style={{ width: '110px' }}>類型</SortableDepositHeader>
                                 <SortableDepositHeader sortKey="description">交易項目</SortableDepositHeader>
-                                <SortableDepositHeader sortKey="amount" className="text-right">金額</SortableDepositHeader>
+                                <SortableDepositHeader sortKey="amount" style={{ width: '100px' }} className="text-right">金額</SortableDepositHeader>
                                 <SortableDepositHeader sortKey="bankCode">銀行代碼/備註</SortableDepositHeader>
                                 <TableHead className="w-[80px] text-center">操作</TableHead>
                               </TableRow>
@@ -1472,7 +1593,7 @@ export function FinanceFlowClient() {
                                         className="h-8"
                                     />
                                   </TableCell>
-                                  <TableCell className={`text-right font-mono ${row.amount < 0 ? 'text-green-600' : 'text-destructive'}`}>{row.amount.toLocaleString()}</TableCell>
+                                  <TableCell style={{ width: '100px' }} className={`text-right font-mono ${row.amount < 0 ? 'text-green-600' : 'text-destructive'}`}>{row.amount.toLocaleString()}</TableCell>
                                   <TableCell>
                                       <Input
                                         type="text"
@@ -1505,13 +1626,13 @@ export function FinanceFlowClient() {
                               <Popover open={isSummaryFilterOpen} onOpenChange={setIsSummaryFilterOpen}>
                                 <PopoverTrigger asChild>
                                   <Button variant="outline">
-                                    篩選類型 ({summarySelectedCategories.length}/{summaryReportData.allCategories.length})
+                                    篩選類型 ({summarySelectedCategories.length}/{availableCategories.length})
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                   </Button>
                                 </PopoverTrigger>
                                 <PopoverContent className="w-[250px] p-0">
                                    <div className="p-2 space-y-1">
-                                    <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => setSummarySelectedCategories(summaryReportData.allCategories)}>
+                                    <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => setSummarySelectedCategories(availableCategories)}>
                                       全選
                                     </Button>
                                      <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => setSummarySelectedCategories([])}>
@@ -1519,7 +1640,7 @@ export function FinanceFlowClient() {
                                     </Button>
                                   </div>
                                   <div className="border-t max-h-60 overflow-y-auto p-2">
-                                  {summaryReportData.allCategories.map(category => (
+                                  {availableCategories.sort((a,b)=> a.localeCompare(b, 'zh-Hant')).map(category => (
                                     <div key={category} className="flex items-center space-x-2 p-1">
                                       <Checkbox
                                         id={`cat-${category}`}
@@ -1541,8 +1662,11 @@ export function FinanceFlowClient() {
                                   </div>
                                 </PopoverContent>
                               </Popover>
-                              <Button variant="outline" size="sm" onClick={() => applyQuickFilter(1)}>篩選一 (主要支出)</Button>
-                              <Button variant="outline" size="sm" onClick={() => applyQuickFilter(2)}>篩選二 (個人)</Button>
+                              {settingsForm.getValues('quickFilters').map((filter, index) => (
+                                <Button key={index} variant="outline" size="sm" onClick={() => applyQuickFilter(filter.categories)}>
+                                  {filter.name}
+                                </Button>
+                              ))}
                               <p className="text-sm text-muted-foreground hidden md:block ml-auto">點擊表格中的數字可查看該月份的交易明細。</p>
                           </div>
                            <div className="rounded-md border">
