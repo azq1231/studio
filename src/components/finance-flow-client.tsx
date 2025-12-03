@@ -511,7 +511,7 @@ export function FinanceFlowClient() {
 
       if (creditData.length > 0) {
         const creditSheetData = creditData.map(d => ({
-          '交易日期': d.transactionDate,
+          '日期': getCreditDisplayDate(d.transactionDate),
           '類型': d.category,
           '交易項目': d.description,
           '金額': d.amount,
@@ -523,13 +523,11 @@ export function FinanceFlowClient() {
 
       if (depositData.length > 0) {
         const depositSheetData = depositData.map(d => ({
-          '交易日期': d.date,
+          '日期': d.date,
           '類型': d.category,
-          '摘要＋存摺備註': d.description,
+          '交易項目': d.description,
           '金額（支出正、存入負）': d.amount,
-          '空白': '',
-          '對方銀行代碼': d.bankCode,
-          '對方帳號（留空）': d.accountNumber,
+          '銀行代碼/備註': d.bankCode || '',
         }));
         const ws = XLSX.utils.json_to_sheet(depositSheetData);
         XLSX.utils.book_append_sheet(wb, ws, '活存報表');
@@ -685,33 +683,13 @@ export function FinanceFlowClient() {
 
   const sortedCreditData = useMemo(() => {
     if (!creditSortKey) return creditData;
-    const now = new Date();
-    const currentYear = getYear(now);
-    const currentMonth = getMonth(now);
 
     return [...creditData].sort((a, b) => {
-        let aDate: Date, bDate: Date;
-        try {
-            const aParsed = parse(a.transactionDate, 'MM/dd', new Date());
-            if (getMonth(aParsed) > currentMonth) {
-                aDate = new Date(new Date(aParsed).setFullYear(currentYear - 1));
-            } else {
-                aDate = new Date(new Date(aParsed).setFullYear(currentYear));
-            }
-        } catch { aDate = new Date(0); }
-        
-        try {
-            const bParsed = parse(b.transactionDate, 'MM/dd', new Date());
-            if (getMonth(bParsed) > currentMonth) {
-                bDate = new Date(new Date(bParsed).setFullYear(currentYear - 1));
-            } else {
-                bDate = new Date(new Date(bParsed).setFullYear(currentYear));
-            }
-        } catch { bDate = new Date(0); }
-
         let comparison = 0;
         if (creditSortKey === 'transactionDate') {
-            comparison = aDate.getTime() - bDate.getTime();
+            const dateA = new Date(getCreditDisplayDate(a.transactionDate)).getTime();
+            const dateB = new Date(getCreditDisplayDate(b.transactionDate)).getTime();
+            comparison = dateA - dateB;
         } else {
             const aValue = a[creditSortKey];
             const bValue = b[creditSortKey];
@@ -721,7 +699,7 @@ export function FinanceFlowClient() {
             } else if (typeof aValue === 'number' && typeof bValue === 'number') {
                 comparison = aValue - bValue;
             } else {
-                comparison = String(aValue).localeCompare(String(bValue), 'zh-Hant');
+                comparison = String(aValue || '').localeCompare(String(bValue || ''), 'zh-Hant');
             }
         }
 
@@ -750,7 +728,7 @@ export function FinanceFlowClient() {
         } else if (typeof aValue === 'number' && typeof bValue === 'number') {
             comparison = aValue - bValue;
         } else {
-            comparison = String(aValue).localeCompare(String(bValue), 'zh-Hant');
+            comparison = String(aValue || '').localeCompare(String(bValue || ''), 'zh-Hant');
         }
 
         return depositSortDirection === 'asc' ? comparison : -comparison;
@@ -790,24 +768,33 @@ export function FinanceFlowClient() {
     source: '信用卡' | '活存帳戶';
   };
 
+  const getCreditDisplayDate = (dateString: string) => {
+    try {
+      const now = new Date();
+      const currentYear = getYear(now);
+      const currentMonth = getMonth(now);
+      const parsedDate = parse(dateString, 'MM/dd', new Date());
+      const transactionMonth = getMonth(parsedDate);
+      
+      let dateObj;
+      if (transactionMonth > currentMonth) {
+          dateObj = new Date(new Date(parsedDate).setFullYear(currentYear - 1));
+      } else {
+          dateObj = new Date(new Date(parsedDate).setFullYear(currentYear));
+      }
+      return format(dateObj, 'yyyy/MM/dd');
+    } catch {
+      return dateString;
+    }
+  };
+
   const combinedData = useMemo<CombinedData[]>(() => {
     const combined: CombinedData[] = [];
-    const now = new Date();
-    const currentYear = getYear(now);
-    const currentMonth = getMonth(now);
 
     creditData.forEach(d => {
       let dateObj;
       try {
-        const parsedDate = parse(d.transactionDate, 'MM/dd', new Date());
-        const transactionMonth = getMonth(parsedDate);
-        
-        if (transactionMonth > currentMonth) {
-            dateObj = new Date(new Date(parsedDate).setFullYear(currentYear - 1));
-        } else {
-            dateObj = new Date(new Date(parsedDate).setFullYear(currentYear));
-        }
-        
+        dateObj = new Date(getCreditDisplayDate(d.transactionDate));
       } catch {
         dateObj = new Date(0);
       }
@@ -924,6 +911,18 @@ export function FinanceFlowClient() {
     setDetailViewTitle(`${monthKey} - ${category}`);
     setIsDetailViewOpen(true);
   };
+  
+  const applyQuickFilter = (filterType: 1 | 2) => {
+    const allCats = summaryReportData.allCategories;
+    if (filterType === 1) { // 主要支出
+      const excluded = ['收入', '方', '蘇'];
+      setSummarySelectedCategories(allCats.filter(c => !excluded.includes(c)));
+    } else if (filterType === 2) { // 個人
+      const included = ['方', '蘇'];
+       setSummarySelectedCategories(allCats.filter(c => included.includes(c)));
+    }
+  }
+
 
   const noDataFound = hasProcessed && !isLoading && creditData.length === 0 && depositData.length === 0;
   const hasData = creditData.length > 0 || depositData.length > 0;
@@ -952,10 +951,10 @@ export function FinanceFlowClient() {
     );
   };
 
-  const SortableCreditHeader = ({ sortKey: key, children, className, style }: { sortKey: CreditSortKey, children: React.ReactNode, className?: string, style?: React.CSSProperties }) => {
+  const SortableCreditHeader = ({ sortKey: key, children, style }: { sortKey: CreditSortKey, children: React.ReactNode, style?: React.CSSProperties }) => {
     const isSorted = creditSortKey === key;
     return (
-      <TableHead className={className} style={style}>
+      <TableHead style={style}>
         <Button variant="ghost" onClick={() => handleCreditSort(key)} className="px-2 py-1 h-auto -ml-2">
           {children}
           {isSorted ? (
@@ -968,10 +967,10 @@ export function FinanceFlowClient() {
     );
 };
 
-  const SortableDepositHeader = ({ sortKey: key, children, className, style }: { sortKey: DepositSortKey, children: React.ReactNode, className?: string, style?: React.CSSProperties }) => {
+  const SortableDepositHeader = ({ sortKey: key, children, style }: { sortKey: DepositSortKey, children: React.ReactNode, style?: React.CSSProperties }) => {
     const isSorted = depositSortKey === key;
     return (
-      <TableHead className={className} style={style}>
+      <TableHead style={style}>
         <Button variant="ghost" onClick={() => handleDepositSort(key)} className="px-2 py-1 h-auto -ml-2">
           {children}
           {isSorted ? (
@@ -982,26 +981,6 @@ export function FinanceFlowClient() {
         </Button>
       </TableHead>
     );
-  };
-
-  const getCreditDisplayDate = (dateString: string) => {
-    try {
-      const now = new Date();
-      const currentYear = getYear(now);
-      const currentMonth = getMonth(now);
-      const parsedDate = parse(dateString, 'MM/dd', new Date());
-      const transactionMonth = getMonth(parsedDate);
-      
-      let dateObj;
-      if (transactionMonth > currentMonth) {
-          dateObj = new Date(new Date(parsedDate).setFullYear(currentYear - 1));
-      } else {
-          dateObj = new Date(new Date(parsedDate).setFullYear(currentYear));
-      }
-      return format(dateObj, 'yyyy/MM/dd');
-    } catch {
-      return dateString;
-    }
   };
 
   return (
@@ -1518,10 +1497,10 @@ export function FinanceFlowClient() {
                       )}
                        {(creditData.length > 0 || depositData.length > 0) && (
                         <TabsContent value="summary">
-                          <div className="flex items-center gap-4 my-4">
+                          <div className="flex flex-wrap items-center gap-2 my-4">
                               <Popover open={isSummaryFilterOpen} onOpenChange={setIsSummaryFilterOpen}>
                                 <PopoverTrigger asChild>
-                                  <Button variant="outline" className="w-full md:w-auto">
+                                  <Button variant="outline">
                                     篩選類型 ({summarySelectedCategories.length}/{summaryReportData.allCategories.length})
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                   </Button>
@@ -1558,7 +1537,9 @@ export function FinanceFlowClient() {
                                   </div>
                                 </PopoverContent>
                               </Popover>
-                              <p className="text-sm text-muted-foreground hidden md:block">點擊表格中的數字可查看該月份的交易明細。</p>
+                              <Button variant="outline" size="sm" onClick={() => applyQuickFilter(1)}>篩選一 (主要支出)</Button>
+                              <Button variant="outline" size="sm" onClick={() => applyQuickFilter(2)}>篩選二 (個人)</Button>
+                              <p className="text-sm text-muted-foreground hidden md:block ml-auto">點擊表格中的數字可查看該月份的交易明細。</p>
                           </div>
                            <div className="rounded-md border">
                             <Table>
@@ -1664,7 +1645,7 @@ export function FinanceFlowClient() {
                 {detailViewData.length > 0 ? (
                   detailViewData.map(item => (
                     <TableRow key={item.id}>
-                      <TableCell className="font-mono">{item.transactionDate || item.date}</TableCell>
+                      <TableCell className="font-mono">{(item as any).transactionDate ? getCreditDisplayDate((item as any).transactionDate) : (item as any).date}</TableCell>
                       <TableCell>{item.description}</TableCell>
                       <TableCell>{(item as any).source || '信用卡'}</TableCell>
                       <TableCell className="text-right font-mono">{item.amount.toLocaleString()}</TableCell>

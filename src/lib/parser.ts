@@ -69,11 +69,19 @@ export function parseCreditCard(text: string): ParsedCreditDataWithCategory[] {
     const amountMatch = remainingLine.match(/(-?[\d,]+(\.\d+)?)$/);
     let amount = 0;
     let description = remainingLine;
+    let bankCode = '';
 
     if (amountMatch) {
         amount = parseFloat(amountMatch[0].replace(/,/g, ''));
         const amountEndIndex = remainingLine.lastIndexOf(amountMatch[0]);
         description = remainingLine.substring(0, amountEndIndex).trim();
+
+        const bankCodeMatch = description.match(/\s(\w+)$/);
+        if (bankCodeMatch) {
+            bankCode = bankCodeMatch[1];
+            description = description.substring(0, description.lastIndexOf(bankCode)).trim();
+        }
+
     } else {
         const lastPart = parts[parts.length - 1];
         const parsedAmount = parseFloat(lastPart.replace(/,/g, ''));
@@ -108,9 +116,7 @@ export type DepositData = {
   category: string;
   description: string;
   amount: number;
-  blank: string;
-  bankCode: string;
-  accountNumber: string;
+  bankCode?: string;
 };
 
 type SpecialRule = {
@@ -188,8 +194,7 @@ export function parseDepositAccount(text: string, replacementRules: ReplacementR
       
       const category = applyCategoryRules(finalDescription, categoryRules);
 
-      // [id, date, category, description, amount, blank, bankCode, accountNumber]
-      temp = [randomUUID(), currentDate, category, finalDescription, amount, '', '', ''];
+      temp = [randomUUID(), currentDate, category, finalDescription, amount, ''];
       
       if (!rule.merge_remark && rule.remark_col !== null && temp.length > rule.remark_col) {
         temp[rule.remark_col] = remark;
@@ -201,8 +206,7 @@ export function parseDepositAccount(text: string, replacementRules: ReplacementR
     if (temp && line) {
       const match = line.match(/^([\d/]+)/);
       if (match) {
-        if(temp.length > 6) temp[6] = match[1]; // bankCode
-        if(temp.length > 7) temp[7] = ''; // accountNumber
+        if(temp.length > 5) temp[5] = match[1]; // bankCode
       }
     }
   }
@@ -217,8 +221,6 @@ export function parseDepositAccount(text: string, replacementRules: ReplacementR
     category: r[2] as string,
     description: r[3] as string,
     amount: r[4] as number,
-    blank: r[5] as string,
-    bankCode: r[6] as string,
-    accountNumber: r[7] as string,
+    bankCode: r[5] as string,
   }));
 }
