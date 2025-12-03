@@ -202,17 +202,22 @@ export function FinanceFlowClient() {
       const now = new Date();
       const currentYear = getYear(now);
       const currentMonth = getMonth(now);
+      // Assuming the format is MM/dd, we parse it into a date object.
+      // We need to handle transactions from last year if the transaction month is "in the future"
+      // compared to the current month.
       const parsedDate = parse(dateString, 'MM/dd', new Date());
       const transactionMonth = getMonth(parsedDate);
       
       let dateObj;
       if (transactionMonth > currentMonth) {
+          // It's a previous year's transaction, e.g. current is Jan, transaction is Dec.
           dateObj = new Date(new Date(parsedDate).setFullYear(currentYear - 1));
       } else {
           dateObj = new Date(new Date(parsedDate).setFullYear(currentYear));
       }
       return format(dateObj, 'yyyy/MM/dd');
     } catch {
+      // If parsing fails for any reason, return the original string.
       return dateString;
     }
   };
@@ -915,11 +920,16 @@ export function FinanceFlowClient() {
 
 
   useEffect(() => {
-    // Only set default selection if there's data and some categories are available
-    if (hasProcessed && availableCategories.length > 0) {
-        setSummarySelectedCategories(availableCategories);
+    // This effect sets the default selection for the summary report categories.
+    // It should only run once after the first time data is processed.
+    if (hasProcessed) {
+        // We read the categories from localStorage as it is the source of truth for all available categories.
+        const allCats = JSON.parse(localStorage.getItem('availableCategories') || '[]');
+        if (allCats.length > 0) {
+            setSummarySelectedCategories(allCats);
+        }
     }
-  }, [hasProcessed, availableCategories]);
+  }, [hasProcessed]);
 
 
   const handleSummaryCellClick = (monthKey: string, category: string) => {
@@ -1345,9 +1355,9 @@ export function FinanceFlowClient() {
                                                             checked={field.value?.includes(cat)}
                                                             onCheckedChange={(checked) => {
                                                               return checked
-                                                                ? field.onChange([...field.value, cat])
+                                                                ? field.onChange([...(field.value || []), cat])
                                                                 : field.onChange(
-                                                                    field.value?.filter(
+                                                                    (field.value || []).filter(
                                                                       (value) => value !== cat
                                                                     )
                                                                   )
@@ -1502,10 +1512,10 @@ export function FinanceFlowClient() {
                             <TableHeader>
                               <TableRow>
                                 <SortableCreditHeader sortKey="date" style={{ width: '110px' }}>日期</SortableCreditHeader>
-                                <SortableCreditHeader sortKey="category" style={{ width: '110px' }}>類型</SortableCreditHeader>
+                                <TableHead style={{ width: '110px' }}>類型</TableHead>
                                 <TableHead>交易項目</TableHead>
                                 <SortableCreditHeader sortKey="amount" style={{ width: '100px' }}>金額</SortableCreditHeader>
-                                <SortableCreditHeader sortKey="bankCode">銀行代碼/備註</SortableCreditHeader>
+                                <TableHead>銀行代碼/備註</TableHead>
                                 <TableHead className="w-[80px] text-center">操作</TableHead>
                               </TableRow>
                             </TableHeader>
