@@ -405,6 +405,20 @@ export function FinanceFlowClient() {
     const result = await processBankStatement(values.statement, replacementRules, categoryRules);
     
     if (result.success) {
+      // Auto-add detected categories
+      if (result.detectedCategories.length > 0) {
+        setAvailableCategories(prev => {
+          const newCategories = result.detectedCategories.filter(c => !prev.includes(c));
+          if (newCategories.length > 0) {
+            const updated = [...prev, ...newCategories];
+            localStorage.setItem('availableCategories', JSON.stringify(updated));
+            toast({ title: '自動新增類型', description: `已新增：${newCategories.join(', ')}`})
+            return updated;
+          }
+          return prev;
+        });
+      }
+
       if (result.creditData.length > 0) {
         setCreditData(prevData => {
           const combined = [...prevData, ...result.creditData];

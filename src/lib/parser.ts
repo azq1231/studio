@@ -18,11 +18,15 @@ export type RawCreditData = {
   amount: number;
 };
 
+export type ParsedCreditDataWithCategory = RawCreditData & {
+    category: string;
+}
+
 // This parser now only extracts raw data. 
 // Categorization and rule application will be handled by the server action.
-export function parseCreditCard(text: string): RawCreditData[] {
+export function parseCreditCard(text: string): ParsedCreditDataWithCategory[] {
   const lines = text.split('\n');
-  const results: RawCreditData[] = [];
+  const results: ParsedCreditDataWithCategory[] = [];
 
   for (const line of lines) {
     const currentLine = line.replace(/\u3000/g, ' ').trim();
@@ -35,16 +39,22 @@ export function parseCreditCard(text: string): RawCreditData[] {
     
     let transactionDate = parts[0];
     let postingDate = '';
+    let category = '';
     let descriptionStartIndex = 1;
 
-    // Check if the second part is a posting date (MM/DD format)
+    // Check if the second part is a posting date (MM/DD format) or a category
     if (/^\d{1,2}\/\d{1,2}$/.test(parts[1])) {
         postingDate = parts[1];
         descriptionStartIndex = 2;
-    } else {
-        // If not, it's part of the description, and postingDate is unknown
-        postingDate = ''; // Or some other placeholder
-        descriptionStartIndex = 1;
+    } else { // It's not a date, so it could be a category or part of the description
+        // If there are at least 3 parts and the last one is a number, the second one is likely a category
+        const lastPart = parts[parts.length - 1].replace(/,/g, '');
+        if (parts.length >=3 && !isNaN(parseFloat(lastPart))) {
+            category = parts[1];
+            descriptionStartIndex = 2;
+        } else {
+             descriptionStartIndex = 1;
+        }
     }
 
     // Sometimes transaction date and posting date are merged, e.g., 11/0211/02
@@ -83,6 +93,7 @@ export function parseCreditCard(text: string): RawCreditData[] {
         postingDate,
         description,
         amount,
+        category,
       });
     }
   }

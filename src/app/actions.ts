@@ -1,7 +1,7 @@
 'use server';
 
 import { detectReportType } from '@/ai/flows/detect-report-type';
-import { parseCreditCard, parseDepositAccount, type CreditData, type DepositData, type RawCreditData } from '@/lib/parser';
+import { parseCreditCard, parseDepositAccount, type CreditData, type DepositData, type RawCreditData, ParsedCreditDataWithCategory } from '@/lib/parser';
 import { randomUUID } from 'crypto';
 
 export type ReplacementRule = {
@@ -42,14 +42,15 @@ function applyCategoryRules(description: string, postingDate: string, rules: Cat
     return '未分類';
 }
 
-async function processSingleCreditEntry(entry: RawCreditData, replacementRules: ReplacementRule[], categoryRules: CategoryRule[]): Promise<CreditData | null> {
+async function processSingleCreditEntry(entry: ParsedCreditDataWithCategory, replacementRules: ReplacementRule[], categoryRules: CategoryRule[]): Promise<CreditData | null> {
     const { processedText: description, shouldDelete } = applyReplacementRules(entry.description, replacementRules);
     
     if (shouldDelete || !description.trim()) {
         return null;
     }
     
-    const category = applyCategoryRules(description, entry.postingDate, categoryRules);
+    // If a category was parsed directly from the paste, use it. Otherwise, apply rules.
+    const category = entry.category || applyCategoryRules(description, entry.postingDate, categoryRules);
 
     return {
         id: randomUUID(),
@@ -69,48 +70,56 @@ export async function processBankStatement(
     success: boolean;
     creditData: CreditData[];
     depositData: DepositData[];
+    detectedCategories: string[];
     error?: string;
 }> {
     if (!text || text.trim().length < 10) {
-        return { success: false, creditData: [], depositData: [], error: "No text provided or text is too short." };
+        return { success: false, creditData: [], depositData: [], detectedCategories: [], error: "No text provided or text is too short." };
     }
 
     try {
         const sections = text.split(/(?=交易日期)/).filter(s => s.trim() !== '');
         let allCreditData: CreditData[] = [];
         let allDepositData: DepositData[] = [];
+        const detectedCategories = new Set<string>();
 
         for (const section of sections) {
             const { reportType } = await detectReportType({ text: section });
 
             if (reportType === 'credit_card') {
                 const rawParsed = parseCreditCard(section);
+                rawParsed.forEach(c => { if(c.category) detectedCategories.add(c.category) });
                 const processedPromises = rawParsed.map(entry => processSingleCreditEntry(entry, replacementRules, categoryRules));
                 const processedEntries = (await Promise.all(processedPromises)).filter((e): e is CreditData => e !== null);
                 allCreditData.push(...processedEntries);
 
             } else if (reportType === 'deposit_account') {
                 const parsed = parseDepositAccount(section, replacementRules, categoryRules);
+                 parsed.forEach(d => detectedCategories.add(d.category));
                 allDepositData.push(...parsed);
             } else { 
                 // Fallback: try parsing as credit card first
                 const rawParsed = parseCreditCard(section);
                 if (rawParsed.length > 0) {
+                    rawParsed.forEach(c => { if(c.category) detectedCategories.add(c.category) });
                     const processedPromises = rawParsed.map(entry => processSingleCreditEntry(entry, replacementRules, categoryRules));
                     const processedEntries = (await Promise.all(processedPromises)).filter((e): e is CreditData => e !== null);
                     allCreditData.push(...processedEntries);
                 } else {
                     // Then try as deposit account if credit parsing yields nothing
                     const depositParsed = parseDepositAccount(section, replacementRules, categoryRules);
-                    if (depositParsed.length > 0) allDepositData.push(...depositParsed);
+                     if (depositParsed.length > 0) {
+                        depositParsed.forEach(d => detectedCategories.add(d.category));
+                        allDepositData.push(...depositParsed);
+                    }
                 }
             }
         }
         
-        return { success: true, creditData: allCreditData, depositData: allDepositData };
+        return { success: true, creditData: allCreditData, depositData: allDepositData, detectedCategories: Array.from(detectedCategories) };
     } catch (e) {
         console.error("Error processing bank statement:", e);
         const error = e instanceof Error ? e.message : 'An unknown error occurred during parsing.';
-        return { success: false, creditData: [], depositData: [], error };
+        return { success: false, creditData: [], depositData: [], detectedCategories: [], error };
     }
 }
