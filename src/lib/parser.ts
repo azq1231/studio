@@ -125,7 +125,7 @@ type SpecialRule = {
 }
 
 const special_rules: Record<string, SpecialRule> = {
-  "國保保費": { merge_remark: false, remark_col: 5 },
+  "國保保費": { merge_remark: true, remark_col: null },
 };
 
 function applyCategoryRules(description: string, rules: CategoryRule[]): string {
@@ -173,7 +173,7 @@ export function parseDepositAccount(text: string, replacementRules: ReplacementR
       let desc = parts[1]?.trim() ?? '';
       const withdraw = parts[2]?.replace(/,/g, '').trim() ?? '';
       const deposit = parts[3]?.replace(/,/g, '').trim() ?? '';
-      let remark = parts.length > 5 ? (parts[5]?.trim() ?? '') : '';
+      let remark = parts.length > 5 ? (parts.slice(5).join(' ').trim() ?? '') : '';
       const amount = withdraw ? parseFloat(withdraw) : (deposit ? -parseFloat(deposit) : 0);
       
       const rule = special_rules[desc] || { merge_remark: true, remark_col: null };
@@ -194,7 +194,14 @@ export function parseDepositAccount(text: string, replacementRules: ReplacementR
       
       const category = applyCategoryRules(finalDescription, categoryRules);
 
-      temp = [randomUUID(), currentDate, category, finalDescription, amount, ''];
+      let bankCode = '';
+      const remarkMatch = finalDescription.match(/(\[[^\]]+\])/);
+      if (remarkMatch) {
+        bankCode = remarkMatch[1];
+        finalDescription = finalDescription.replace(remarkMatch[1], '').trim();
+      }
+
+      temp = [randomUUID(), currentDate, category, finalDescription, amount, bankCode];
       
       if (!rule.merge_remark && rule.remark_col !== null && temp.length > rule.remark_col) {
         temp[rule.remark_col] = remark;
@@ -206,7 +213,7 @@ export function parseDepositAccount(text: string, replacementRules: ReplacementR
     if (temp && line) {
       const match = line.match(/^([\d/]+)/);
       if (match) {
-        if(temp.length > 5) temp[5] = match[1]; // bankCode
+        if(temp.length > 5 && !temp[5]) temp[5] = match[1]; // bankCode, only if not already set by remarkMatch
       }
     }
   }
