@@ -82,7 +82,7 @@ type StatementFormData = z.infer<typeof statementFormSchema>;
 type SettingsFormData = z.infer<typeof settingsFormSchema>;
 type SortKey = 'keyword' | 'category';
 type SortDirection = 'asc' | 'desc';
-type CreditSortKey = 'transactionDate' | 'category' | 'description' | 'amount' | 'bankCode';
+type CreditSortKey = 'date' | 'category' | 'description' | 'amount' | 'bankCode';
 type DepositSortKey = 'date' | 'category' | 'description' | 'amount' | 'bankCode';
 
 
@@ -185,6 +185,26 @@ const DEFAULT_CATEGORY_RULES: CategoryRule[] = [
 ];
 
 export function FinanceFlowClient() {
+  const getCreditDisplayDate = (dateString: string) => {
+    try {
+      const now = new Date();
+      const currentYear = getYear(now);
+      const currentMonth = getMonth(now);
+      const parsedDate = parse(dateString, 'MM/dd', new Date());
+      const transactionMonth = getMonth(parsedDate);
+      
+      let dateObj;
+      if (transactionMonth > currentMonth) {
+          dateObj = new Date(new Date(parsedDate).setFullYear(currentYear - 1));
+      } else {
+          dateObj = new Date(new Date(parsedDate).setFullYear(currentYear));
+      }
+      return format(dateObj, 'yyyy/MM/dd');
+    } catch {
+      return dateString;
+    }
+  };
+
   const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
   const [isClient, setIsClient] = useState(false);
@@ -205,7 +225,7 @@ export function FinanceFlowClient() {
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
-  const [creditSortKey, setCreditSortKey] = useState<CreditSortKey | null>('transactionDate');
+  const [creditSortKey, setCreditSortKey] = useState<CreditSortKey | null>('date');
   const [creditSortDirection, setCreditSortDirection] = useState<SortDirection>('desc');
 
   const [depositSortKey, setDepositSortKey] = useState<DepositSortKey | null>('date');
@@ -686,13 +706,13 @@ export function FinanceFlowClient() {
 
     return [...creditData].sort((a, b) => {
         let comparison = 0;
-        if (creditSortKey === 'transactionDate') {
+        if (creditSortKey === 'date') {
             const dateA = new Date(getCreditDisplayDate(a.transactionDate)).getTime();
             const dateB = new Date(getCreditDisplayDate(b.transactionDate)).getTime();
             comparison = dateA - dateB;
         } else {
-            const aValue = a[creditSortKey];
-            const bValue = b[creditSortKey];
+            const aValue = a[creditSortKey as keyof Omit<CreditData, 'transactionDate'>];
+            const bValue = b[creditSortKey as keyof Omit<CreditData, 'transactionDate'>];
 
             if (typeof aValue === 'string' && typeof bValue === 'string') {
                 comparison = aValue.localeCompare(bValue, 'zh-Hant');
@@ -705,7 +725,7 @@ export function FinanceFlowClient() {
 
         return creditSortDirection === 'asc' ? comparison : -comparison;
     });
-}, [creditData, creditSortKey, creditSortDirection]);
+}, [creditData, creditSortKey, creditSortDirection, getCreditDisplayDate]);
 
   const sortedDepositData = useMemo(() => {
     if (!depositSortKey) return depositData;
@@ -768,26 +788,6 @@ export function FinanceFlowClient() {
     source: '信用卡' | '活存帳戶';
   };
 
-  const getCreditDisplayDate = (dateString: string) => {
-    try {
-      const now = new Date();
-      const currentYear = getYear(now);
-      const currentMonth = getMonth(now);
-      const parsedDate = parse(dateString, 'MM/dd', new Date());
-      const transactionMonth = getMonth(parsedDate);
-      
-      let dateObj;
-      if (transactionMonth > currentMonth) {
-          dateObj = new Date(new Date(parsedDate).setFullYear(currentYear - 1));
-      } else {
-          dateObj = new Date(new Date(parsedDate).setFullYear(currentYear));
-      }
-      return format(dateObj, 'yyyy/MM/dd');
-    } catch {
-      return dateString;
-    }
-  };
-
   const combinedData = useMemo<CombinedData[]>(() => {
     const combined: CombinedData[] = [];
 
@@ -828,7 +828,7 @@ export function FinanceFlowClient() {
     });
 
     return combined.sort((a, b) => b.dateObj.getTime() - a.dateObj.getTime());
-  }, [creditData, depositData]);
+  }, [creditData, depositData, getCreditDisplayDate]);
   
   const summaryReportData = useMemo(() => {
     const monthlyData: Record<string, Record<string, number>> = {};
@@ -1327,7 +1327,7 @@ export function FinanceFlowClient() {
                         {combinedData.length > 0 && <TabsTrigger value="combined"><Combine className="w-4 h-4 mr-2"/>合併報表</TabsTrigger>}
                         {creditData.length > 0 && <TabsTrigger value="credit">信用卡 ({creditData.length})</TabsTrigger>}
                         {depositData.length > 0 && <TabsTrigger value="deposit">活存帳戶 ({depositData.length})</TabsTrigger>}
-                        {creditData.length > 0 && <TabsTrigger value="summary"><FileText className="w-4 h-4 mr-2"/>彙總報表</TabsTrigger>}
+                        {(creditData.length > 0 || depositData.length > 0) && <TabsTrigger value="summary"><FileText className="w-4 h-4 mr-2"/>彙總報表</TabsTrigger>}
                         {creditData.length > 0 && <TabsTrigger value="chart"><BarChart2 className="w-4 h-4 mr-2"/>統計圖表</TabsTrigger>}
                       </TabsList>
                       {combinedData.length > 0 && (
@@ -1361,7 +1361,7 @@ export function FinanceFlowClient() {
                           <Table>
                             <TableHeader>
                               <TableRow>
-                                <SortableCreditHeader sortKey="transactionDate" style={{ width: '110px' }}>日期</SortableCreditHeader>
+                                <SortableCreditHeader sortKey="date" style={{ width: '110px' }}>日期</SortableCreditHeader>
                                 <SortableCreditHeader sortKey="category" style={{ width: '110px' }}>類型</SortableCreditHeader>
                                 <TableHead>交易項目</TableHead>
                                 <SortableCreditHeader sortKey="amount" className="text-right">金額</SortableCreditHeader>
@@ -1372,7 +1372,9 @@ export function FinanceFlowClient() {
                             <TableBody>
                               {sortedCreditData.map((row) => (
                                 <TableRow key={row.id}>
-                                  <TableCell className="font-mono" style={{ width: '110px' }}>{getCreditDisplayDate(row.transactionDate)}</TableCell>
+                                  <TableCell style={{ width: '110px' }}>
+                                    <div className="font-mono">{getCreditDisplayDate(row.transactionDate)}</div>
+                                  </TableCell>
                                   <TableCell style={{ width: '110px' }}>
                                     <Select
                                         value={row.category}
@@ -1442,7 +1444,9 @@ export function FinanceFlowClient() {
                             <TableBody>
                               {sortedDepositData.map((row) => (
                                 <TableRow key={row.id}>
-                                  <TableCell className="font-mono" style={{ width: '110px' }}>{row.date}</TableCell>
+                                  <TableCell style={{ width: '110px' }}>
+                                    <div className="font-mono">{row.date}</div>
+                                  </TableCell>
                                   <TableCell style={{ width: '110px' }}>
                                      <Select
                                         value={row.category}
