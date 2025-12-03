@@ -676,27 +676,44 @@ export function FinanceFlowClient() {
 
   const sortedCreditData = useMemo(() => {
     if (!creditSortKey) return creditData;
+    const now = new Date();
+    const currentYear = getYear(now);
+    const currentMonth = getMonth(now);
 
     return [...creditData].sort((a, b) => {
-        const aValue = a[creditSortKey];
-        const bValue = b[creditSortKey];
+        let aDate: Date, bDate: Date;
+        try {
+            const aParsed = parse(a.transactionDate, 'MM/dd', new Date());
+            if (getMonth(aParsed) > currentMonth) {
+                aDate = new Date(new Date(aParsed).setFullYear(currentYear - 1));
+            } else {
+                aDate = new Date(new Date(aParsed).setFullYear(currentYear));
+            }
+        } catch { aDate = new Date(0); }
+        
+        try {
+            const bParsed = parse(b.transactionDate, 'MM/dd', new Date());
+            if (getMonth(bParsed) > currentMonth) {
+                bDate = new Date(new Date(bParsed).setFullYear(currentYear - 1));
+            } else {
+                bDate = new Date(new Date(bParsed).setFullYear(currentYear));
+            }
+        } catch { bDate = new Date(0); }
 
         let comparison = 0;
         if (creditSortKey === 'transactionDate') {
-            try {
-                // Assuming MM/DD format, might need adjustment for YYYY/MM/DD
-                const dateA = parse(aValue as string, 'MM/dd', new Date());
-                const dateB = parse(bValue as string, 'MM/dd', new Date());
-                comparison = dateA.getTime() - dateB.getTime();
-            } catch {
-                comparison = (aValue as string || '').localeCompare(bValue as string || '');
-            }
-        } else if (typeof aValue === 'string' && typeof bValue === 'string') {
-            comparison = aValue.localeCompare(bValue, 'zh-Hant');
-        } else if (typeof aValue === 'number' && typeof bValue === 'number') {
-            comparison = aValue - bValue;
+            comparison = aDate.getTime() - bDate.getTime();
         } else {
-            comparison = String(aValue).localeCompare(String(bValue), 'zh-Hant');
+            const aValue = a[creditSortKey];
+            const bValue = b[creditSortKey];
+
+            if (typeof aValue === 'string' && typeof bValue === 'string') {
+                comparison = aValue.localeCompare(bValue, 'zh-Hant');
+            } else if (typeof aValue === 'number' && typeof bValue === 'number') {
+                comparison = aValue - bValue;
+            } else {
+                comparison = String(aValue).localeCompare(String(bValue), 'zh-Hant');
+            }
         }
 
         return creditSortDirection === 'asc' ? comparison : -comparison;
@@ -950,10 +967,10 @@ export function FinanceFlowClient() {
     );
   };
 
-  const SortableCreditHeader = ({ sortKey: key, children, className }: { sortKey: CreditSortKey, children: React.ReactNode, className?: string }) => {
+  const SortableCreditHeader = ({ sortKey: key, children, className, style }: { sortKey: CreditSortKey, children: React.ReactNode, className?: string, style?: React.CSSProperties }) => {
     const isSorted = creditSortKey === key;
     return (
-      <TableHead className={className}>
+      <TableHead className={className} style={style}>
         <Button variant="ghost" onClick={() => handleCreditSort(key)} className="px-2 py-1 h-auto -ml-2">
           {children}
           {isSorted ? (
@@ -966,10 +983,10 @@ export function FinanceFlowClient() {
     );
 };
 
-  const SortableDepositHeader = ({ sortKey: key, children, className }: { sortKey: DepositSortKey, children: React.ReactNode, className?: string }) => {
+  const SortableDepositHeader = ({ sortKey: key, children, className, style }: { sortKey: DepositSortKey, children: React.ReactNode, className?: string, style?: React.CSSProperties }) => {
     const isSorted = depositSortKey === key;
     return (
-      <TableHead className={className}>
+      <TableHead className={className} style={style}>
         <Button variant="ghost" onClick={() => handleDepositSort(key)} className="px-2 py-1 h-auto -ml-2">
           {children}
           {isSorted ? (
@@ -980,6 +997,26 @@ export function FinanceFlowClient() {
         </Button>
       </TableHead>
     );
+  };
+
+  const getCreditDisplayDate = (dateString: string) => {
+    try {
+      const now = new Date();
+      const currentYear = getYear(now);
+      const currentMonth = getMonth(now);
+      const parsedDate = parse(dateString, 'MM/dd', new Date());
+      const transactionMonth = getMonth(parsedDate);
+      
+      let dateObj;
+      if (transactionMonth > currentMonth) {
+          dateObj = new Date(new Date(parsedDate).setFullYear(currentYear - 1));
+      } else {
+          dateObj = new Date(new Date(parsedDate).setFullYear(currentYear));
+      }
+      return format(dateObj, 'yyyy/MM/dd');
+    } catch {
+      return dateString;
+    }
   };
 
 
@@ -1361,8 +1398,8 @@ export function FinanceFlowClient() {
                           <Table>
                             <TableHeader>
                               <TableRow>
-                                <SortableCreditHeader sortKey="transactionDate" className="w-[110px]">交易日期</SortableCreditHeader>
-                                <SortableCreditHeader sortKey="category" className="w-[110px]">類型</SortableCreditHeader>
+                                <SortableCreditHeader sortKey="transactionDate" style={{ width: '110px' }}>交易日期</SortableCreditHeader>
+                                <SortableCreditHeader sortKey="category" style={{ width: '110px' }}>類型</SortableCreditHeader>
                                 <TableHead>交易項目</TableHead>
                                 <SortableCreditHeader sortKey="amount" className="text-right">金額</SortableCreditHeader>
                                 <SortableCreditHeader sortKey="bankCode">銀行代碼/備註</SortableCreditHeader>
@@ -1372,8 +1409,8 @@ export function FinanceFlowClient() {
                             <TableBody>
                               {sortedCreditData.map((row) => (
                                 <TableRow key={row.id}>
-                                  <TableCell className="font-mono">{row.transactionDate}</TableCell>
-                                  <TableCell>
+                                  <TableCell className="font-mono" style={{ width: '110px' }}>{getCreditDisplayDate(row.transactionDate)}</TableCell>
+                                  <TableCell style={{ width: '110px' }}>
                                     <Select
                                         value={row.category}
                                         onValueChange={(newCategory) => handleUpdateCreditData(row.id, 'category', newCategory)}
@@ -1431,8 +1468,8 @@ export function FinanceFlowClient() {
                             <TableCaption>金額：支出為正，存入為負</TableCaption>
                             <TableHeader>
                               <TableRow>
-                                <SortableDepositHeader sortKey="date" className="w-[110px]">交易日期</SortableDepositHeader>
-                                <SortableDepositHeader sortKey="category" className="w-[110px]">類型</SortableDepositHeader>
+                                <SortableDepositHeader sortKey="date" style={{ width: '110px' }}>交易日期</SortableDepositHeader>
+                                <SortableDepositHeader sortKey="category" style={{ width: '110px' }}>類型</SortableDepositHeader>
                                 <SortableDepositHeader sortKey="description">交易項目</SortableDepositHeader>
                                 <SortableDepositHeader sortKey="amount" className="text-right">金額</SortableDepositHeader>
                                 <SortableDepositHeader sortKey="bankCode">銀行代碼/備註</SortableDepositHeader>
@@ -1442,8 +1479,8 @@ export function FinanceFlowClient() {
                             <TableBody>
                               {sortedDepositData.map((row) => (
                                 <TableRow key={row.id}>
-                                  <TableCell className="font-mono">{row.date}</TableCell>
-                                  <TableCell>
+                                  <TableCell className="font-mono" style={{ width: '110px' }}>{row.date}</TableCell>
+                                  <TableCell style={{ width: '110px' }}>
                                      <Select
                                         value={row.category}
                                         onValueChange={(newCategory) => handleUpdateDepositData(row.id, 'category', newCategory)}
