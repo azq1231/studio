@@ -81,6 +81,46 @@
         "description",
         "amount"
       ]
+    },
+    "CashTransaction": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "CashTransaction",
+      "type": "object",
+      "description": "Represents a single cash transaction.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the cash transaction."
+        },
+        "date": {
+          "type": "string",
+          "format": "date",
+          "description": "The date the transaction occurred."
+        },
+        "category": {
+          "type": "string",
+          "description": "The category of the transaction."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the transaction."
+        },
+        "amount": {
+          "type": "number",
+          "description": "The amount of the transaction. Positive values are expenses, negative values are income."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Any additional notes or remarks for the transaction."
+        }
+      },
+      "required": [
+        "id",
+        "date",
+        "category",
+        "description",
+        "amount"
+      ]
     }
   },
   "auth": {
@@ -130,8 +170,28 @@
             }
           ]
         }
+      },
+      {
+        "path": "/users/{userId}/cashTransactions/{transactionId}",
+        "definition": {
+          "entityName": "CashTransaction",
+          "schema": {
+            "$ref": "#/backend/entities/CashTransaction"
+          },
+          "description": "Stores individual cash transactions for a specific user. Authorization is based on path ownership.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user."
+            },
+            {
+              "name": "transactionId",
+              "description": "The unique identifier of the cash transaction."
+            }
+          ]
+        }
       }
     ],
-    "reasoning": "This design prioritizes user-owned data with path-based ownership, ensuring strong security and efficient querying. It leverages subcollections under the `users` collection to store credit card and deposit account transactions. This eliminates the need for complex security rules based on data content and ensures that only the authenticated user can access their own transaction data. Each user has dedicated subcollections for 'creditCardTransactions' and 'depositAccountTransactions'. This segregation simplifies security rules, as each collection has a homogeneous security posture (private to the user). This structure directly supports Authorization Independence because each document is implicitly authorized via its path. No denormalization is needed because authorization is directly derived from the path. This structure supports QAPs (Rules are not Filters) because list operations are scoped to the user's collections, enabling secure and efficient data retrieval."
+    "reasoning": "This design prioritizes user-owned data with path-based ownership, ensuring strong security and efficient querying. It leverages subcollections under the `users` collection to store credit card, deposit account, and cash transactions. This eliminates the need for complex security rules based on data content and ensures that only the authenticated user can access their own transaction data. Each user has dedicated subcollections for 'creditCardTransactions', 'depositAccountTransactions', and 'cashTransactions'. This segregation simplifies security rules, as each collection has a homogeneous security posture (private to the user). This structure directly supports Authorization Independence because each document is implicitly authorized via its path. No denormalization is needed because authorization is directly derived from the path. This structure supports QAPs (Rules are not Filters) because list operations are scoped to the user's collections, enabling secure and efficient data retrieval."
   }
 }

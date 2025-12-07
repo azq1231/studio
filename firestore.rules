@@ -110,5 +110,20 @@ service cloud.firestore {
       allow update: if isExistingOwner(userId);
       allow delete: if isExistingOwner(userId);
     }
+    
+    /**
+     * @description Secures a user's private cash transactions. Only the user who owns this data tree can access it.
+     * @path /users/USER_123/cashTransactions/CASH_XYZ
+     * @allow A user with auth.uid 'USER_123' can (create), (get), (update), or (delete) their own transaction.
+     * @deny A different user with auth.uid 'USER_456' is blocked from all operations on this path.
+     * @principle Restricts access to a user's own data tree. All operations are scoped to the authenticated owner.
+     */
+    match /users/{userId}/cashTransactions/{transactionId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
   }
 }

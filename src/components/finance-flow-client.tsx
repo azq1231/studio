@@ -50,12 +50,15 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { Calendar } from "@/components/ui/calendar"
 import { useToast } from "@/hooks/use-toast"
-import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2, FileText, RotateCcw, Combine, Search } from 'lucide-react';
+import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2, FileText, RotateCcw, Combine, Search, Calendar as CalendarIcon, Coins } from 'lucide-react';
 import { processBankStatement, type ReplacementRule, type CategoryRule } from '@/app/actions';
-import type { CreditData, DepositData } from '@/lib/parser';
+import type { CreditData, DepositData, CashData } from '@/lib/parser';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, doc, writeBatch, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, doc, writeBatch, updateDoc, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { randomUUID } from 'crypto';
+
 
 const statementFormSchema = z.object({
   statement: z.string().min(10, { message: '報表內容至少需要10個字元。' }),
@@ -83,12 +86,29 @@ const settingsFormSchema = z.object({
   quickFilters: z.array(quickFilterSchema),
 });
 
+const cashTransactionSchema = z.object({
+    date: z.date({
+        required_error: "請選擇日期",
+    }),
+    description: z.string().min(1, "請輸入交易項目"),
+    category: z.string().min(1, "請選擇類型"),
+    amount: z.number({
+        required_error: "請輸入金額",
+        invalid_type_error: "請輸入有效數字",
+    }).min(1, "金額必須大於 0"),
+    notes: z.string().optional(),
+    type: z.enum(['expense', 'income']).default('expense'),
+});
+
 type StatementFormData = z.infer<typeof statementFormSchema>;
 type SettingsFormData = z.infer<typeof settingsFormSchema>;
+type CashTransactionFormData = z.infer<typeof cashTransactionSchema>;
+
 type SortKey = 'keyword' | 'category';
 type SortDirection = 'asc' | 'desc';
 type CreditSortKey = 'date' | 'category' | 'description' | 'amount' | 'bankCode';
 type DepositSortKey = 'date' | 'category' | 'description' | 'amount' | 'bankCode';
+type CashSortKey = 'date' | 'category' | 'description' | 'amount' | 'notes';
 
 type QuickFilter = z.infer<typeof quickFilterSchema>;
 
@@ -202,22 +222,17 @@ export function FinanceFlowClient() {
       const now = new Date();
       const currentYear = getYear(now);
       const currentMonth = getMonth(now);
-      // Assuming the format is MM/dd, we parse it into a date object.
-      // We need to handle transactions from last year if the transaction month is "in the future"
-      // compared to the current month.
       const parsedDate = parse(dateString, 'MM/dd', new Date());
       const transactionMonth = getMonth(parsedDate);
       
       let dateObj;
       if (transactionMonth > currentMonth) {
-          // It's a previous year's transaction, e.g. current is Jan, transaction is Dec.
           dateObj = new Date(new Date(parsedDate).setFullYear(currentYear - 1));
       } else {
           dateObj = new Date(new Date(parsedDate).setFullYear(currentYear));
       }
       return format(dateObj, 'yyyy/MM/dd');
     } catch {
-      // If parsing fails for any reason, return the original string.
       return dateString;
     }
   };
@@ -234,6 +249,8 @@ export function FinanceFlowClient() {
   const [hasProcessed, setHasProcessed] = useState(false);
   const [creditData, setCreditData] = useState<CreditData[]>([]);
   const [depositData, setDepositData] = useState<DepositData[]>([]);
+  const [cashData, setCashData] = useState<CashData[]>([]);
+
   const { toast } = useToast();
 
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
@@ -247,6 +264,9 @@ export function FinanceFlowClient() {
 
   const [depositSortKey, setDepositSortKey] = useState<DepositSortKey | null>('date');
   const [depositSortDirection, setDepositSortDirection] = useState<SortDirection>('desc');
+  
+  const [cashSortKey, setCashSortKey] = useState<CashSortKey | null>('date');
+  const [cashSortDirection, setCashSortDirection] = useState<SortDirection>('desc');
 
   const [detailViewData, setDetailViewData] = useState<CreditData[]>([]);
   const [isDetailViewOpen, setIsDetailViewOpen] = useState(false);
@@ -271,6 +291,13 @@ export function FinanceFlowClient() {
 
   const { data: savedDepositTransactions, isLoading: isLoadingDepositTransactions } = useCollection<DepositData>(depositTransactionsQuery);
 
+  const cashTransactionsQuery = useMemoFirebase(
+    () => (user && firestore ? collection(firestore, 'users', user.uid, 'cashTransactions') : null),
+    [user, firestore]
+  );
+
+  const { data: savedCashTransactions, isLoading: isLoadingCashTransactions } = useCollection<CashData>(cashTransactionsQuery);
+
 
   const statementForm = useForm<StatementFormData>({
     resolver: zodResolver(statementFormSchema),
@@ -284,6 +311,16 @@ export function FinanceFlowClient() {
       replacementRules: [],
       categoryRules: [],
       quickFilters: [],
+    },
+  });
+  
+  const cashTransactionForm = useForm<CashTransactionFormData>({
+    resolver: zodResolver(cashTransactionSchema),
+    defaultValues: {
+        description: '',
+        category: '',
+        notes: '',
+        type: 'expense'
     },
   });
 
@@ -341,6 +378,24 @@ export function FinanceFlowClient() {
 
   }, [isUserLoading, savedDepositTransactions]);
 
+  useEffect(() => {
+    if (isUserLoading || !savedCashTransactions) return;
+
+    setCashData(prevData => {
+        const existingIds = new Set(prevData.map(d => d.id));
+        const newSaved = savedCashTransactions.filter(t => !existingIds.has(t.id));
+
+        if (newSaved.length === 0 && prevData.length === savedCashTransactions.length) {
+            return prevData;
+        }
+
+        const mergedData = [...prevData, ...newSaved];
+        const uniqueData = Array.from(new Map(mergedData.map(item => [item.id, item])).values());
+
+        return uniqueData;
+    });
+}, [isUserLoading, savedCashTransactions]);
+
 
   const resetReplacementRules = () => {
     replaceReplacementRules(DEFAULT_REPLACEMENT_RULES);
@@ -364,7 +419,6 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
   useEffect(() => {
     if (!isClient) return;
     try {
-      // Load available categories
       const savedCategories = localStorage.getItem('availableCategories');
       if (savedCategories) {
         setAvailableCategories(JSON.parse(savedCategories));
@@ -373,8 +427,6 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
         setAvailableCategories(defaultCategories);
         localStorage.setItem('availableCategories', JSON.stringify(defaultCategories));
       }
-
-      // Replacement Rules
       const savedReplacementRules = localStorage.getItem('replacementRules');
       if (savedReplacementRules) {
         const parsed = JSON.parse(savedReplacementRules);
@@ -384,11 +436,8 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
       } else {
         settingsForm.setValue('replacementRules', DEFAULT_REPLACEMENT_RULES);
       }
-
-      // Category Rules - Smart Merging on load
       const savedCategoryRulesRaw = localStorage.getItem('categoryRules');
       let finalCategoryRules = [...DEFAULT_CATEGORY_RULES];
-
       if (savedCategoryRulesRaw) {
         try {
             const savedRules = JSON.parse(savedCategoryRulesRaw) as CategoryRule[];
@@ -399,27 +448,21 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                 });
                 finalCategoryRules = Array.from(finalRulesMap.values());
             }
-        } catch {
-            // If parsing fails, stick with defaults
-        }
+        } catch {}
       }
-      
       settingsForm.setValue('categoryRules', finalCategoryRules);
       localStorage.setItem('categoryRules', JSON.stringify(finalCategoryRules));
 
-      // Quick Filters
       const savedQuickFilters = localStorage.getItem('quickFilters');
       if (savedQuickFilters) {
-        replaceQuickFilters(JSON.parse(savedQuickFilters));
+        settingsForm.setValue('quickFilters', JSON.parse(savedQuickFilters));
       } else {
-        replaceQuickFilters(DEFAULT_QUICK_FILTERS);
+        settingsForm.setValue('quickFilters', DEFAULT_QUICK_FILTERS);
       }
-
-
     } catch (e) {
       console.error("Failed to load settings from localStorage", e);
     }
-  }, [settingsForm, isClient, replaceQuickFilters, replaceCategoryRules, replaceReplacementRules]);
+  }, [isClient]);
 
   const handleSaveSettings = (data: SettingsFormData) => {
     try {
@@ -481,7 +524,6 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
     const result = await processBankStatement(values.statement, replacementRules, categoryRules);
     
     if (result.success) {
-      // Auto-add detected categories
       if (result.detectedCategories.length > 0) {
         const currentCats = JSON.parse(localStorage.getItem('availableCategories') || '[]');
         const newCats = result.detectedCategories.filter(c => !currentCats.includes(c));
@@ -566,6 +608,40 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
     statementForm.reset({ statement: '' });
   }
 
+  async function handleAddCashTransaction(values: CashTransactionFormData) {
+    if (!user || !firestore) {
+      toast({ variant: 'destructive', title: '錯誤', description: '請先登入' });
+      return;
+    }
+
+    const amount = values.type === 'expense' ? values.amount : -values.amount;
+
+    const newTransaction: Omit<CashData, 'id'> = {
+      date: format(values.date, 'yyyy/MM/dd'),
+      category: values.category,
+      description: values.description,
+      amount: amount,
+      notes: values.notes,
+    };
+
+    try {
+      const cashCollection = collection(firestore, 'users', user.uid, 'cashTransactions');
+      const docRef = await addDoc(cashCollection, newTransaction);
+      
+      setCashData(prev => [...prev, { ...newTransaction, id: docRef.id }]);
+      toast({ title: '成功', description: '現金交易已新增' });
+      cashTransactionForm.reset();
+
+    } catch (e: any) {
+      console.error("Error adding cash transaction:", e);
+      toast({
+        variant: "destructive",
+        title: "儲存失敗",
+        description: e.message || "無法將資料儲存到資料庫。",
+      });
+    }
+  }
+
   function handleDownload() {
     try {
       const wb = XLSX.utils.book_new();
@@ -581,7 +657,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
         const ws = XLSX.utils.json_to_sheet(creditSheetData);
         XLSX.utils.book_append_sheet(wb, ws, '信用卡報表');
       }
-
+      
       if (depositData.length > 0) {
         const depositSheetData = depositData.map(d => ({
           '日期': d.date,
@@ -592,6 +668,18 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
         }));
         const ws = XLSX.utils.json_to_sheet(depositSheetData);
         XLSX.utils.book_append_sheet(wb, ws, '活存報表');
+      }
+
+      if (cashData.length > 0) {
+        const cashSheetData = cashData.map(d => ({
+          '日期': d.date,
+          '類型': d.category,
+          '交易項目': d.description,
+          '金額（支出正、存入負）': d.amount,
+          '備註': d.notes || '',
+        }));
+        const ws = XLSX.utils.json_to_sheet(cashSheetData);
+        XLSX.utils.book_append_sheet(wb, ws, '現金收支');
       }
 
       const today = new Date().toISOString().split('T')[0];
@@ -620,7 +708,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
         setCreditSortDirection(creditSortDirection === 'asc' ? 'desc' : 'asc');
     } else {
         setCreditSortKey(key);
-        setCreditSortDirection('asc');
+        setCreditSortDirection('desc');
     }
   };
 
@@ -629,7 +717,16 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
         setDepositSortDirection(depositSortDirection === 'asc' ? 'desc' : 'asc');
     } else {
         setDepositSortKey(key);
-        setDepositSortDirection('asc');
+        setDepositSortDirection('desc');
+    }
+  };
+  
+  const handleCashSort = (key: CashSortKey) => {
+    if (cashSortKey === key) {
+        setCashSortDirection(cashSortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+        setCashSortKey(key);
+        setCashSortDirection('desc');
     }
   };
 
@@ -728,7 +825,54 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
             }
         }
     };
+    
+    const handleUpdateCashData = async (transactionId: string, field: keyof CashData, value: string | number) => {
+        setCashData(prevData =>
+            prevData.map(item =>
+                item.id === transactionId ? { ...item, [field]: value } : item
+            )
+        );
 
+        if (user && firestore) {
+            try {
+                const docRef = doc(firestore, 'users', user.uid, 'cashTransactions', transactionId);
+                await updateDoc(docRef, { [field]: value });
+            } catch (error) {
+                console.error(`Error updating ${field} in Firestore:`, error);
+                toast({
+                    variant: "destructive",
+                    title: "更新失敗",
+                    description: `無法將變更儲存到資料庫。`,
+                });
+                if (savedCashTransactions) {
+                   const originalItem = savedCashTransactions.find(t => t.id === transactionId);
+                   if (originalItem) {
+                       setCashData(prevData => prevData.map(item => item.id === transactionId ? originalItem : item));
+                   }
+                }
+            }
+        }
+    };
+
+    const handleDeleteCashTransaction = async (transactionId: string) => {
+        const originalData = [...cashData];
+        setCashData(prevData => prevData.filter(item => item.id !== transactionId));
+
+        if (user && firestore) {
+            try {
+                const docRef = doc(firestore, 'users', user.uid, 'cashTransactions', transactionId);
+                await deleteDoc(docRef);
+            } catch (error) {
+                console.error("Error deleting cash transaction from Firestore:", error);
+                toast({
+                    variant: "destructive",
+                    title: "刪除失敗",
+                    description: "無法從資料庫中刪除此筆交易。",
+                });
+                setCashData(originalData);
+            }
+        }
+    };
 
   const renderSortedCategoryFields = useMemo(() => {
      if (!sortKey) {
@@ -810,6 +954,40 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
     });
   }, [depositData, depositSortKey, depositSortDirection, searchQuery]);
 
+  const sortedCashData = useMemo(() => {
+    let filteredData = cashData;
+    if (searchQuery) {
+        filteredData = cashData.filter(item => 
+            item.description.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+    }
+
+    if (!cashSortKey) return filteredData;
+
+    return [...filteredData].sort((a, b) => {
+        const aValue = a[cashSortKey];
+        const bValue = b[cashSortKey];
+        let comparison = 0;
+        if (cashSortKey === 'date') {
+             try {
+                const dateA = parse(aValue as string, 'yyyy/MM/dd', new Date());
+                const dateB = parse(bValue as string, 'yyyy/MM/dd', new Date());
+                comparison = dateA.getTime() - dateB.getTime();
+            } catch {
+                comparison = (aValue as string || '').localeCompare(bValue as string || '');
+            }
+        } else if (typeof aValue === 'string' && typeof bValue === 'string') {
+            comparison = aValue.localeCompare(bValue, 'zh-Hant');
+        } else if (typeof aValue === 'number' && typeof bValue === 'number') {
+            comparison = aValue - bValue;
+        } else {
+             comparison = String(aValue || '').localeCompare(String(bValue || ''), 'zh-Hant');
+        }
+
+        return cashSortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [cashData, cashSortKey, cashSortDirection, searchQuery]);
+
 
   const categoryChartData = useMemo(() => {
     if (!creditData || creditData.length === 0) return [];
@@ -840,7 +1018,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
     category: string;
     description: string;
     amount: number;
-    source: '信用卡' | '活存帳戶';
+    source: '信用卡' | '活存帳戶' | '現金';
   };
 
   const combinedData = useMemo<CombinedData[]>(() => {
@@ -848,11 +1026,13 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
     
     let filteredCreditData = creditData;
     let filteredDepositData = depositData;
+    let filteredCashData = cashData;
 
     if (searchQuery) {
         const lowercasedQuery = searchQuery.toLowerCase();
         filteredCreditData = creditData.filter(d => d.description.toLowerCase().includes(lowercasedQuery));
         filteredDepositData = depositData.filter(d => d.description.toLowerCase().includes(lowercasedQuery));
+        filteredCashData = cashData.filter(d => d.description.toLowerCase().includes(lowercasedQuery));
     }
 
 
@@ -891,9 +1071,27 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
         source: '活存帳戶',
       });
     });
+    
+    filteredCashData.forEach(d => {
+       let dateObj;
+       try {
+         dateObj = parse(d.date, 'yyyy/MM/dd', new Date());
+       } catch {
+         dateObj = new Date(0);
+       }
+      combined.push({
+        id: d.id,
+        date: d.date,
+        dateObj: dateObj,
+        category: d.category,
+        description: d.description,
+        amount: d.amount,
+        source: '現金',
+      });
+    });
 
     return combined.sort((a, b) => b.dateObj.getTime() - a.dateObj.getTime());
-  }, [creditData, depositData, getCreditDisplayDate, searchQuery]);
+  }, [creditData, depositData, cashData, getCreditDisplayDate, searchQuery]);
   
   const summaryReportData = useMemo(() => {
     const monthlyData: Record<string, Record<string, number>> = {};
@@ -952,13 +1150,10 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
 
 
   useEffect(() => {
-    // This effect sets the default selection for the summary report categories.
-    // It should only run once after the first time data is processed.
     if (hasProcessed) {
-        // We read the categories from localStorage as it is the source of truth for all available categories.
-        const allCats = JSON.parse(localStorage.getItem('availableCategories') || '[]');
-        if (allCats.length > 0) {
-            setSummarySelectedCategories(allCats);
+        const currentCats = JSON.parse(localStorage.getItem('availableCategories') || '[]');
+        if (currentCats.length > 0) {
+            setSummarySelectedCategories(currentCats);
         }
     }
   }, [hasProcessed]);
@@ -983,7 +1178,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
 
     const sortedFilteredData = filteredData.sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
 
-    setDetailViewData(sortedFilteredData as any); // Cast is okay as we just need a few fields
+    setDetailViewData(sortedFilteredData as any);
     setDetailViewTitle(`${monthKey} - ${category}`);
     setIsDetailViewOpen(true);
   };
@@ -993,14 +1188,14 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
   }
 
 
-  const noDataFound = hasProcessed && !isLoading && creditData.length === 0 && depositData.length === 0;
-  const hasData = creditData.length > 0 || depositData.length > 0;
+  const noDataFound = hasProcessed && !isLoading && creditData.length === 0 && depositData.length === 0 && cashData.length === 0;
+  const hasData = creditData.length > 0 || depositData.length > 0 || cashData.length > 0;
   
   const defaultTab = hasData
-    ? (creditData.length > 0 ? "credit" : "deposit")
+    ? (creditData.length > 0 ? "credit" : (depositData.length > 0 ? "deposit" : "cash"))
     : "statement";
 
-  const isLoadingTransactions = isLoadingCreditTransactions || isLoadingDepositTransactions;
+  const isLoadingTransactions = isLoadingCreditTransactions || isLoadingDepositTransactions || isLoadingCashTransactions;
   const showResults = (hasProcessed && hasData) || (!isUserLoading && !hasProcessed && hasData && !isLoadingTransactions);
 
 
@@ -1044,6 +1239,22 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
           {children}
           {isSorted ? (
             depositSortDirection === 'asc' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />
+          ) : (
+            <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
+          )}
+        </Button>
+      </TableHead>
+    );
+  };
+  
+  const SortableCashHeader = ({ sortKey: key, children, style }: { sortKey: CashSortKey, children: React.ReactNode, style?: React.CSSProperties }) => {
+    const isSorted = cashSortKey === key;
+    return (
+      <TableHead style={style}>
+        <Button variant="ghost" onClick={() => handleCashSort(key)} className="px-2 py-1 h-auto -ml-2">
+          {children}
+          {isSorted ? (
+            cashSortDirection === 'asc' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />
           ) : (
             <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
           )}
@@ -1518,7 +1729,8 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                         {combinedData.length > 0 && <TabsTrigger value="combined"><Combine className="w-4 h-4 mr-2"/>合併報表</TabsTrigger>}
                         {creditData.length > 0 && <TabsTrigger value="credit">信用卡 ({sortedCreditData.length})</TabsTrigger>}
                         {depositData.length > 0 && <TabsTrigger value="deposit">活存帳戶 ({sortedDepositData.length})</TabsTrigger>}
-                        {(creditData.length > 0 || depositData.length > 0) && <TabsTrigger value="summary"><FileText className="w-4 h-4 mr-2"/>彙總報表</TabsTrigger>}
+                        {cashData.length > 0 && <TabsTrigger value="cash">現金 ({sortedCashData.length})</TabsTrigger>}
+                        {(creditData.length > 0 || depositData.length > 0 || cashData.length > 0) && <TabsTrigger value="summary"><FileText className="w-4 h-4 mr-2"/>彙總報表</TabsTrigger>}
                         {creditData.length > 0 && <TabsTrigger value="chart"><BarChart2 className="w-4 h-4 mr-2"/>統計圖表</TabsTrigger>}
                       </TabsList>
                       {combinedData.length > 0 && (
@@ -1690,6 +1902,197 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                           </Table>
                         </TabsContent>
                       )}
+                      {cashData.length > 0 && (
+                        <TabsContent value="cash">
+                          <Card className="mb-4">
+                            <CardHeader>
+                                <CardTitle>新增現金交易</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                               <Form {...cashTransactionForm}>
+                                    <form onSubmit={cashTransactionForm.handleSubmit(handleAddCashTransaction)} className="space-y-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                            <FormField
+                                                control={cashTransactionForm.control}
+                                                name="date"
+                                                render={({ field }) => (
+                                                    <FormItem className="flex flex-col">
+                                                    <FormLabel>日期</FormLabel>
+                                                    <Popover>
+                                                        <PopoverTrigger asChild>
+                                                        <FormControl>
+                                                            <Button
+                                                            variant={"outline"}
+                                                            className={cn(
+                                                                "pl-3 text-left font-normal",
+                                                                !field.value && "text-muted-foreground"
+                                                            )}
+                                                            >
+                                                            {field.value ? (
+                                                                format(field.value, "yyyy/MM/dd")
+                                                            ) : (
+                                                                <span>選擇日期</span>
+                                                            )}
+                                                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                                            </Button>
+                                                        </FormControl>
+                                                        </PopoverTrigger>
+                                                        <PopoverContent className="w-auto p-0" align="start">
+                                                        <Calendar
+                                                            mode="single"
+                                                            selected={field.value}
+                                                            onSelect={field.onChange}
+                                                            disabled={(date) =>
+                                                                date > new Date() || date < new Date("1900-01-01")
+                                                            }
+                                                            initialFocus
+                                                        />
+                                                        </PopoverContent>
+                                                    </Popover>
+                                                    <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={cashTransactionForm.control}
+                                                name="description"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>交易項目</FormLabel>
+                                                        <FormControl>
+                                                            <Input placeholder="例如：午餐" {...field} />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                             <FormField
+                                                control={cashTransactionForm.control}
+                                                name="amount"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>金額</FormLabel>
+                                                        <FormControl>
+                                                            <Input type="number" placeholder="120" {...field} onChange={e => field.onChange(parseFloat(e.target.value))}/>
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={cashTransactionForm.control}
+                                                name="category"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>類型</FormLabel>
+                                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                            <FormControl>
+                                                            <SelectTrigger>
+                                                                <SelectValue placeholder="選擇一個類型" />
+                                                            </SelectTrigger>
+                                                            </FormControl>
+                                                            <SelectContent>
+                                                                {availableCategories.map(cat => (
+                                                                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={cashTransactionForm.control}
+                                                name="notes"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>備註</FormLabel>
+                                                        <FormControl>
+                                                            <Input placeholder="（選填）" {...field} />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                        </div>
+                                        <div className="flex justify-end">
+                                            <Button type="submit" disabled={!user || cashTransactionForm.formState.isSubmitting}>
+                                                {cashTransactionForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                                新增
+                                            </Button>
+                                        </div>
+                                    </form>
+                                </Form>
+                            </CardContent>
+                          </Card>
+                          <Table>
+                            <TableCaption>金額：支出為正，存入為負</TableCaption>
+                            <TableHeader>
+                              <TableRow>
+                                <SortableCashHeader sortKey="date" style={{ width: '110px' }}>日期</SortableCashHeader>
+                                <TableHead style={{ width: '110px' }}>類型</TableHead>
+                                <TableHead>交易項目</TableHead>
+                                <SortableCashHeader sortKey="amount" style={{ width: '100px' }}>金額</SortableCashHeader>
+                                <TableHead>備註</TableHead>
+                                <TableHead className="w-[80px] text-center">操作</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {sortedCashData.map((row) => (
+                                <TableRow key={row.id}>
+                                  <TableCell style={{ width: '110px' }}><div className="font-mono">{row.date}</div></TableCell>
+                                  <TableCell style={{ width: '110px' }}>
+                                    <Select
+                                      value={row.category}
+                                      onValueChange={(newCategory) => handleUpdateCashData(row.id, 'category', newCategory)}
+                                      disabled={!user}
+                                    >
+                                      <SelectTrigger className="h-8 w-full">
+                                        <SelectValue placeholder="選擇類型" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {availableCategories.map(cat => (
+                                          <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Input
+                                      type="text"
+                                      defaultValue={row.description}
+                                      onBlur={(e) => handleUpdateCashData(row.id, 'description', e.target.value)}
+                                      disabled={!user}
+                                      className="h-8"
+                                    />
+                                  </TableCell>
+                                  <TableCell style={{ width: '100px' }} className={`text-right font-mono ${row.amount < 0 ? 'text-green-600' : 'text-destructive'}`}>{row.amount.toLocaleString()}</TableCell>
+                                  <TableCell>
+                                    <Input
+                                      type="text"
+                                      defaultValue={row.notes || ''}
+                                      onBlur={(e) => handleUpdateCashData(row.id, 'notes', e.target.value)}
+                                      disabled={!user}
+                                      className="h-8"
+                                    />
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => handleDeleteCashTransaction(row.id)}
+                                      disabled={!user}
+                                      className="h-8 w-8"
+                                    >
+                                      <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </TabsContent>
+                      )}
                        {(creditData.length > 0 || depositData.length > 0) && (
                         <TabsContent value="summary">
                           <div className="flex flex-wrap items-center gap-2 my-4">
@@ -1716,6 +2119,8 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                                         id={`cat-${category}`}
                                         checked={summarySelectedCategories.includes(category)}
                                         onCheckedChange={(checked) => {
+                                          const currentCats = JSON.parse(localStorage.getItem('availableCategories') || '[]');
+                                          setAvailableCategories(currentCats);
                                           return checked
                                             ? setSummarySelectedCategories([...summarySelectedCategories, category])
                                             : setSummarySelectedCategories(summarySelectedCategories.filter(c => c !== category))

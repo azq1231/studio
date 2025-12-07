@@ -119,6 +119,16 @@ export type DepositData = {
   bankCode?: string;
 };
 
+export type CashData = {
+  id: string;
+  date: string;
+  category: string;
+  description: string;
+  amount: number;
+  notes?: string;
+};
+
+
 type SpecialRule = {
   merge_remark: boolean;
   remark_col: number | null;
@@ -213,7 +223,10 @@ export function parseDepositAccount(text: string, replacementRules: ReplacementR
     if (temp && line) {
       const match = line.match(/^([\d/]+)/);
       if (match) {
-        if(temp.length > 5 && !temp[5]) temp[5] = match[1]; // bankCode, only if not already set by remarkMatch
+        const remarkMatch = line.match(/(\[[^\]]+\])/);
+        if (remarkMatch) {
+            if(temp.length > 5) temp[5] = remarkMatch[1];
+        }
       }
     }
   }
