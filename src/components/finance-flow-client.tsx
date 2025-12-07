@@ -51,7 +51,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
-import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2, FileText, RotateCcw, Combine } from 'lucide-react';
+import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2, FileText, RotateCcw, Combine, Search } from 'lucide-react';
 import { processBankStatement, type ReplacementRule, type CategoryRule } from '@/app/actions';
 import type { CreditData, DepositData } from '@/lib/parser';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
@@ -254,6 +254,7 @@ export function FinanceFlowClient() {
   
   const [summarySelectedCategories, setSummarySelectedCategories] = useState<string[]>([]);
   const [isSummaryFilterOpen, setIsSummaryFilterOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
 
   const creditTransactionsQuery = useMemoFirebase(
@@ -349,7 +350,7 @@ export function FinanceFlowClient() {
 
   const resetCategoryRules = () => {
     replaceCategoryRules(DEFAULT_CATEGORY_RULES);
-    localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
+localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
     toast({ title: '分類規則已重置', description: '已恢復為預設規則。' });
   };
   
@@ -742,9 +743,16 @@ export function FinanceFlowClient() {
   }, [categoryFields, sortKey, sortDirection, settingsForm]);
 
   const sortedCreditData = useMemo(() => {
-    if (!creditSortKey) return creditData;
+    let filteredData = creditData;
+    if (searchQuery) {
+        filteredData = creditData.filter(item => 
+            item.description.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+    }
+    
+    if (!creditSortKey) return filteredData;
 
-    return [...creditData].sort((a, b) => {
+    return [...filteredData].sort((a, b) => {
         let comparison = 0;
         if (creditSortKey === 'date') {
             const dateA = new Date(getCreditDisplayDate(a.transactionDate)).getTime();
@@ -765,12 +773,19 @@ export function FinanceFlowClient() {
 
         return creditSortDirection === 'asc' ? comparison : -comparison;
     });
-}, [creditData, creditSortKey, creditSortDirection, getCreditDisplayDate]);
+  }, [creditData, creditSortKey, creditSortDirection, getCreditDisplayDate, searchQuery]);
 
   const sortedDepositData = useMemo(() => {
-    if (!depositSortKey) return depositData;
+    let filteredData = depositData;
+    if (searchQuery) {
+        filteredData = depositData.filter(item => 
+            item.description.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+    }
+    
+    if (!depositSortKey) return filteredData;
 
-    return [...depositData].sort((a, b) => {
+    return [...filteredData].sort((a, b) => {
         const aValue = a[depositSortKey];
         const bValue = b[depositSortKey];
 
@@ -793,7 +808,7 @@ export function FinanceFlowClient() {
 
         return depositSortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [depositData, depositSortKey, depositSortDirection]);
+  }, [depositData, depositSortKey, depositSortDirection, searchQuery]);
 
 
   const categoryChartData = useMemo(() => {
@@ -829,9 +844,19 @@ export function FinanceFlowClient() {
   };
 
   const combinedData = useMemo<CombinedData[]>(() => {
-    const combined: CombinedData[] = [];
+    let combined: CombinedData[] = [];
+    
+    let filteredCreditData = creditData;
+    let filteredDepositData = depositData;
 
-    creditData.forEach(d => {
+    if (searchQuery) {
+        const lowercasedQuery = searchQuery.toLowerCase();
+        filteredCreditData = creditData.filter(d => d.description.toLowerCase().includes(lowercasedQuery));
+        filteredDepositData = depositData.filter(d => d.description.toLowerCase().includes(lowercasedQuery));
+    }
+
+
+    filteredCreditData.forEach(d => {
       let dateObj;
       try {
         dateObj = new Date(getCreditDisplayDate(d.transactionDate));
@@ -849,7 +874,7 @@ export function FinanceFlowClient() {
       });
     });
 
-    depositData.forEach(d => {
+    filteredDepositData.forEach(d => {
        let dateObj;
        try {
          dateObj = parse(d.date, 'yyyy/MM/dd', new Date());
@@ -868,13 +893,20 @@ export function FinanceFlowClient() {
     });
 
     return combined.sort((a, b) => b.dateObj.getTime() - a.dateObj.getTime());
-  }, [creditData, depositData, getCreditDisplayDate]);
+  }, [creditData, depositData, getCreditDisplayDate, searchQuery]);
   
   const summaryReportData = useMemo(() => {
     const monthlyData: Record<string, Record<string, number>> = {};
     const allCategoriesInReport = new Set<string>();
 
-    combinedData.forEach(transaction => {
+    const sourceData = combinedData.filter(item => {
+        if(searchQuery){
+            return item.description.toLowerCase().includes(searchQuery.toLowerCase());
+        }
+        return true;
+    });
+
+    sourceData.forEach(transaction => {
         try {
             const { dateObj, category, amount } = transaction;
             
@@ -916,7 +948,7 @@ export function FinanceFlowClient() {
     }).sort((a, b) => (a['日期（年月）'] as string).localeCompare(b['日期（年月）'] as string, 'zh-Hant', { numeric: true }));
     
     return { headers, rows };
-  }, [combinedData, summarySelectedCategories]);
+  }, [combinedData, summarySelectedCategories, searchQuery]);
 
 
   useEffect(() => {
@@ -1116,7 +1148,7 @@ export function FinanceFlowClient() {
                                 <TableHeader>
                                   <TableRow>
                                     <TableHead className="w-2/5">尋找文字</TableHead>
-                                    <TableHead className="w-2/5">取代為</TableHead>
+                                    <TableHead className="w-2_5">取代為</TableHead>
                                     <TableHead className="w-1/5 text-center">刪除整筆資料</TableHead>
                                     <TableHead className="w-[50px]">操作</TableHead>
                                   </TableRow>
@@ -1466,7 +1498,16 @@ export function FinanceFlowClient() {
                 
                 {hasData && (
                   <div>
-                    <div className="flex justify-end items-center mb-4">
+                    <div className="flex justify-between items-center mb-4 gap-4">
+                       <div className="relative w-full max-w-sm">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="尋找交易項目..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="pl-10"
+                        />
+                      </div>
                       <Button variant="outline" size="sm" onClick={handleDownload}>
                         <Download className="mr-2 h-4 w-4" />
                         下載 Excel
@@ -1475,8 +1516,8 @@ export function FinanceFlowClient() {
                     <Tabs defaultValue={defaultTab} className="w-full">
                       <TabsList>
                         {combinedData.length > 0 && <TabsTrigger value="combined"><Combine className="w-4 h-4 mr-2"/>合併報表</TabsTrigger>}
-                        {creditData.length > 0 && <TabsTrigger value="credit">信用卡 ({creditData.length})</TabsTrigger>}
-                        {depositData.length > 0 && <TabsTrigger value="deposit">活存帳戶 ({depositData.length})</TabsTrigger>}
+                        {creditData.length > 0 && <TabsTrigger value="credit">信用卡 ({sortedCreditData.length})</TabsTrigger>}
+                        {depositData.length > 0 && <TabsTrigger value="deposit">活存帳戶 ({sortedDepositData.length})</TabsTrigger>}
                         {(creditData.length > 0 || depositData.length > 0) && <TabsTrigger value="summary"><FileText className="w-4 h-4 mr-2"/>彙總報表</TabsTrigger>}
                         {creditData.length > 0 && <TabsTrigger value="chart"><BarChart2 className="w-4 h-4 mr-2"/>統計圖表</TabsTrigger>}
                       </TabsList>
@@ -1587,7 +1628,7 @@ export function FinanceFlowClient() {
                                 <SortableDepositHeader sortKey="category" style={{ width: '110px' }}>類型</SortableDepositHeader>
                                 <SortableDepositHeader sortKey="description">交易項目</SortableDepositHeader>
                                 <SortableDepositHeader sortKey="amount" style={{ width: '100px' }}>金額</SortableDepositHeader>
-                                <SortableDepositHeader sortKey="bankCode">銀行代碼/備註</SortableDepositHeader>
+                                <TableHead>銀行代碼/備註</TableHead>
                                 <TableHead className="w-[80px] text-center">操作</TableHead>
                               </TableRow>
                             </TableHeader>
