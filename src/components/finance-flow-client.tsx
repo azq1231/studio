@@ -1151,10 +1151,10 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
 
   useEffect(() => {
     if (hasProcessed) {
-        const currentCats = JSON.parse(localStorage.getItem('availableCategories') || '[]');
-        if (currentCats.length > 0) {
-            setSummarySelectedCategories(currentCats);
-        }
+      const currentCats = JSON.parse(localStorage.getItem('availableCategories') || '[]');
+      if (currentCats.length > 0) {
+        setSummarySelectedCategories(currentCats);
+      }
     }
   }, [hasProcessed]);
 
@@ -1731,7 +1731,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                         {combinedData.length > 0 && <TabsTrigger value="combined"><Combine className="w-4 h-4 mr-2"/>合併報表</TabsTrigger>}
                         {creditData.length > 0 && <TabsTrigger value="credit">信用卡 ({sortedCreditData.length})</TabsTrigger>}
                         {depositData.length > 0 && <TabsTrigger value="deposit">活存帳戶 ({sortedDepositData.length})</TabsTrigger>}
-                        {cashData.length > 0 && <TabsTrigger value="cash">現金 ({sortedCashData.length})</TabsTrigger>}
+                        <TabsTrigger value="cash">現金 ({sortedCashData.length})</TabsTrigger>
                         {(creditData.length > 0 || depositData.length > 0 || cashData.length > 0) && <TabsTrigger value="summary"><FileText className="w-4 h-4 mr-2"/>彙總報表</TabsTrigger>}
                         {creditData.length > 0 && <TabsTrigger value="chart"><BarChart2 className="w-4 h-4 mr-2"/>統計圖表</TabsTrigger>}
                       </TabsList>
@@ -1904,7 +1904,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                           </Table>
                         </TabsContent>
                       )}
-                      {cashData.length > 0 && (
+                      
                         <TabsContent value="cash">
                           <Card className="mb-4">
                             <CardHeader>
@@ -2094,8 +2094,8 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                             </TableBody>
                           </Table>
                         </TabsContent>
-                      )}
-                       {(creditData.length > 0 || depositData.length > 0) && (
+                      
+                       {(creditData.length > 0 || depositData.length > 0 || cashData.length > 0) && (
                         <TabsContent value="summary">
                           <div className="flex flex-wrap items-center gap-2 my-4">
                               <Popover open={isSummaryFilterOpen} onOpenChange={setIsSummaryFilterOpen}>
