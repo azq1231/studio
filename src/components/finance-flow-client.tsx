@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useId } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -57,7 +57,7 @@ import { processBankStatement, type ReplacementRule, type CategoryRule } from '@
 import type { CreditData, DepositData, CashData } from '@/lib/parser';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection, doc, writeBatch, updateDoc, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
-import { randomUUID } from 'crypto';
+import { cn } from '@/lib/utils';
 
 
 const statementFormSchema = z.object({
@@ -462,7 +462,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
     } catch (e) {
       console.error("Failed to load settings from localStorage", e);
     }
-  }, [isClient]);
+  }, [isClient, settingsForm]);
 
   const handleSaveSettings = (data: SettingsFormData) => {
     try {
@@ -1184,6 +1184,8 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
   };
   
   const applyQuickFilter = (categories: string[]) => {
+    const currentCats = JSON.parse(localStorage.getItem('availableCategories') || '[]');
+    setAvailableCategories(currentCats);
     setSummarySelectedCategories(categories);
   }
 
@@ -2247,7 +2249,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
               <TableBody>
                 {detailViewData.length > 0 ? (
                   detailViewData.map(item => (
-                    <TableRow key={item.id}>
+                    <TableRow key={useId()}>
                       <TableCell className="font-mono">{(item as any).transactionDate ? getCreditDisplayDate((item as any).transactionDate) : (item as any).date}</TableCell>
                       <TableCell>{item.description}</TableCell>
                       <TableCell>{(item as any).source || '信用卡'}</TableCell>
