@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useId } from 'react';
+import { useState, useEffect, useMemo, useId, useRef } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -52,7 +52,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Calendar } from "@/components/ui/calendar"
 import { useToast } from "@/hooks/use-toast"
-import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2, FileText, RotateCcw, Combine, Search, Calendar as CalendarIcon, Coins } from 'lucide-react';
+import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2, FileText, RotateCcw, Combine, Search, Calendar as CalendarIcon, Coins, Upload } from 'lucide-react';
 import { processBankStatement, type ReplacementRule, type CategoryRule } from '@/app/actions';
 import type { CreditData, DepositData, CashData } from '@/lib/parser';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
@@ -240,6 +240,7 @@ export function FinanceFlowClient() {
   const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
   const [isClient, setIsClient] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setIsClient(true);
@@ -516,12 +517,12 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
   };
 
 
-  async function onSubmit(values: StatementFormData) {
+  async function processAndSaveData(text: string) {
     setIsLoading(true);
     setHasProcessed(false);
     
     const { replacementRules, categoryRules } = settingsForm.getValues();
-    const result = await processBankStatement(values.statement, replacementRules, categoryRules);
+    const result = await processBankStatement(text, replacementRules, categoryRules);
     
     if (result.success) {
       if (result.detectedCategories.length > 0) {
@@ -607,6 +608,46 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
     setHasProcessed(true);
     statementForm.reset({ statement: '' });
   }
+
+  async function onSubmit(values: StatementFormData) {
+    await processAndSaveData(values.statement);
+  }
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const data = e.target?.result;
+        if (typeof data === 'string' || data instanceof ArrayBuffer) {
+          const workbook = XLSX.read(data, { type: data instanceof ArrayBuffer ? 'array' : 'string' });
+          let fullText = '';
+          workbook.SheetNames.forEach(sheetName => {
+            const worksheet = workbook.Sheets[sheetName];
+            const text = XLSX.utils.sheet_to_csv(worksheet, { header: 1, skipHidden: true, RS: '\n' });
+            fullText += text + '\n\n';
+          });
+          await processAndSaveData(fullText);
+        }
+      } catch (error) {
+        console.error("Error parsing file:", error);
+        toast({
+          variant: "destructive",
+          title: "檔案解析失敗",
+          description: "無法讀取或解析您提供的檔案，請確認格式是否正確。",
+        });
+      } finally {
+        // Reset file input so the same file can be uploaded again
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
 
   async function handleAddCashTransaction(values: CashTransactionFormData) {
     if (!user || !firestore) {
@@ -1269,12 +1310,29 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
     <div className="space-y-4">
       <Card className="shadow-lg">
         <CardHeader>
-          <CardTitle>貼上報表內容</CardTitle>
-          <CardDescription>
-            {isClient && user
-              ? "將您的網路銀行報表內容直接複製並貼到下方文字框中，處理後的資料將會自動儲存到您的帳戶。"
-              : "將您的網路銀行報表內容直接複製並貼到下方文字框中。如需儲存資料，請先登入。"}
-          </CardDescription>
+            <div className="flex justify-between items-center">
+                <div>
+                    <CardTitle>貼上報表內容</CardTitle>
+                    <CardDescription className="mt-2">
+                        {isClient && user
+                        ? "將您的網路銀行報表內容直接複製並貼到下方文字框中，或點擊右方按鈕匯入 Excel 檔案。處理後的資料將會自動儲存到您的帳戶。"
+                        : "將您的網路銀行報表內容直接複製並貼到下方文字框中，或點擊右方按鈕匯入 Excel 檔案。如需儲存資料，請先登入。"}
+                    </CardDescription>
+                </div>
+                <div>
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileChange}
+                        className="hidden"
+                        accept=".xlsx, .xls"
+                    />
+                    <Button onClick={() => fileInputRef.current?.click()} variant="outline">
+                        <Upload className="mr-2 h-4 w-4" />
+                        從檔案匯入
+                    </Button>
+                </div>
+            </div>
         </CardHeader>
         <CardContent>
           <Form {...statementForm}>
