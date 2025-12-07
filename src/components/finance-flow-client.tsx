@@ -348,11 +348,16 @@ export function FinanceFlowClient() {
         const existingIds = new Set(prevData.map(d => d.id));
         const newSaved = savedCreditTransactions.filter(t => !existingIds.has(t.id));
         
-        if (newSaved.length === 0 && prevData.length === savedCreditTransactions.length) {
+        const updatedData = prevData.map(old => {
+            const updated = savedCreditTransactions.find(s => s.id === old.id);
+            return updated ? updated : old;
+        });
+
+        if (newSaved.length === 0 && prevData.length === updatedData.length) {
             return prevData;
         }
         
-        const mergedData = [...prevData, ...newSaved];
+        const mergedData = [...updatedData, ...newSaved];
         const uniqueData = Array.from(new Map(mergedData.map(item => [item.id, item])).values());
         
         return uniqueData;
@@ -367,11 +372,16 @@ export function FinanceFlowClient() {
         const existingIds = new Set(prevData.map(d => d.id));
         const newSaved = savedDepositTransactions.filter(t => !existingIds.has(t.id));
         
-        if (newSaved.length === 0 && prevData.length === savedDepositTransactions.length) {
+        const updatedData = prevData.map(old => {
+            const updated = savedDepositTransactions.find(s => s.id === old.id);
+            return updated ? updated : old;
+        });
+        
+        if (newSaved.length === 0 && prevData.length === updatedData.length) {
             return prevData;
         }
         
-        const mergedData = [...prevData, ...newSaved];
+        const mergedData = [...updatedData, ...newSaved];
         const uniqueData = Array.from(new Map(mergedData.map(item => [item.id, item])).values());
         
         return uniqueData;
@@ -385,12 +395,17 @@ export function FinanceFlowClient() {
     setCashData(prevData => {
         const existingIds = new Set(prevData.map(d => d.id));
         const newSaved = savedCashTransactions.filter(t => !existingIds.has(t.id));
+        
+        const updatedData = prevData.map(old => {
+            const updated = savedCashTransactions.find(s => s.id === old.id);
+            return updated ? updated : old;
+        });
 
-        if (newSaved.length === 0 && prevData.length === savedCashTransactions.length) {
+        if (newSaved.length === 0 && prevData.length === updatedData.length) {
             return prevData;
         }
 
-        const mergedData = [...prevData, ...newSaved];
+        const mergedData = [...updatedData, ...newSaved];
         const uniqueData = Array.from(new Map(mergedData.map(item => [item.id, item])).values());
 
         return uniqueData;
@@ -536,18 +551,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
         }
       }
 
-      if (result.creditData.length > 0) {
-        setCreditData(prevData => {
-          const combined = [...prevData, ...result.creditData];
-          return Array.from(new Map(combined.map(item => [item.id, item])).values());
-        });
-      }
-      if (result.depositData.length > 0) {
-        setDepositData(prevData => {
-          const combined = [...prevData, ...result.depositData];
-          return Array.from(new Map(combined.map(item => [item.id, item])).values());
-        });
-      }
+      // No state update here, rely on Firestore listener
       
       if (user && firestore) {
         const batch = writeBatch(firestore);
@@ -667,9 +671,9 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
 
     try {
       const cashCollection = collection(firestore, 'users', user.uid, 'cashTransactions');
-      const docRef = await addDoc(cashCollection, newTransaction);
+      await addDoc(cashCollection, newTransaction);
       
-      setCashData(prev => [...prev, { ...newTransaction, id: docRef.id }]);
+      // No local state update, will be handled by listener
       toast({ title: '成功', description: '現金交易已新增' });
       cashTransactionForm.reset();
 
@@ -686,41 +690,42 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
   function handleDownload() {
     try {
       const wb = XLSX.utils.book_new();
-
-      if (creditData.length > 0) {
-        const creditSheetData = creditData.map(d => ({
-          '日期': getCreditDisplayDate(d.transactionDate),
-          '類型': d.category,
-          '交易項目': d.description,
-          '金額': d.amount,
-          '銀行代碼/備註': d.bankCode || '',
-        }));
-        const ws = XLSX.utils.json_to_sheet(creditSheetData);
-        XLSX.utils.book_append_sheet(wb, ws, '信用卡報表');
-      }
       
-      if (depositData.length > 0) {
-        const depositSheetData = depositData.map(d => ({
-          '日期': d.date,
-          '類型': d.category,
-          '交易項目': d.description,
-          '金額（支出正、存入負）': d.amount,
-          '銀行代碼/備註': d.bankCode || '',
-        }));
-        const ws = XLSX.utils.json_to_sheet(depositSheetData);
-        XLSX.utils.book_append_sheet(wb, ws, '活存報表');
-      }
+      const allData = [...sortedCreditData, ...sortedDepositData, ...sortedCashData];
 
-      if (cashData.length > 0) {
-        const cashSheetData = cashData.map(d => ({
-          '日期': d.date,
-          '類型': d.category,
-          '交易項目': d.description,
-          '金額（支出正、存入負）': d.amount,
-          '備註': d.notes || '',
-        }));
-        const ws = XLSX.utils.json_to_sheet(cashSheetData);
-        XLSX.utils.book_append_sheet(wb, ws, '現金收支');
+      if (allData.length > 0) {
+        const sheetData = allData.map(d => {
+            if ('transactionDate' in d) { // CreditData
+                return {
+                    '日期': getCreditDisplayDate(d.transactionDate),
+                    '類型': d.category,
+                    '交易項目': d.description,
+                    '金額': d.amount,
+                    '備註': d.bankCode || '',
+                    '來源': '信用卡'
+                }
+            } else if ('notes' in d) { // CashData
+                 return {
+                    '日期': d.date,
+                    '類型': d.category,
+                    '交易項目': d.description,
+                    '金額': d.amount,
+                    '備註': d.notes || '',
+                    '來源': '現金'
+                }
+            } else { // DepositData
+                 return {
+                    '日期': d.date,
+                    '類型': d.category,
+                    '交易項目': d.description,
+                    '金額': d.amount,
+                    '備註': d.bankCode || '',
+                    '來源': '活存帳戶'
+                }
+            }
+        });
+        const ws = XLSX.utils.json_to_sheet(sheetData);
+        XLSX.utils.book_append_sheet(wb, ws, '合併報表');
       }
 
       const today = new Date().toISOString().split('T')[0];
@@ -772,6 +777,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
   };
 
   const handleUpdateCreditData = async (transactionId: string, field: keyof CreditData, value: string | number) => {
+        // Optimistic update
         setCreditData(prevData =>
             prevData.map(item =>
                 item.id === transactionId ? { ...item, [field]: value } : item
@@ -789,17 +795,13 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                     title: "更新失敗",
                     description: `無法將變更儲存到資料庫。`,
                 });
-                if (savedCreditTransactions) {
-                   const originalItem = savedCreditTransactions.find(t => t.id === transactionId);
-                   if (originalItem) {
-                       setCreditData(prevData => prevData.map(item => item.id === transactionId ? originalItem : item));
-                   }
-                }
+                // Revert optimistic update on error is handled by the listener
             }
         }
     };
 
     const handleDeleteCreditTransaction = async (transactionId: string) => {
+        // Optimistic update
         const originalData = [...creditData];
         setCreditData(prevData => prevData.filter(item => item.id !== transactionId));
 
@@ -814,12 +816,13 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                     title: "刪除失敗",
                     description: "無法從資料庫中刪除此筆交易。",
                 });
-                setCreditData(originalData);
+                setCreditData(originalData); // Revert
             }
         }
     };
 
     const handleUpdateDepositData = async (transactionId: string, field: keyof DepositData, value: string | number) => {
+        // Optimistic update
         setDepositData(prevData =>
             prevData.map(item =>
                 item.id === transactionId ? { ...item, [field]: value } : item
@@ -837,17 +840,13 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                     title: "更新失敗",
                     description: "無法將變更儲存到資料庫。",
                 });
-                if (savedDepositTransactions) {
-                    const originalItem = savedDepositTransactions.find(t => t.id === transactionId);
-                    if (originalItem) {
-                        setDepositData(prevData => prevData.map(item => item.id === transactionId ? originalItem : item));
-                    }
-                }
+                // Revert handled by listener
             }
         }
     };
 
     const handleDeleteDepositTransaction = async (transactionId: string) => {
+        // Optimistic update
         const originalData = [...depositData];
         setDepositData(prevData => prevData.filter(item => item.id !== transactionId));
 
@@ -862,12 +861,13 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                     title: "刪除失敗",
                     description: "無法從資料庫中刪除此筆交易。",
                 });
-                setDepositData(originalData);
+                setDepositData(originalData); // Revert
             }
         }
     };
     
     const handleUpdateCashData = async (transactionId: string, field: keyof CashData, value: string | number) => {
+        // Optimistic update
         setCashData(prevData =>
             prevData.map(item =>
                 item.id === transactionId ? { ...item, [field]: value } : item
@@ -885,17 +885,13 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                     title: "更新失敗",
                     description: `無法將變更儲存到資料庫。`,
                 });
-                if (savedCashTransactions) {
-                   const originalItem = savedCashTransactions.find(t => t.id === transactionId);
-                   if (originalItem) {
-                       setCashData(prevData => prevData.map(item => item.id === transactionId ? originalItem : item));
-                   }
-                }
+                // Revert handled by listener
             }
         }
     };
 
     const handleDeleteCashTransaction = async (transactionId: string) => {
+        // Optimistic update
         const originalData = [...cashData];
         setCashData(prevData => prevData.filter(item => item.id !== transactionId));
 
@@ -910,7 +906,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                     title: "刪除失敗",
                     description: "無法從資料庫中刪除此筆交易。",
                 });
-                setCashData(originalData);
+                setCashData(originalData); // Revert
             }
         }
     };
@@ -1305,6 +1301,8 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
       </TableHead>
     );
   };
+  
+  const detailDialogId = useId();
 
   return (
     <div className="space-y-4">
@@ -2307,7 +2305,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
               <TableBody>
                 {detailViewData.length > 0 ? (
                   detailViewData.map(item => (
-                    <TableRow key={useId()}>
+                    <TableRow key={`${detailDialogId}-${item.id}`}>
                       <TableCell className="font-mono">{(item as any).transactionDate ? getCreditDisplayDate((item as any).transactionDate) : (item as any).date}</TableCell>
                       <TableCell>{item.description}</TableCell>
                       <TableCell>{(item as any).source || '信用卡'}</TableCell>

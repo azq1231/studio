@@ -1,5 +1,12 @@
 import type { ReplacementRule, CategoryRule } from '@/app/actions';
-import { randomUUID } from 'crypto';
+
+// Helper function to create a SHA-1 hash for generating consistent IDs
+async function sha1(str: string): Promise<string> {
+    const buffer = new TextEncoder().encode(str);
+    const hash = await crypto.subtle.digest('SHA-1', buffer);
+    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 
 // This is the final, categorized data structure
 export type CreditData = {
@@ -20,12 +27,13 @@ export type RawCreditData = {
 };
 
 export type ParsedCreditDataWithCategory = RawCreditData & {
+    id: string;
     category: string;
 }
 
 // This parser now only extracts raw data. 
 // Categorization and rule application will be handled by the server action.
-export function parseCreditCard(text: string): ParsedCreditDataWithCategory[] {
+export async function parseCreditCard(text: string): Promise<ParsedCreditDataWithCategory[]> {
   const lines = text.split('\n');
   const results: ParsedCreditDataWithCategory[] = [];
 
@@ -97,7 +105,11 @@ export function parseCreditCard(text: string): ParsedCreditDataWithCategory[] {
 
 
     if (description) {
+      const idString = `${transactionDate}-${description}-${amount}`;
+      const id = await sha1(idString);
+
       results.push({
+        id,
         transactionDate,
         postingDate,
         description,
@@ -147,7 +159,7 @@ function applyCategoryRules(description: string, rules: CategoryRule[]): string 
     return '未分類';
 }
 
-export function parseDepositAccount(text: string, replacementRules: ReplacementRule[], categoryRules: CategoryRule[]): DepositData[] {
+export async function parseDepositAccount(text: string, replacementRules: ReplacementRule[], categoryRules: CategoryRule[]): Promise<DepositData[]> {
   const lines = text.split('\n').map(l => l.trim()).filter(l => l);
   const results: (string|number)[][] = [];
   let currentDate = '';
@@ -203,6 +215,9 @@ export function parseDepositAccount(text: string, replacementRules: ReplacementR
       finalDescription = processedText;
       
       const category = applyCategoryRules(finalDescription, categoryRules);
+      
+      const idString = `${currentDate}-${finalDescription}-${amount}`;
+      const id = await sha1(idString);
 
       let bankCode = '';
       const remarkMatch = finalDescription.match(/(\[[^\]]+\])/);
@@ -211,7 +226,7 @@ export function parseDepositAccount(text: string, replacementRules: ReplacementR
         finalDescription = finalDescription.replace(remarkMatch[1], '').trim();
       }
 
-      temp = [randomUUID(), currentDate, category, finalDescription, amount, bankCode];
+      temp = [id, currentDate, category, finalDescription, amount, bankCode];
       
       if (!rule.merge_remark && rule.remark_col !== null && temp.length > rule.remark_col) {
         temp[rule.remark_col] = remark;
