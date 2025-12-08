@@ -52,11 +52,11 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Calendar } from "@/components/ui/calendar"
 import { useToast } from "@/hooks/use-toast"
-import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2, FileText, RotateCcw, Combine, Search, Calendar as CalendarIcon, Coins, Upload } from 'lucide-react';
+import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2, FileText, RotateCcw, Combine, Search, Calendar as CalendarIcon, Coins, Upload, DatabaseZap } from 'lucide-react';
 import { processBankStatement, type ReplacementRule, type CategoryRule } from '@/app/actions';
 import type { CreditData, DepositData, CashData } from '@/lib/parser';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, doc, writeBatch, updateDoc, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, writeBatch, updateDoc, deleteDoc, addDoc, getDocs, query } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 
 
@@ -550,8 +550,6 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
             toast({ title: '自動新增類型', description: `已新增：${newCats.join(', ')}`})
         }
       }
-
-      // No state update here, rely on Firestore listener
       
       if (user && firestore) {
         const batch = writeBatch(firestore);
@@ -661,7 +659,11 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
 
     const amount = values.type === 'expense' ? values.amount : -values.amount;
 
-    const newTransaction: Omit<CashData, 'id'> = {
+    const idString = `${format(values.date, 'yyyy/MM/dd')}-${values.description}-${amount}`;
+    const id = await sha1(idString);
+
+    const newTransaction: CashData = {
+      id,
       date: format(values.date, 'yyyy/MM/dd'),
       category: values.category,
       description: values.description,
@@ -670,10 +672,9 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
     };
 
     try {
-      const cashCollection = collection(firestore, 'users', user.uid, 'cashTransactions');
-      await addDoc(cashCollection, newTransaction);
+      const cashDocRef = doc(firestore, 'users', user.uid, 'cashTransactions', id);
+      await updateDoc(cashDocRef, newTransaction);
       
-      // No local state update, will be handled by listener
       toast({ title: '成功', description: '現金交易已新增' });
       cashTransactionForm.reset();
 
@@ -795,7 +796,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                     title: "更新失敗",
                     description: `無法將變更儲存到資料庫。`,
                 });
-                // Revert optimistic update on error is handled by the listener
+                // Revert optimistic update is handled by the listener
             }
         }
     };
@@ -908,6 +909,54 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                 });
                 setCashData(originalData); // Revert
             }
+        }
+    };
+
+    const handleDeleteAllData = async () => {
+        if (!user || !firestore) {
+            toast({ variant: 'destructive', title: '錯誤', description: '請先登入' });
+            return;
+        }
+        setIsLoading(true);
+        try {
+            const batch = writeBatch(firestore);
+
+            const collectionsToDelete = [
+                'creditCardTransactions',
+                'depositAccountTransactions',
+                'cashTransactions'
+            ];
+
+            for (const collectionName of collectionsToDelete) {
+                const collectionRef = collection(firestore, 'users', user.uid, collectionName);
+                const q = query(collectionRef);
+                const snapshot = await getDocs(q);
+                snapshot.forEach(doc => {
+                    batch.delete(doc.ref);
+                });
+            }
+            
+            await batch.commit();
+
+            // Optimistically clear local state
+            setCreditData([]);
+            setDepositData([]);
+            setCashData([]);
+
+            toast({
+                title: '成功',
+                description: '您的所有交易資料已被刪除。'
+            });
+
+        } catch (e: any) {
+            console.error("Error deleting all data:", e);
+            toast({
+                variant: 'destructive',
+                title: '刪除失敗',
+                description: e.message || '刪除所有資料時發生錯誤。'
+            });
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -1189,9 +1238,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
   useEffect(() => {
     if (hasProcessed) {
       const currentCats = JSON.parse(localStorage.getItem('availableCategories') || '[]');
-      if (currentCats.length > 0) {
-        setSummarySelectedCategories(currentCats);
-      }
+      setSummarySelectedCategories(currentCats);
     }
   }, [hasProcessed]);
 
@@ -1380,11 +1427,12 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                     <Form {...settingsForm}>
                       <form onSubmit={settingsForm.handleSubmit(handleSaveSettings)} className="space-y-6">
                         <Tabs defaultValue="category" className="w-full">
-                          <TabsList className="grid w-full grid-cols-4">
+                          <TabsList className="grid w-full grid-cols-5">
                             <TabsTrigger value="replacement">取代規則</TabsTrigger>
                             <TabsTrigger value="category">分類規則</TabsTrigger>
                              <TabsTrigger value="quick-filters">快速篩選</TabsTrigger>
                             <TabsTrigger value="manage-categories">管理類型</TabsTrigger>
+                            <TabsTrigger value="data-management">資料管理</TabsTrigger>
                           </TabsList>
                           <TabsContent value="replacement" className="mt-4">
                             <div className="flex justify-between items-center mb-4">
@@ -1736,6 +1784,46 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                                 )}
                               </div>
                             </div>
+                          </TabsContent>
+                          <TabsContent value="data-management" className="mt-4">
+                            <CardDescription className="mb-4">
+                                執行永久性的資料操作。請謹慎使用。
+                            </CardDescription>
+                            <Card className="border-destructive">
+                                <CardHeader>
+                                    <CardTitle className="text-destructive">危險區域</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <p className="text-sm mb-4">
+                                        此操作將會永久刪除您帳戶中**所有**的交易紀錄，包含信用卡、活存帳戶與現金收支。
+                                        此動作無法復原。
+                                    </p>
+                                    <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                          <Button type="button" variant="destructive" disabled={!user}>
+                                            <DatabaseZap className="mr-2 h-4 w-4" />
+                                            刪除所有交易資料
+                                          </Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                          <AlertDialogHeader>
+                                            <AlertDialogTitle>您確定嗎？</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                              您即將永久刪除所有交易資料。此動作無法復原，所有已儲存的報表資料都將遺失。
+                                            </AlertDialogDescription>
+                                          </AlertDialogHeader>
+                                          <AlertDialogFooter>
+                                            <AlertDialogCancel>取消</AlertDialogCancel>
+                                            <AlertDialogAction 
+                                                onClick={handleDeleteAllData}
+                                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                                確定刪除
+                                            </AlertDialogAction>
+                                          </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                      </AlertDialog>
+                                </CardContent>
+                            </Card>
                           </TabsContent>
                         </Tabs>
                         <div className="flex justify-end items-center mt-6">
@@ -2326,4 +2414,10 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
       </Dialog>
     </div>
   );
+}
+
+async function sha1(str: string): Promise<string> {
+    const buffer = new TextEncoder().encode(str);
+    const hash = await crypto.subtle.digest('SHA-1', buffer);
+    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
