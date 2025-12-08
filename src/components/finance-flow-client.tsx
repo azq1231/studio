@@ -532,12 +532,18 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
   };
 
 
-  async function processAndSaveData(text: string) {
+  async function processAndSaveData({ text, excelData }: { text?: string; excelData?: any[][] }) {
     setIsLoading(true);
     setHasProcessed(false);
     
     const { replacementRules, categoryRules } = settingsForm.getValues();
-    const result = await processBankStatement(text, replacementRules, categoryRules);
+    const result = await processBankStatement(
+        text || '', 
+        replacementRules, 
+        categoryRules, 
+        !!excelData, 
+        excelData
+    );
     
     if (result.success) {
       if (result.detectedCategories.length > 0) {
@@ -612,7 +618,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
   }
 
   async function onSubmit(values: StatementFormData) {
-    await processAndSaveData(values.statement);
+    await processAndSaveData({ text: values.statement });
   }
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -623,15 +629,13 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
     reader.onload = async (e) => {
       try {
         const data = e.target?.result;
-        if (typeof data === 'string' || data instanceof ArrayBuffer) {
-          const workbook = XLSX.read(data, { type: data instanceof ArrayBuffer ? 'array' : 'string' });
-          let fullText = '';
-          workbook.SheetNames.forEach(sheetName => {
-            const worksheet = workbook.Sheets[sheetName];
-            const text = XLSX.utils.sheet_to_csv(worksheet, { header: 1, skipHidden: true, RS: '\n' });
-            fullText += text + '\n\n';
-          });
-          await processAndSaveData(fullText);
+        if (data instanceof ArrayBuffer) {
+          const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+          const worksheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[worksheetName];
+          const excelData = XLSX.utils.sheet_to_json<any>(worksheet, { header: 1, defval: '' });
+          
+          await processAndSaveData({ excelData });
         }
       } catch (error) {
         console.error("Error parsing file:", error);
@@ -641,7 +645,6 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
           description: "無法讀取或解析您提供的檔案，請確認格式是否正確。",
         });
       } finally {
-        // Reset file input so the same file can be uploaded again
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
         }
@@ -672,8 +675,8 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
     };
 
     try {
-      const cashDocRef = doc(firestore, 'users', user.uid, 'cashTransactions', id);
-      await updateDoc(cashDocRef, newTransaction);
+      const cashCollectionRef = collection(firestore, 'users', user.uid, 'cashTransactions');
+      await addDoc(cashCollectionRef, newTransaction);
       
       toast({ title: '成功', description: '現金交易已新增' });
       cashTransactionForm.reset();
@@ -985,9 +988,13 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
     return [...filteredData].sort((a, b) => {
         let comparison = 0;
         if (creditSortKey === 'date') {
-            const dateA = new Date(getCreditDisplayDate(a.transactionDate)).getTime();
-            const dateB = new Date(getCreditDisplayDate(b.transactionDate)).getTime();
-            comparison = dateA - dateB;
+            try {
+                const dateA = new Date(getCreditDisplayDate(a.transactionDate)).getTime();
+                const dateB = new Date(getCreditDisplayDate(b.transactionDate)).getTime();
+                comparison = dateA - dateB;
+            } catch {
+                comparison = a.transactionDate.localeCompare(b.transactionDate);
+            }
         } else {
             const aValue = a[creditSortKey as keyof Omit<CreditData, 'transactionDate'>];
             const bValue = b[creditSortKey as keyof Omit<CreditData, 'transactionDate'>];

@@ -1,5 +1,5 @@
 import type { ReplacementRule, CategoryRule } from '@/app/actions';
-import { format } from 'date-fns';
+import { format, parse } from 'date-fns';
 
 // Helper function to create a SHA-1 hash for generating consistent IDs
 async function sha1(str: string): Promise<string> {
@@ -32,6 +32,47 @@ export type ParsedCreditDataWithCategory = RawCreditData & {
     category: string;
 }
 
+export async function parseExcelData(data: any[][]): Promise<ParsedCreditDataWithCategory[]> {
+    const results: ParsedCreditDataWithCategory[] = [];
+    // Skip header row if present, assuming first row is header
+    const dataRows = data.slice(1);
+
+    for (const row of dataRows) {
+        if (!row || row.length < 4) continue;
+
+        const rawDate = row[0];
+        let transactionDate: string;
+
+        if (rawDate instanceof Date) {
+            transactionDate = format(rawDate, 'yyyy/MM/dd');
+        } else if (typeof rawDate === 'string' && /^\d{4}\/\d{1,2}\/\d{1,2}$/.test(rawDate)) {
+            transactionDate = rawDate;
+        } else {
+            continue; // Skip row if date is not in expected format
+        }
+
+        const category = String(row[1] || '').trim();
+        const description = String(row[2] || '').trim();
+        const amount = parseFloat(String(row[3] || '0').replace(/,/g, ''));
+
+        if (description && !isNaN(amount)) {
+            const idString = `${transactionDate}-${description}-${amount}`;
+            const id = await sha1(idString);
+
+            results.push({
+                id,
+                transactionDate,
+                postingDate: transactionDate, // Use transactionDate for postingDate as well
+                description,
+                amount,
+                category,
+            });
+        }
+    }
+    return results;
+}
+
+
 // This parser now only extracts raw data. 
 // Categorization and rule application will be handled by the server action.
 export async function parseCreditCard(text: string): Promise<ParsedCreditDataWithCategory[]> {
@@ -53,6 +94,11 @@ export async function parseCreditCard(text: string): Promise<ParsedCreditDataWit
     let category = '';
     let descriptionStartIndex = 1;
 
+    // Handle YYYY/MM/DD format
+    if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(transactionDate)) {
+        postingDate = transactionDate;
+    }
+
     // Check if the second part is a posting date (MM/DD format) or a category
     if (/^\d{1,2}\/\d{1,2}$/.test(parts[1])) {
         postingDate = parts[1];
@@ -69,9 +115,21 @@ export async function parseCreditCard(text: string): Promise<ParsedCreditDataWit
     }
 
     // Sometimes transaction date and posting date are merged, e.g., 11/0211/02
-    if (transactionDate.length > 5 && /^\d{1,2}\/\d{1,2}\d{1,2}\/\d{1,2}/.test(transactionDate)) {
-        postingDate = transactionDate.slice(transactionDate.length / 2);
-        transactionDate = transactionDate.slice(0, transactionDate.length / 2);
+    if (transactionDate.length > 5 && !transactionDate.includes('/') && /^\d+$/.test(transactionDate)) {
+        const mid = Math.floor(transactionDate.length / 2);
+        const p1 = transactionDate.substring(0, mid);
+        const p2 = transactionDate.substring(mid);
+        if (p1.length >= 2 && p2.length >= 2) {
+            const d1 = `${p1.slice(0, -2)}/${p1.slice(-2)}`;
+            const d2 = `${p2.slice(0, -2)}/${p2.slice(-2)}`;
+            if (/^\d{1,2}\/\d{1,2}$/.test(d1) && /^\d{1,2}\/\d{1,2}$/.test(d2)) {
+                transactionDate = d1;
+                postingDate = d2;
+            }
+        }
+    } else if (transactionDate.length > 5 && transactionDate.match(/^\d{2}\/\d{2}\d{2}\/\d{2}$/)) {
+        postingDate = transactionDate.slice(5);
+        transactionDate = transactionDate.slice(0, 5);
     }
     
     const remainingLine = parts.slice(descriptionStartIndex).join(' ');
@@ -107,7 +165,7 @@ export async function parseCreditCard(text: string): Promise<ParsedCreditDataWit
 
 
     if (description) {
-      const idString = `${transactionDate}-${description}-${amount}`;
+      const idString = `${postingDate || transactionDate}-${description}-${amount}`;
       const id = await sha1(idString);
 
       results.push({
@@ -194,7 +252,9 @@ export async function parseDepositAccount(text: string, replacementRules: Replac
       }
 
       if (!currentDate) {
-        currentDate = format(new Date(), 'yyyy/MM/dd');
+        try {
+            currentDate = format(new Date(), 'yyyy/MM/dd');
+        } catch {}
       }
 
       const parts = line.split('\t');

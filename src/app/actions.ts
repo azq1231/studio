@@ -1,6 +1,6 @@
 'use server';
 
-import { parseCreditCard, parseDepositAccount, type CreditData, type DepositData, ParsedCreditDataWithCategory } from '@/lib/parser';
+import { parseCreditCard, parseDepositAccount, type CreditData, type DepositData, ParsedCreditDataWithCategory, parseExcelData } from '@/lib/parser';
 
 export type ReplacementRule = {
     find: string;
@@ -64,7 +64,9 @@ async function processSingleCreditEntry(entry: ParsedCreditDataWithCategory, rep
 export async function processBankStatement(
     text: string, 
     replacementRules: ReplacementRule[],
-    categoryRules: CategoryRule[]
+    categoryRules: CategoryRule[],
+    isExcelUpload: boolean = false,
+    excelData?: any[][]
 ): Promise<{
     success: boolean;
     creditData: CreditData[];
@@ -72,29 +74,40 @@ export async function processBankStatement(
     detectedCategories: string[];
     error?: string;
 }> {
-    if (!text || text.trim().length === 0) {
+    if (!text && !isExcelUpload) {
         return { success: false, creditData: [], depositData: [], detectedCategories: [], error: "No text provided." };
     }
 
     try {
         const detectedCategories = new Set<string>();
+        let allCreditData: CreditData[] = [];
+        let allDepositData: DepositData[] = [];
 
-        // Attempt to parse as credit card data
-        const rawCreditParsedPromise = parseCreditCard(text);
-        
-        // Attempt to parse as deposit account data
-        const depositParsedPromise = parseDepositAccount(text, replacementRules, categoryRules);
+        if (isExcelUpload && excelData) {
+            const parsedCreditFromExcel = await parseExcelData(excelData);
+            
+            parsedCreditFromExcel.forEach(c => { if(c.category) detectedCategories.add(c.category) });
+            const processedCreditPromises = parsedCreditFromExcel.map(entry => processSingleCreditEntry(entry, replacementRules, categoryRules));
+            allCreditData = (await Promise.all(processedCreditPromises)).filter((e): e is CreditData => e !== null);
 
-        const [rawCreditParsed, depositParsed] = await Promise.all([rawCreditParsedPromise, depositParsedPromise]);
+        } else {
+             // Attempt to parse as credit card data
+            const rawCreditParsedPromise = parseCreditCard(text);
+            
+            // Attempt to parse as deposit account data
+            const depositParsedPromise = parseDepositAccount(text, replacementRules, categoryRules);
 
-        // Process credit card entries
-        rawCreditParsed.forEach(c => { if(c.category) detectedCategories.add(c.category) });
-        const processedCreditPromises = rawCreditParsed.map(entry => processSingleCreditEntry(entry, replacementRules, categoryRules));
-        const allCreditData = (await Promise.all(processedCreditPromises)).filter((e): e is CreditData => e !== null);
+            const [rawCreditParsed, depositParsed] = await Promise.all([rawCreditParsedPromise, depositParsedPromise]);
 
-        // Process deposit account entries
-        depositParsed.forEach(d => detectedCategories.add(d.category));
-        const allDepositData = depositParsed;
+            // Process credit card entries
+            rawCreditParsed.forEach(c => { if(c.category) detectedCategories.add(c.category) });
+            const processedCreditPromises = rawCreditParsed.map(entry => processSingleCreditEntry(entry, replacementRules, categoryRules));
+            allCreditData = (await Promise.all(processedCreditPromises)).filter((e): e is CreditData => e !== null);
+
+            // Process deposit account entries
+            depositParsed.forEach(d => detectedCategories.add(d.category));
+            allDepositData = depositParsed;
+        }
         
         return { 
             success: true, 
