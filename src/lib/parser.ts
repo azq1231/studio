@@ -33,8 +33,16 @@ export type ParsedCreditDataWithCategory = CreditData & {
 
 export async function parseExcelData(data: any[][]): Promise<DepositData[]> {
     const results: DepositData[] = [];
-    // Skip header row if present, assuming first row is header
-    const dataRows = data.slice(1);
+    if (!data || data.length === 0) {
+        return results;
+    }
+
+    // Check if the first row is a header
+    const firstRow = data[0];
+    let dataRows = data;
+    if (firstRow && firstRow.some(cell => typeof cell === 'string' && ['日期', '用途', '內容', '金額', 'date', 'category', 'description', 'amount'].includes(cell.toLowerCase()))) {
+        dataRows = data.slice(1);
+    }
 
     for (const row of dataRows) {
         if (!row || row.length < 4) continue;
