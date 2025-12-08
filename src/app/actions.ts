@@ -57,6 +57,7 @@ async function processSingleCreditEntry(entry: ParsedCreditDataWithCategory, rep
         category: category,
         description: description,
         amount: entry.amount,
+        bankCode: (entry as any).bankCode // Keep bank code if parser found it
     };
 }
 
@@ -72,50 +73,37 @@ export async function processBankStatement(
     detectedCategories: string[];
     error?: string;
 }> {
-    if (!text || text.trim().length < 10) {
-        return { success: false, creditData: [], depositData: [], detectedCategories: [], error: "No text provided or text is too short." };
+    if (!text || text.trim().length === 0) {
+        return { success: false, creditData: [], depositData: [], detectedCategories: [], error: "No text provided." };
     }
 
     try {
-        const sections = text.split(/(?=交易日期)/).filter(s => s.trim() !== '');
-        let allCreditData: CreditData[] = [];
-        let allDepositData: DepositData[] = [];
         const detectedCategories = new Set<string>();
 
-        for (const section of sections) {
-            const { reportType } = await detectReportType({ text: section });
-
-            if (reportType === 'credit_card') {
-                const rawParsed = await parseCreditCard(section);
-                rawParsed.forEach(c => { if(c.category) detectedCategories.add(c.category) });
-                const processedPromises = rawParsed.map(entry => processSingleCreditEntry(entry, replacementRules, categoryRules));
-                const processedEntries = (await Promise.all(processedPromises)).filter((e): e is CreditData => e !== null);
-                allCreditData.push(...processedEntries);
-
-            } else if (reportType === 'deposit_account') {
-                const parsed = await parseDepositAccount(section, replacementRules, categoryRules);
-                 parsed.forEach(d => detectedCategories.add(d.category));
-                allDepositData.push(...parsed);
-            } else { 
-                // Fallback: try parsing as credit card first
-                const rawParsed = await parseCreditCard(section);
-                if (rawParsed.length > 0) {
-                    rawParsed.forEach(c => { if(c.category) detectedCategories.add(c.category) });
-                    const processedPromises = rawParsed.map(entry => processSingleCreditEntry(entry, replacementRules, categoryRules));
-                    const processedEntries = (await Promise.all(processedPromises)).filter((e): e is CreditData => e !== null);
-                    allCreditData.push(...processedEntries);
-                } else {
-                    // Then try as deposit account if credit parsing yields nothing
-                    const depositParsed = await parseDepositAccount(section, replacementRules, categoryRules);
-                     if (depositParsed.length > 0) {
-                        depositParsed.forEach(d => detectedCategories.add(d.category));
-                        allDepositData.push(...depositParsed);
-                    }
-                }
-            }
-        }
+        // Attempt to parse as credit card data
+        const rawCreditParsedPromise = parseCreditCard(text);
         
-        return { success: true, creditData: allCreditData, depositData: allDepositData, detectedCategories: Array.from(detectedCategories) };
+        // Attempt to parse as deposit account data
+        const depositParsedPromise = parseDepositAccount(text, replacementRules, categoryRules);
+
+        const [rawCreditParsed, depositParsed] = await Promise.all([rawCreditParsedPromise, depositParsedPromise]);
+
+        // Process credit card entries
+        rawCreditParsed.forEach(c => { if(c.category) detectedCategories.add(c.category) });
+        const processedCreditPromises = rawCreditParsed.map(entry => processSingleCreditEntry(entry, replacementRules, categoryRules));
+        const allCreditData = (await Promise.all(processedCreditPromises)).filter((e): e is CreditData => e !== null);
+
+        // Process deposit account entries
+        depositParsed.forEach(d => detectedCategories.add(d.category));
+        const allDepositData = depositParsed;
+        
+        return { 
+            success: true, 
+            creditData: allCreditData, 
+            depositData: allDepositData, 
+            detectedCategories: Array.from(detectedCategories) 
+        };
+
     } catch (e) {
         console.error("Error processing bank statement:", e);
         const error = e instanceof Error ? e.message : 'An unknown error occurred during parsing.';
