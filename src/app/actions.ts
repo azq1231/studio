@@ -84,11 +84,10 @@ export async function processBankStatement(
         let allDepositData: DepositData[] = [];
 
         if (isExcelUpload && excelData) {
-            const parsedCreditFromExcel = await parseExcelData(excelData);
+            const parsedDataFromExcel = await parseExcelData(excelData);
             
-            parsedCreditFromExcel.forEach(c => { if(c.category) detectedCategories.add(c.category) });
-            const processedCreditPromises = parsedCreditFromExcel.map(entry => processSingleCreditEntry(entry, replacementRules, categoryRules));
-            allCreditData = (await Promise.all(processedCreditPromises)).filter((e): e is CreditData => e !== null);
+            parsedDataFromExcel.forEach(c => { if(c.category) detectedCategories.add(c.category) });
+            allDepositData = parsedDataFromExcel;
 
         } else {
              // Attempt to parse as credit card data

@@ -12,8 +12,8 @@ async function sha1(str: string): Promise<string> {
 // This is the final, categorized data structure
 export type CreditData = {
   id: string; // Added for unique identification
-  transactionDate: string;
-  category: string; // This will hold either the rule-based category or the original posting date
+  transactionDate: string; // MM/DD format
+  category: string;
   description: string;
   amount: number;
   bankCode?: string;
@@ -27,13 +27,12 @@ export type RawCreditData = {
   amount: number;
 };
 
-export type ParsedCreditDataWithCategory = RawCreditData & {
-    id: string;
-    category: string;
+export type ParsedCreditDataWithCategory = CreditData & {
+    postingDate: string;
 }
 
-export async function parseExcelData(data: any[][]): Promise<ParsedCreditDataWithCategory[]> {
-    const results: ParsedCreditDataWithCategory[] = [];
+export async function parseExcelData(data: any[][]): Promise<DepositData[]> {
+    const results: DepositData[] = [];
     // Skip header row if present, assuming first row is header
     const dataRows = data.slice(1);
 
@@ -41,31 +40,36 @@ export async function parseExcelData(data: any[][]): Promise<ParsedCreditDataWit
         if (!row || row.length < 4) continue;
 
         const rawDate = row[0];
-        let transactionDate: string;
+        let date: string;
 
         if (rawDate instanceof Date) {
-            transactionDate = format(rawDate, 'yyyy/MM/dd');
+            date = format(rawDate, 'yyyy/MM/dd');
         } else if (typeof rawDate === 'string' && /^\d{4}\/\d{1,2}\/\d{1,2}$/.test(rawDate)) {
-            transactionDate = rawDate;
+            date = rawDate;
+        } else if (typeof rawDate === 'number') { // Handle Excel date serial numbers
+            const excelEpoch = new Date(1899, 11, 30);
+            const jsDate = new Date(excelEpoch.getTime() + rawDate * 86400000);
+            date = format(jsDate, 'yyyy/MM/dd');
         } else {
             continue; // Skip row if date is not in expected format
         }
 
-        const category = String(row[1] || '').trim();
+        const category = String(row[1] || '未分類').trim();
         const description = String(row[2] || '').trim();
         const amount = parseFloat(String(row[3] || '0').replace(/,/g, ''));
+        const bankCode = String(row[4] || '').trim();
 
         if (description && !isNaN(amount)) {
-            const idString = `${transactionDate}-${description}-${amount}`;
+            const idString = `${date}-${description}-${amount}`;
             const id = await sha1(idString);
 
             results.push({
                 id,
-                transactionDate,
-                postingDate: transactionDate, // Use transactionDate for postingDate as well
+                date,
+                category,
                 description,
                 amount,
-                category,
+                bankCode
             });
         }
     }
@@ -184,7 +188,7 @@ export async function parseCreditCard(text: string): Promise<ParsedCreditDataWit
 
 export type DepositData = {
   id: string; // Add ID for uniqueness
-  date: string;
+  date: string; // yyyy/MM/dd format
   category: string;
   description: string;
   amount: number;

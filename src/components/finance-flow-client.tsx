@@ -219,6 +219,10 @@ const DEFAULT_QUICK_FILTERS: QuickFilter[] = [
 export function FinanceFlowClient() {
   const getCreditDisplayDate = (dateString: string) => {
     try {
+      // This function is specifically for MM/DD format
+      if (!/^\d{1,2}\/\d{1,2}$/.test(dateString)) {
+          return dateString; // Return as-is if not in MM/DD format
+      }
       const now = new Date();
       const currentYear = getYear(now);
       const currentMonth = getMonth(now);
@@ -630,10 +634,10 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
       try {
         const data = e.target?.result;
         if (data instanceof ArrayBuffer) {
-          const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+          const workbook = XLSX.read(data, { type: 'array', cellDates: true, dateNF: 'yyyy/mm/dd' });
           const worksheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[worksheetName];
-          const excelData = XLSX.utils.sheet_to_json<any>(worksheet, { header: 1, defval: '' });
+          const excelData = XLSX.utils.sheet_to_json<any>(worksheet, { header: 1, defval: '', raw: false });
           
           await processAndSaveData({ excelData });
         }
@@ -1131,14 +1135,15 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
 
     filteredCreditData.forEach(d => {
       let dateObj;
+      const displayDate = getCreditDisplayDate(d.transactionDate);
       try {
-        dateObj = new Date(getCreditDisplayDate(d.transactionDate));
+        dateObj = parse(displayDate, 'yyyy/MM/dd', new Date());
       } catch {
         dateObj = new Date(0);
       }
       combined.push({
         id: d.id,
-        date: format(dateObj, 'yyyy/MM/dd'),
+        date: displayDate,
         dateObj: dateObj,
         category: d.category,
         description: d.description,
@@ -1764,7 +1769,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                             <div className="space-y-4">
                               <div className="flex gap-2">
                                 <Input 
-                                  placeholder="輸入新的類型名稱" 
+                                  placeholder="輸入新的類型名称" 
                                   value={newCategory}
                                   onChange={(e) => setNewCategory(e.target.value)}
                                   onKeyDown={(e) => {
@@ -2401,7 +2406,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                 {detailViewData.length > 0 ? (
                   detailViewData.map(item => (
                     <TableRow key={`${detailDialogId}-${item.id}`}>
-                      <TableCell className="font-mono">{(item as any).transactionDate ? getCreditDisplayDate((item as any).transactionDate) : (item as any).date}</TableCell>
+                      <TableCell className="font-mono">{(item as any).date || getCreditDisplayDate((item as any).transactionDate)}</TableCell>
                       <TableCell>{item.description}</TableCell>
                       <TableCell>{(item as any).source || '信用卡'}</TableCell>
                       <TableCell className="text-right font-mono">{item.amount.toLocaleString()}</TableCell>
