@@ -1,4 +1,5 @@
 import type { ReplacementRule, CategoryRule } from '@/app/actions';
+import { format } from 'date-fns';
 
 // Helper function to create a SHA-1 hash for generating consistent IDs
 async function sha1(str: string): Promise<string> {
@@ -189,6 +190,10 @@ export async function parseDepositAccount(text: string, replacementRules: Replac
     if (/^\d{2}:\d{2}:\d{2}/.test(line)) {
       if (temp) {
         results.push(temp);
+      }
+
+      if (!currentDate) {
+        currentDate = format(new Date(), 'yyyy/MM/dd');
       }
 
       const parts = line.split('\t');
