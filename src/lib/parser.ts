@@ -40,7 +40,8 @@ export async function parseCreditCard(text: string): Promise<ParsedCreditDataWit
 
   for (const line of lines) {
     const currentLine = line.replace(/\u3000/g, ' ').trim();
-    if (!/^\d{1,2}\/\d{1,2}/.test(currentLine)) {
+    // Allow YYYY/MM/DD or MM/DD format
+    if (!/^(?:\d{4}\/)?\d{1,2}\/\d{1,2}/.test(currentLine)) {
       continue;
     }
 

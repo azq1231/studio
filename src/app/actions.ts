@@ -1,6 +1,5 @@
 'use server';
 
-import { detectReportType } from '@/ai/flows/detect-report-type';
 import { parseCreditCard, parseDepositAccount, type CreditData, type DepositData, ParsedCreditDataWithCategory } from '@/lib/parser';
 
 export type ReplacementRule = {
