@@ -50,7 +50,7 @@ export async function parseExcelData(data: any[][]): Promise<ParsedExcelData> {
 
     let dataRows = data;
     const firstRow = data[0];
-    if (firstRow && firstRow.some(cell => typeof cell === 'string' && ['日期', '種類', '用途', '內容', '金額', 'date', 'category', 'type', 'description', 'amount'].includes(cell.toLowerCase()))) {
+    if (firstRow && firstRow.some(cell => typeof cell === 'string' && ['日期', '用途', '內容', '金額', '種類', '帳號備註'].includes(cell.toLowerCase()))) {
         dataRows = data.slice(1);
     }
     
@@ -71,12 +71,12 @@ export async function parseExcelData(data: any[][]): Promise<ParsedExcelData> {
         } else {
             continue; // Skip row if date is not in expected format
         }
-
-        const type = String(row[1] || '').trim(); // "種類"
-        const category = String(row[2] || '未分類').trim(); // "用途"
-        const description = String(row[3] || '').trim(); // "內容"
-        const amount = parseFloat(String(row[4] || '0').replace(/,/g, '')); // "金額"
-        const notes = String(row[5] || '').trim();
+        
+        const category = String(row[1] || '未分類').trim(); // "用途"
+        const description = String(row[2] || '').trim(); // "內容"
+        const amount = parseFloat(String(row[3] || '0').replace(/,/g, '')); // "金額"
+        const type = String(row[4] || '').trim(); // "種類"
+        const notes = String(row[5] || '').trim(); // "帳號備註"
 
         if (description && !isNaN(amount)) {
             detectedCategories.add(category);
