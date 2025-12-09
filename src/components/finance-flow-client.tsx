@@ -598,6 +598,15 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
           transactionsSaved += result.depositData.length;
         }
         
+        if (result.cashData.length > 0) {
+          const cashCollection = collection(firestore, 'users', user.uid, 'cashTransactions');
+          result.cashData.forEach(transaction => {
+            const docRef = doc(cashCollection, transaction.id);
+            batch.set(docRef, transaction, { merge: true });
+          });
+          transactionsSaved += result.cashData.length;
+        }
+
         if (transactionsSaved > 0) {
           try {
             await batch.commit();
@@ -616,7 +625,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
         }
       }
 
-      if (result.creditData.length === 0 && result.depositData.length === 0) {
+      if (result.creditData.length === 0 && result.depositData.length === 0 && result.cashData.length === 0) {
         toast({
           variant: "default",
           title: "提醒",
@@ -2000,7 +2009,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                         {combinedData.length > 0 && <TabsTrigger value="combined"><Combine className="w-4 h-4 mr-2"/>合併報表</TabsTrigger>}
                         {creditData.length > 0 && <TabsTrigger value="credit">信用卡 ({creditData.length})</TabsTrigger>}
                         {depositData.length > 0 && <TabsTrigger value="deposit">活存帳戶 ({depositData.length})</TabsTrigger>}
-                        <TabsTrigger value="cash">現金 ({cashData.length})</TabsTrigger>}
+                        <TabsTrigger value="cash">現金 ({cashData.length})</TabsTrigger>
                         {(creditData.length > 0 || depositData.length > 0 || cashData.length > 0) && <TabsTrigger value="summary"><FileText className="w-4 h-4 mr-2"/>彙總報表</TabsTrigger>}
                         {creditData.length > 0 && <TabsTrigger value="chart"><BarChart2 className="w-4 h-4 mr-2"/>統計圖表</TabsTrigger>}
                       </TabsList>
