@@ -1,6 +1,6 @@
 'use server';
 
-import { parseCreditCard, parseDepositAccount, type CreditData, type DepositData, ParsedCreditDataWithCategory, parseExcelData } from '@/lib/parser';
+import { parseCreditCard, parseDepositAccount, type CreditData, type DepositData, type CashData, ParsedCreditDataWithCategory, parseExcelData } from '@/lib/parser';
 
 export type ReplacementRule = {
     find: string;
@@ -71,24 +71,26 @@ export async function processBankStatement(
     success: boolean;
     creditData: CreditData[];
     depositData: DepositData[];
+    cashData: CashData[];
     detectedCategories: string[];
     error?: string;
 }> {
     if (!text && !isExcelUpload) {
-        return { success: false, creditData: [], depositData: [], detectedCategories: [], error: "No text provided." };
+        return { success: false, creditData: [], depositData: [], cashData: [], detectedCategories: [], error: "No text provided." };
     }
 
     try {
         const detectedCategories = new Set<string>();
         let allCreditData: CreditData[] = [];
         let allDepositData: DepositData[] = [];
+        let allCashData: CashData[] = [];
 
         if (isExcelUpload && excelData) {
             const parsedDataFromExcel = await parseExcelData(excelData);
-            
-            parsedDataFromExcel.forEach(c => { if(c.category) detectedCategories.add(c.category) });
-            allDepositData = parsedDataFromExcel;
-
+            allCreditData = parsedDataFromExcel.creditData;
+            allDepositData = parsedDataFromExcel.depositData;
+            allCashData = parsedDataFromExcel.cashData;
+            parsedDataFromExcel.detectedCategories.forEach(c => detectedCategories.add(c));
         } else {
              // Attempt to parse as credit card data
             const rawCreditParsedPromise = parseCreditCard(text);
@@ -112,12 +114,13 @@ export async function processBankStatement(
             success: true, 
             creditData: allCreditData, 
             depositData: allDepositData, 
+            cashData: allCashData,
             detectedCategories: Array.from(detectedCategories) 
         };
 
     } catch (e) {
         console.error("Error processing bank statement:", e);
         const error = e instanceof Error ? e.message : 'An unknown error occurred during parsing.';
-        return { success: false, creditData: [], depositData: [], detectedCategories: [], error };
+        return { success: false, creditData: [], depositData: [], cashData: [], detectedCategories: [], error };
     }
 }

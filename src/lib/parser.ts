@@ -31,57 +31,101 @@ export type ParsedCreditDataWithCategory = CreditData & {
     postingDate: string;
 }
 
-export async function parseExcelData(data: any[][]): Promise<DepositData[]> {
-    const results: DepositData[] = [];
+export type ParsedExcelData = {
+    creditData: CreditData[];
+    depositData: DepositData[];
+    cashData: CashData[];
+    detectedCategories: string[];
+}
+
+export async function parseExcelData(data: any[][]): Promise<ParsedExcelData> {
+    const creditResults: CreditData[] = [];
+    const depositResults: DepositData[] = [];
+    const cashResults: CashData[] = [];
+    const detectedCategories = new Set<string>();
+
     if (!data || data.length === 0) {
-        return results;
+        return { creditData: [], depositData: [], cashData: [], detectedCategories: [] };
     }
 
-    // Check if the first row is a header
-    const firstRow = data[0];
     let dataRows = data;
-    if (firstRow && firstRow.some(cell => typeof cell === 'string' && ['日期', '用途', '內容', '金額', 'date', 'category', 'description', 'amount'].includes(cell.toLowerCase()))) {
+    const firstRow = data[0];
+    if (firstRow && firstRow.some(cell => typeof cell === 'string' && ['日期', '種類', '用途', '內容', '金額', 'date', 'category', 'type', 'description', 'amount'].includes(cell.toLowerCase()))) {
         dataRows = data.slice(1);
     }
-
+    
     for (const row of dataRows) {
         if (!row || row.length < 4) continue;
 
         const rawDate = row[0];
-        let date: string;
+        let dateStr: string;
 
         if (rawDate instanceof Date) {
-            date = format(rawDate, 'yyyy/MM/dd');
+            dateStr = format(rawDate, 'yyyy/MM/dd');
         } else if (typeof rawDate === 'string' && /^\d{4}\/\d{1,2}\/\d{1,2}$/.test(rawDate)) {
-            date = rawDate;
+            dateStr = rawDate;
         } else if (typeof rawDate === 'number') { // Handle Excel date serial numbers
             const excelEpoch = new Date(1899, 11, 30);
             const jsDate = new Date(excelEpoch.getTime() + rawDate * 86400000);
-            date = format(jsDate, 'yyyy/MM/dd');
+            dateStr = format(jsDate, 'yyyy/MM/dd');
         } else {
             continue; // Skip row if date is not in expected format
         }
 
-        const category = String(row[1] || '未分類').trim();
-        const description = String(row[2] || '').trim();
-        const amount = parseFloat(String(row[3] || '0').replace(/,/g, ''));
-        const bankCode = String(row[4] || '').trim();
+        const type = String(row[1] || '').trim(); // "種類"
+        const category = String(row[2] || '未分類').trim(); // "用途"
+        const description = String(row[3] || '').trim(); // "內容"
+        const amount = parseFloat(String(row[4] || '0').replace(/,/g, '')); // "金額"
+        const notes = String(row[5] || '').trim();
 
         if (description && !isNaN(amount)) {
-            const idString = `${date}-${description}-${amount}`;
+            detectedCategories.add(category);
+            const idString = `${dateStr}-${description}-${amount}-${type}`;
             const id = await sha1(idString);
 
-            results.push({
-                id,
-                date,
-                category,
-                description,
-                amount,
-                bankCode
-            });
+            switch (type) {
+                case '玉山信':
+                    creditResults.push({
+                        id,
+                        transactionDate: format(parse(dateStr, 'yyyy/MM/dd', new Date()), 'MM/dd'),
+                        category,
+                        description,
+                        amount,
+                        bankCode: notes
+                    });
+                    break;
+                case '現金':
+                    cashResults.push({
+                        id,
+                        date: dateStr,
+                        category,
+                        description,
+                        amount,
+                        notes
+                    });
+                    break;
+                case '兆豐匯':
+                case '玉山匯':
+                default: // Default to deposit account
+                    depositResults.push({
+                        id,
+                        date: dateStr,
+                        category,
+                        description,
+                        amount,
+                        bankCode: notes
+                    });
+                    break;
+            }
         }
     }
-    return results;
+    
+    return {
+        creditData: creditResults,
+        depositData: depositResults,
+        cashData: cashResults,
+        detectedCategories: Array.from(detectedCategories),
+    };
 }
 
 
@@ -109,6 +153,7 @@ export async function parseCreditCard(text: string): Promise<ParsedCreditDataWit
     // Handle YYYY/MM/DD format
     if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(transactionDate)) {
         postingDate = transactionDate;
+        transactionDate = format(parse(transactionDate, 'yyyy/MM/dd', new Date()), 'MM/dd')
     }
 
     // Check if the second part is a posting date (MM/DD format) or a category
