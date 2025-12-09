@@ -223,6 +223,7 @@ async function sha1(str: string): Promise<string> {
     return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+
 export function FinanceFlowClient() {
   const getCreditDisplayDate = (dateString: string) => {
     try {
@@ -1006,8 +1007,10 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
   const sortedCreditData = useMemo(() => {
     let filteredData = creditData;
     if (searchQuery) {
+        const lowercasedQuery = searchQuery.toLowerCase();
         filteredData = creditData.filter(item => 
-            item.description.toLowerCase().includes(searchQuery.toLowerCase())
+            item.description.toLowerCase().includes(lowercasedQuery) ||
+            (item.bankCode && item.bankCode.toLowerCase().includes(lowercasedQuery))
         );
     }
     
@@ -1048,8 +1051,10 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
   const sortedDepositData = useMemo(() => {
     let filteredData = depositData;
     if (searchQuery) {
+        const lowercasedQuery = searchQuery.toLowerCase();
         filteredData = depositData.filter(item => 
-            item.description.toLowerCase().includes(searchQuery.toLowerCase())
+            item.description.toLowerCase().includes(lowercasedQuery) ||
+            (item.bankCode && item.bankCode.toLowerCase().includes(lowercasedQuery))
         );
     }
     
@@ -1089,8 +1094,10 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
   const sortedCashData = useMemo(() => {
     let filteredData = cashData;
     if (searchQuery) {
+        const lowercasedQuery = searchQuery.toLowerCase();
         filteredData = cashData.filter(item => 
-            item.description.toLowerCase().includes(searchQuery.toLowerCase())
+            item.description.toLowerCase().includes(lowercasedQuery) ||
+            (item.notes && item.notes.toLowerCase().includes(lowercasedQuery))
         );
     }
 
@@ -1156,6 +1163,8 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
     description: string;
     amount: number;
     source: '信用卡' | '活存帳戶' | '現金';
+    notes?: string;
+    bankCode?: string;
   };
 
   const combinedData = useMemo<CombinedData[]>(() => {
@@ -1167,9 +1176,18 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
 
     if (searchQuery) {
         const lowercasedQuery = searchQuery.toLowerCase();
-        filteredCreditData = creditData.filter(d => d.description.toLowerCase().includes(lowercasedQuery));
-        filteredDepositData = depositData.filter(d => d.description.toLowerCase().includes(lowercasedQuery));
-        filteredCashData = cashData.filter(d => d.description.toLowerCase().includes(lowercasedQuery));
+        filteredCreditData = creditData.filter(d => 
+            d.description.toLowerCase().includes(lowercasedQuery) ||
+            (d.bankCode && d.bankCode.toLowerCase().includes(lowercasedQuery))
+        );
+        filteredDepositData = depositData.filter(d => 
+            d.description.toLowerCase().includes(lowercasedQuery) ||
+            (d.bankCode && d.bankCode.toLowerCase().includes(lowercasedQuery))
+        );
+        filteredCashData = cashData.filter(d => 
+            d.description.toLowerCase().includes(lowercasedQuery) ||
+            (d.notes && d.notes.toLowerCase().includes(lowercasedQuery))
+        );
     }
 
     filteredCreditData.forEach(d => {
@@ -1188,6 +1206,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
             description: d.description,
             amount: d.amount,
             source: '信用卡',
+            bankCode: d.bankCode,
         });
     });
 
@@ -1206,6 +1225,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
         description: d.description,
         amount: d.amount,
         source: '活存帳戶',
+        bankCode: d.bankCode,
       });
     });
     
@@ -1224,6 +1244,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
         description: d.description,
         amount: d.amount,
         source: '現金',
+        notes: d.notes,
       });
     });
 
@@ -1236,7 +1257,10 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
 
     const sourceData = combinedData.filter(item => {
         if(searchQuery){
-            return item.description.toLowerCase().includes(searchQuery.toLowerCase());
+            const lowercasedQuery = searchQuery.toLowerCase();
+            return item.description.toLowerCase().includes(lowercasedQuery) ||
+                   (item.bankCode && item.bankCode.toLowerCase().includes(lowercasedQuery)) ||
+                   (item.notes && item.notes.toLowerCase().includes(lowercasedQuery));
         }
         return true;
     });
@@ -1993,7 +2017,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                        <div className="relative w-full max-w-sm">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
-                          placeholder="尋找交易項目..."
+                          placeholder="尋找交易項目或備註..."
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
                           className="pl-10"
