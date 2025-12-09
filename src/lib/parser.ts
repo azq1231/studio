@@ -54,69 +54,75 @@ export async function parseExcelData(data: any[][]): Promise<ParsedExcelData> {
         dataRows = data.slice(1);
     }
     
-    for (const row of dataRows) {
-        if (!row || row.length < 4) continue;
+    for (const [index, row] of dataRows.entries()) {
+        if (!row || row.every(cell => cell === null || cell === '')) continue;
 
         const rawDate = row[0];
         let dateStr: string;
 
         if (rawDate instanceof Date) {
             dateStr = format(rawDate, 'yyyy/MM/dd');
-        } else if (typeof rawDate === 'string' && /^\d{4}\/\d{1,2}\/\d{1,2}$/.test(rawDate)) {
+        } else if (typeof rawDate === 'string' && (/\d{4}\/\d{1,2}\/\d{1,2}/.test(rawDate) || /\d{1,2}\/\d{1,2}/.test(rawDate))) {
             dateStr = rawDate;
         } else if (typeof rawDate === 'number') { // Handle Excel date serial numbers
             const excelEpoch = new Date(1899, 11, 30);
             const jsDate = new Date(excelEpoch.getTime() + rawDate * 86400000);
             dateStr = format(jsDate, 'yyyy/MM/dd');
         } else {
-            continue; // Skip row if date is not in expected format
+            // If date is unrecognizable, use a placeholder but still process the row
+            dateStr = `無效日期 (行 ${index + 2})`;
         }
         
-        const category = String(row[1] || '未分類').trim(); // "用途"
-        const description = String(row[2] || '').trim(); // "內容"
-        const amount = parseFloat(String(row[3] || '0').replace(/,/g, '')); // "金額"
-        const type = String(row[4] || '').trim(); // "種類"
-        const notes = String(row[5] || '').trim(); // "帳號備註"
+        const category = String(row[1] || '未分類').trim();
+        const description = String(row[2] || '').trim();
+        // More robust amount parsing, defaults to 0 if invalid
+        const rawAmount = String(row[3] || '0').replace(/,/g, '');
+        const amount = !isNaN(parseFloat(rawAmount)) ? parseFloat(rawAmount) : 0;
+        
+        const type = String(row[4] || '').trim();
+        const notes = String(row[5] || '').trim();
 
-        if (description && !isNaN(amount)) {
-            detectedCategories.add(category);
-            const idString = `${dateStr}-${description}-${amount}-${type}`;
-            const id = await sha1(idString);
+        // The core logic for not dropping data: process the row even if some fields are imperfect.
+        // We only require some semblance of a row existing.
+        detectedCategories.add(category);
+        
+        // Use row index in ID to guarantee uniqueness even if content is identical
+        const idString = `${dateStr}-${description}-${amount}-${type}-${index}`;
+        const id = await sha1(idString);
 
-            switch (type) {
-                case '玉山信':
-                    creditResults.push({
-                        id,
-                        transactionDate: dateStr, // Keep full yyyy/MM/dd format
-                        category,
-                        description,
-                        amount,
-                        bankCode: notes
-                    });
-                    break;
-                case '現金':
-                    cashResults.push({
-                        id,
-                        date: dateStr,
-                        category,
-                        description,
-                        amount,
-                        notes
-                    });
-                    break;
-                case '兆豐匯':
-                case '玉山匯':
-                default: // Default to deposit account
-                    depositResults.push({
-                        id,
-                        date: dateStr,
-                        category,
-                        description,
-                        amount,
-                        bankCode: notes
-                    });
-                    break;
-            }
+        switch (type) {
+            case '玉山信':
+                creditResults.push({
+                    id,
+                    transactionDate: dateStr, // Keep original yyyy/MM/dd format
+                    category,
+                    description,
+                    amount,
+                    bankCode: notes
+                });
+                break;
+            case '現金':
+                cashResults.push({
+                    id,
+                    date: dateStr,
+                    category,
+                    description,
+                    amount,
+                    notes
+                });
+                break;
+            case '兆豐匯':
+            case '玉山匯':
+            default: // Default to deposit account
+                depositResults.push({
+                    id,
+                    date: dateStr,
+                    category,
+                    description,
+                    amount,
+                    bankCode: notes
+                });
+                break;
         }
     }
     
@@ -153,7 +159,7 @@ export async function parseCreditCard(text: string): Promise<ParsedCreditDataWit
     // Handle YYYY/MM/DD format
     if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(transactionDate)) {
         postingDate = transactionDate;
-        transactionDate = format(parse(transactionDate, 'yyyy/MM/dd', new Date()), 'MM/dd')
+        // Do not convert to MM/dd anymore, keep the full date
     }
 
     // Check if the second part is a posting date (MM/DD format) or a category
