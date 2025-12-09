@@ -50,7 +50,7 @@ export async function parseExcelData(data: any[][]): Promise<ParsedExcelData> {
 
     let dataRows = data;
     const firstRow = data[0];
-    if (firstRow && firstRow.some(cell => typeof cell === 'string' && ['日期', '用途', '內容', '金額', '種類', '帳號備註'].includes(cell.toLowerCase()))) {
+    if (firstRow && firstRow.some(cell => typeof cell === 'string' && ['日期', '用途', '內容', '金額', '種類', '帳號備註'].some(header => cell.toLowerCase().includes(header.toLowerCase())))) {
         dataRows = data.slice(1);
     }
     
@@ -87,7 +87,7 @@ export async function parseExcelData(data: any[][]): Promise<ParsedExcelData> {
                 case '玉山信':
                     creditResults.push({
                         id,
-                        transactionDate: format(parse(dateStr, 'yyyy/MM/dd', new Date()), 'MM/dd'),
+                        transactionDate: dateStr, // Keep full yyyy/MM/dd format
                         category,
                         description,
                         amount,

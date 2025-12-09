@@ -226,6 +226,10 @@ async function sha1(str: string): Promise<string> {
 export function FinanceFlowClient() {
   const getCreditDisplayDate = (dateString: string) => {
     try {
+      // If the date is already in yyyy/MM/dd format, return it directly
+      if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(dateString)) {
+          return dateString;
+      }
       // This function is specifically for MM/DD format
       if (!/^\d{1,2}\/\d{1,2}$/.test(dateString)) {
           return dateString; // Return as-is if not in MM/DD format
