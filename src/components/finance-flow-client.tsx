@@ -52,7 +52,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Calendar } from "@/components/ui/calendar"
 import { useToast } from "@/hooks/use-toast"
-import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2, FileText, RotateCcw, Combine, Search, Calendar as CalendarIcon, Coins, Upload, DatabaseZap } from 'lucide-react';
+import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2, FileText, RotateCcw, Combine, Search, Calendar as CalendarIcon, Coins, Upload, DatabaseZap, ChevronsLeft, ChevronsRight, ArrowRight } from 'lucide-react';
 import { processBankStatement, type ReplacementRule, type CategoryRule } from '@/app/actions';
 import type { CreditData, DepositData, CashData } from '@/lib/parser';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
@@ -216,6 +216,12 @@ const DEFAULT_QUICK_FILTERS: QuickFilter[] = [
   { name: '篩選一', categories: ['吃', '家', '固定', '秀', '弟', '玩', '姊', '華'] },
   { name: '篩選二', categories: ['方', '蘇'] },
 ];
+
+async function sha1(str: string): Promise<string> {
+    const buffer = new TextEncoder().encode(str);
+    const hash = await crypto.subtle.digest('SHA-1', buffer);
+    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
 
 export function FinanceFlowClient() {
   const getCreditDisplayDate = (dateString: string) => {
@@ -1153,39 +1159,23 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
         filteredCashData = cashData.filter(d => d.description.toLowerCase().includes(lowercasedQuery));
     }
 
-
     filteredCreditData.forEach(d => {
-      let dateObj;
-      const displayDate = getCreditDisplayDate(d.transactionDate);
-      try {
-        // The displayDate could already be in yyyy/MM/dd format if parsed from excel and miscategorized
-        if (/\d{4}\/\d{1,2}\/\d{1,2}/.test(displayDate)) {
-             dateObj = parse(displayDate, 'yyyy/MM/dd', new Date());
-        } else {
-            // Original logic for MM/dd
-            const now = new Date();
-            const currentYear = getYear(now);
-            const currentMonth = getMonth(now);
-            const parsedDate = parse(displayDate, 'MM/dd', new Date());
-            const transactionMonth = getMonth(parsedDate);
-             if (transactionMonth > currentMonth) {
-                dateObj = new Date(new Date(parsedDate).setFullYear(currentYear - 1));
-            } else {
-                dateObj = new Date(new Date(parsedDate).setFullYear(currentYear));
-            }
+        const displayDate = getCreditDisplayDate(d.transactionDate);
+        let dateObj;
+        try {
+            dateObj = parse(displayDate, 'yyyy/MM/dd', new Date());
+        } catch {
+            dateObj = new Date(0);
         }
-      } catch {
-        dateObj = new Date(0);
-      }
-      combined.push({
-        id: d.id,
-        date: format(dateObj, 'yyyy/MM/dd'),
-        dateObj: dateObj,
-        category: d.category,
-        description: d.description,
-        amount: d.amount,
-        source: '信用卡',
-      });
+        combined.push({
+            id: d.id,
+            date: displayDate,
+            dateObj: dateObj,
+            category: d.category,
+            description: d.description,
+            amount: d.amount,
+            source: '信用卡',
+        });
     });
 
     filteredDepositData.forEach(d => {
@@ -1322,9 +1312,42 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
   }
 
   const PaginationControls = ({ currentPage, totalPages, onPageChange }: { currentPage: number, totalPages: number, onPageChange: (page: number) => void }) => {
+    const [jumpToPage, setJumpToPage] = useState(String(currentPage));
+
+    useEffect(() => {
+        setJumpToPage(String(currentPage));
+    }, [currentPage]);
+    
     if (totalPages <= 1) return null;
+
+    const handleJump = () => {
+        let page = parseInt(jumpToPage, 10);
+        if (isNaN(page) || page < 1) {
+            page = 1;
+        } else if (page > totalPages) {
+            page = totalPages;
+        }
+        onPageChange(page);
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            handleJump();
+        }
+    };
+
     return (
         <div className="flex items-center justify-end space-x-2 py-4">
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onPageChange(1)}
+                disabled={currentPage === 1}
+                className="hidden md:flex"
+            >
+                <ChevronsLeft className="h-4 w-4" />
+                第一頁
+            </Button>
             <Button
                 variant="outline"
                 size="sm"
@@ -1333,9 +1356,26 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
             >
                 上一頁
             </Button>
-            <span className="text-sm text-muted-foreground">
-                第 {currentPage} 頁 / 共 {totalPages} 頁
-            </span>
+            <div className="flex items-center space-x-2">
+                <span className="text-sm text-muted-foreground hidden sm:inline">
+                    第
+                </span>
+                <Input
+                    type="number"
+                    value={jumpToPage}
+                    onChange={(e) => setJumpToPage(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    className="h-9 w-16 text-center"
+                    min="1"
+                    max={totalPages}
+                />
+                 <Button variant="outline" size="sm" onClick={handleJump} className="sm:hidden">
+                    <ArrowRight className="h-4 w-4" />
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                    / {totalPages} 頁
+                </span>
+            </div>
             <Button
                 variant="outline"
                 size="sm"
@@ -1343,6 +1383,16 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                 disabled={currentPage === totalPages}
             >
                 下一頁
+            </Button>
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onPageChange(totalPages)}
+                disabled={currentPage === totalPages}
+                className="hidden md:flex"
+            >
+                最後一頁
+                <ChevronsRight className="h-4 w-4" />
             </Button>
         </div>
     );
@@ -1889,11 +1939,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                                           </AlertDialogHeader>
                                           <AlertDialogFooter>
                                             <AlertDialogCancel>取消</AlertDialogCancel>
-                                            <AlertDialogAction 
-                                                onClick={handleDeleteAllData}
-                                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                                                確定刪除
-                                            </AlertDialogAction>
+                                            <AlertDialogAction onClick={handleDeleteAllData}>確定刪除</AlertDialogAction>
                                           </AlertDialogFooter>
                                         </AlertDialogContent>
                                       </AlertDialog>
@@ -1950,7 +1996,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                         {combinedData.length > 0 && <TabsTrigger value="combined"><Combine className="w-4 h-4 mr-2"/>合併報表</TabsTrigger>}
                         {creditData.length > 0 && <TabsTrigger value="credit">信用卡 ({creditData.length})</TabsTrigger>}
                         {depositData.length > 0 && <TabsTrigger value="deposit">活存帳戶 ({depositData.length})</TabsTrigger>}
-                        <TabsTrigger value="cash">現金 ({cashData.length})</TabsTrigger>
+                        <TabsTrigger value="cash">現金 ({cashData.length})</TabsTrigger>}
                         {(creditData.length > 0 || depositData.length > 0 || cashData.length > 0) && <TabsTrigger value="summary"><FileText className="w-4 h-4 mr-2"/>彙總報表</TabsTrigger>}
                         {creditData.length > 0 && <TabsTrigger value="chart"><BarChart2 className="w-4 h-4 mr-2"/>統計圖表</TabsTrigger>}
                       </TabsList>
@@ -2405,9 +2451,9 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                                       return (
                                         <TableCell key={header} className={`font-mono ${header !== '日期（年月）' ? 'text-right' : ''} ${textColor}`}>
                                           {isClickable ? (
-                                             <Button variant="link" className={`p-0 h-auto font-mono text-base ${textColor}`} onClick={() => handleSummaryCellClick(row['日期（年月）'] as string, header)}>
+                                             <button onClick={() => handleSummaryCellClick(row['日期（年月）'] as string, header)} className="hover:underline hover:text-blue-500">
                                                 {(row[header] as number).toLocaleString()}
-                                              </Button>
+                                              </button>
                                           ) : (
                                             typeof row[header] === 'number' ? (row[header] as number).toLocaleString() : row[header]
                                           )}
@@ -2423,29 +2469,30 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                       )}
                        {creditData.length > 0 && (
                         <TabsContent value="chart">
-                           <div className="h-[400px] w-full mt-4">
-                            <ResponsiveContainer width="100%" height="100%">
-                              <BarChart
-                                data={categoryChartData}
-                                margin={{
-                                  top: 5, right: 30, left: 20, bottom: 5,
-                                }}
-                              >
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="name" />
-                                <YAxis allowDecimals={false} />
-                                <Tooltip
-                                  contentStyle={{ 
-                                    background: "hsl(var(--background))",
-                                    border: "1px solid hsl(var(--border))"
-                                  }}
-                                  formatter={(value: number) => value.toLocaleString()}
-                                />
-                                <Legend formatter={(value) => "總金額"}/>
-                                <Bar dataKey="total" fill="hsl(var(--primary))" name="總金額"/>
-                              </BarChart>
-                            </ResponsiveContainer>
-                          </div>
+                           <Card>
+                            <CardHeader>
+                                <CardTitle>信用卡消費分類統計</CardTitle>
+                                <CardDescription>此圖表顯示信用卡的各類別總支出。 (僅計算正數金額)</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div style={{ width: '100%', height: 400 }}>
+                                  <ResponsiveContainer>
+                                      <BarChart
+                                        layout="vertical"
+                                        data={categoryChartData}
+                                        margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                                      >
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis type="number" />
+                                        <YAxis dataKey="name" type="category" width={80} />
+                                        <Tooltip formatter={(value: number) => value.toLocaleString()} />
+                                        <Legend />
+                                        <Bar dataKey="total" fill="var(--color-chart-1)" name="總支出" />
+                                      </BarChart>
+                                  </ResponsiveContainer>
+                                </div>
+                            </CardContent>
+                           </Card>
                         </TabsContent>
                       )}
                     </Tabs>
@@ -2453,10 +2500,14 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                 )}
 
                 {noDataFound && !isLoading && !isLoadingTransactions && (
-                  <div className="text-center text-muted-foreground p-8 border-2 border-dashed rounded-lg">
-                    <AlertCircle className="mx-auto h-12 w-12" />
-                    <p className="mt-4 text-lg">無有效資料</p>
-                    <p className="mt-2 text-sm">我們無法從您提供的內容中解析出任何報表資料。<br/>請確認格式是否正確，或嘗試貼上其他內容。</p>
+                  <div className="text-center py-10">
+                    <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground" />
+                    <h3 className="mt-4 text-lg font-semibold">沒有找到資料</h3>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                    我們無法從您提供的內容中解析出任何報表資料。
+                    <br />
+                    請確認格式是否正確，或嘗試貼上其他內容。
+                    </p>
                   </div>
                 )}
               </CardContent>
@@ -2466,48 +2517,40 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
       )}
 
       <Dialog open={isDetailViewOpen} onOpenChange={setIsDetailViewOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>{detailViewTitle}</DialogTitle>
-          </DialogHeader>
-          <div className="max-h-[60vh] overflow-y-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>日期</TableHead>
-                  <TableHead>交易項目</TableHead>
-                  <TableHead>來源</TableHead>
-                  <TableHead className="text-right">金額</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {detailViewData.length > 0 ? (
-                  detailViewData.map(item => (
-                    <TableRow key={`${detailDialogId}-${item.id}`}>
-                      <TableCell className="font-mono">{(item as any).date || getCreditDisplayDate((item as any).transactionDate)}</TableCell>
-                      <TableCell>{item.description}</TableCell>
-                      <TableCell>{(item as any).source || '信用卡'}</TableCell>
-                      <TableCell className="text-right font-mono">{item.amount.toLocaleString()}</TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={4} className="text-center">
-                      沒有找到相關交易紀錄。
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+        <DialogContent className="max-w-4xl h-4/5 flex flex-col" id={detailDialogId}>
+            <DialogHeader>
+                <DialogTitle>{detailViewTitle}</DialogTitle>
+            </DialogHeader>
+            <div className="flex-grow overflow-y-auto">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>日期</TableHead>
+                            <TableHead>交易項目</TableHead>
+                            <TableHead>來源</TableHead>
+                            <TableHead className="text-right">金額</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {detailViewData.length > 0 ? (
+                        detailViewData.map(item => (
+                            <TableRow key={item.id}>
+                            <TableCell>{(item as any).date || getCreditDisplayDate((item as any).transactionDate)}</TableCell>
+                            <TableCell>{item.description}</TableCell>
+                            <TableCell>{(item as any).source || '信用卡'}</TableCell>
+                            <TableCell className={`text-right ${item.amount < 0 ? 'text-green-600' : ''}`}>{item.amount.toLocaleString()}</TableCell>
+                            </TableRow>
+                        ))
+                        ) : (
+                        <TableRow>
+                            <TableCell colSpan={4} className="text-center">沒有找到相關交易紀錄。</TableCell>
+                        </TableRow>
+                        )}
+                    </TableBody>
+                </Table>
+            </div>
         </DialogContent>
       </Dialog>
     </div>
   );
-}
-
-async function sha1(str: string): Promise<string> {
-    const buffer = new TextEncoder().encode(str);
-    const hash = await crypto.subtle.digest('SHA-1', buffer);
-    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
