@@ -112,6 +112,7 @@ type CashSortKey = 'date' | 'category' | 'description' | 'amount' | 'notes';
 
 type QuickFilter = z.infer<typeof quickFilterSchema>;
 
+const ITEMS_PER_PAGE = 50;
 
 const DEFAULT_REPLACEMENT_RULES: ReplacementRule[] = [
   { find: '行銀非約跨優', replace: '', deleteRow: false },
@@ -280,6 +281,10 @@ export function FinanceFlowClient() {
   const [summarySelectedCategories, setSummarySelectedCategories] = useState<string[]>([]);
   const [isSummaryFilterOpen, setIsSummaryFilterOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  const [creditPage, setCreditPage] = useState(1);
+  const [depositPage, setDepositPage] = useState(1);
+  const [cashPage, setCashPage] = useState(1);
 
 
   const creditTransactionsQuery = useMemoFirebase(
@@ -699,7 +704,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
     try {
       const wb = XLSX.utils.book_new();
       
-      const allData = [...sortedCreditData, ...sortedDepositData, ...sortedCashData];
+      const allData = [...sortedCreditData.data, ...sortedDepositData.data, ...sortedCashData.data];
 
       if (allData.length > 0) {
         const sheetData = allData.map(d => {
@@ -987,9 +992,9 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
         );
     }
     
-    if (!creditSortKey) return filteredData;
+    if (!creditSortKey) return { data: filteredData, totalPages: Math.ceil(filteredData.length / ITEMS_PER_PAGE) };
 
-    return [...filteredData].sort((a, b) => {
+    const sorted = [...filteredData].sort((a, b) => {
         let comparison = 0;
         if (creditSortKey === 'date') {
             try {
@@ -1014,7 +1019,12 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
 
         return creditSortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [creditData, creditSortKey, creditSortDirection, getCreditDisplayDate, searchQuery]);
+    const startIndex = (creditPage - 1) * ITEMS_PER_PAGE;
+    const paginatedData = sorted.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+    return { data: paginatedData, totalPages: Math.ceil(sorted.length / ITEMS_PER_PAGE) };
+
+  }, [creditData, creditSortKey, creditSortDirection, getCreditDisplayDate, searchQuery, creditPage]);
 
   const sortedDepositData = useMemo(() => {
     let filteredData = depositData;
@@ -1024,9 +1034,9 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
         );
     }
     
-    if (!depositSortKey) return filteredData;
+    if (!depositSortKey) return { data: filteredData, totalPages: Math.ceil(filteredData.length / ITEMS_PER_PAGE) };
 
-    return [...filteredData].sort((a, b) => {
+    const sorted = [...filteredData].sort((a, b) => {
         const aValue = a[depositSortKey];
         const bValue = b[depositSortKey];
 
@@ -1049,7 +1059,13 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
 
         return depositSortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [depositData, depositSortKey, depositSortDirection, searchQuery]);
+
+    const startIndex = (depositPage - 1) * ITEMS_PER_PAGE;
+    const paginatedData = sorted.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+    return { data: paginatedData, totalPages: Math.ceil(sorted.length / ITEMS_PER_PAGE) };
+
+  }, [depositData, depositSortKey, depositSortDirection, searchQuery, depositPage]);
 
   const sortedCashData = useMemo(() => {
     let filteredData = cashData;
@@ -1059,9 +1075,9 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
         );
     }
 
-    if (!cashSortKey) return filteredData;
+    if (!cashSortKey) return { data: filteredData, totalPages: Math.ceil(filteredData.length / ITEMS_PER_PAGE) };
 
-    return [...filteredData].sort((a, b) => {
+    const sorted = [...filteredData].sort((a, b) => {
         const aValue = a[cashSortKey];
         const bValue = b[cashSortKey];
         let comparison = 0;
@@ -1083,7 +1099,12 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
 
         return cashSortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [cashData, cashSortKey, cashSortDirection, searchQuery]);
+
+    const startIndex = (cashPage - 1) * ITEMS_PER_PAGE;
+    const paginatedData = sorted.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+    return { data: paginatedData, totalPages: Math.ceil(sorted.length / ITEMS_PER_PAGE) };
+  }, [cashData, cashSortKey, cashSortDirection, searchQuery, cashPage]);
 
 
   const categoryChartData = useMemo(() => {
@@ -1137,13 +1158,28 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
       let dateObj;
       const displayDate = getCreditDisplayDate(d.transactionDate);
       try {
-        dateObj = parse(displayDate, 'yyyy/MM/dd', new Date());
+        // The displayDate could already be in yyyy/MM/dd format if parsed from excel and miscategorized
+        if (/\d{4}\/\d{1,2}\/\d{1,2}/.test(displayDate)) {
+             dateObj = parse(displayDate, 'yyyy/MM/dd', new Date());
+        } else {
+            // Original logic for MM/dd
+            const now = new Date();
+            const currentYear = getYear(now);
+            const currentMonth = getMonth(now);
+            const parsedDate = parse(displayDate, 'MM/dd', new Date());
+            const transactionMonth = getMonth(parsedDate);
+             if (transactionMonth > currentMonth) {
+                dateObj = new Date(new Date(parsedDate).setFullYear(currentYear - 1));
+            } else {
+                dateObj = new Date(new Date(parsedDate).setFullYear(currentYear));
+            }
+        }
       } catch {
         dateObj = new Date(0);
       }
       combined.push({
         id: d.id,
-        date: displayDate,
+        date: format(dateObj, 'yyyy/MM/dd'),
         dateObj: dateObj,
         category: d.category,
         description: d.description,
@@ -1284,6 +1320,33 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
     setAvailableCategories(currentCats);
     setSummarySelectedCategories(categories);
   }
+
+  const PaginationControls = ({ currentPage, totalPages, onPageChange }: { currentPage: number, totalPages: number, onPageChange: (page: number) => void }) => {
+    if (totalPages <= 1) return null;
+    return (
+        <div className="flex items-center justify-end space-x-2 py-4">
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onPageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+            >
+                上一頁
+            </Button>
+            <span className="text-sm text-muted-foreground">
+                第 {currentPage} 頁 / 共 {totalPages} 頁
+            </span>
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onPageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+            >
+                下一頁
+            </Button>
+        </div>
+    );
+  };
 
 
   const noDataFound = hasProcessed && !isLoading && creditData.length === 0 && depositData.length === 0 && cashData.length === 0;
@@ -1885,9 +1948,9 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                     <Tabs defaultValue={defaultTab} className="w-full">
                       <TabsList>
                         {combinedData.length > 0 && <TabsTrigger value="combined"><Combine className="w-4 h-4 mr-2"/>合併報表</TabsTrigger>}
-                        {creditData.length > 0 && <TabsTrigger value="credit">信用卡 ({sortedCreditData.length})</TabsTrigger>}
-                        {depositData.length > 0 && <TabsTrigger value="deposit">活存帳戶 ({sortedDepositData.length})</TabsTrigger>}
-                        <TabsTrigger value="cash">現金 ({sortedCashData.length})</TabsTrigger>
+                        {creditData.length > 0 && <TabsTrigger value="credit">信用卡 ({creditData.length})</TabsTrigger>}
+                        {depositData.length > 0 && <TabsTrigger value="deposit">活存帳戶 ({depositData.length})</TabsTrigger>}
+                        <TabsTrigger value="cash">現金 ({cashData.length})</TabsTrigger>
                         {(creditData.length > 0 || depositData.length > 0 || cashData.length > 0) && <TabsTrigger value="summary"><FileText className="w-4 h-4 mr-2"/>彙總報表</TabsTrigger>}
                         {creditData.length > 0 && <TabsTrigger value="chart"><BarChart2 className="w-4 h-4 mr-2"/>統計圖表</TabsTrigger>}
                       </TabsList>
@@ -1931,7 +1994,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {sortedCreditData.map((row) => (
+                              {sortedCreditData.data.map((row) => (
                                 <TableRow key={row.id}>
                                   <TableCell style={{ width: '110px' }}>
                                     <div className="font-mono">{getCreditDisplayDate(row.transactionDate)}</div>
@@ -1986,6 +2049,11 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                               ))}
                             </TableBody>
                           </Table>
+                          <PaginationControls
+                            currentPage={creditPage}
+                            totalPages={sortedCreditData.totalPages}
+                            onPageChange={setCreditPage}
+                           />
                         </TabsContent>
                       )}
                       {depositData.length > 0 && (
@@ -2003,7 +2071,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {sortedDepositData.map((row) => (
+                              {sortedDepositData.data.map((row) => (
                                 <TableRow key={row.id}>
                                   <TableCell style={{ width: '110px' }}>
                                     <div className="font-mono">{row.date}</div>
@@ -2058,6 +2126,11 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                               ))}
                             </TableBody>
                           </Table>
+                          <PaginationControls
+                            currentPage={depositPage}
+                            totalPages={sortedDepositData.totalPages}
+                            onPageChange={setDepositPage}
+                          />
                         </TabsContent>
                       )}
                       
@@ -2196,7 +2269,7 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {sortedCashData.map((row) => (
+                              {sortedCashData.data.map((row) => (
                                 <TableRow key={row.id}>
                                   <TableCell style={{ width: '110px' }}><div className="font-mono">{row.date}</div></TableCell>
                                   <TableCell style={{ width: '110px' }}>
@@ -2249,6 +2322,11 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
                               ))}
                             </TableBody>
                           </Table>
+                          <PaginationControls
+                            currentPage={cashPage}
+                            totalPages={sortedCashData.totalPages}
+                            onPageChange={setCashPage}
+                          />
                         </TabsContent>
                       
                        {(creditData.length > 0 || depositData.length > 0 || cashData.length > 0) && (
