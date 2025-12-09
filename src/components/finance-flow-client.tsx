@@ -1304,7 +1304,11 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
       row['總計'] = total;
       
       return row;
-    }).sort((a, b) => (a['日期（年月）'] as string).localeCompare(b['日期（年月）'] as string, 'zh-Hant', { numeric: true }));
+    }).sort((a, b) => {
+        const dateA = parse(a['日期（年月）'] as string, 'yyyy年M月', new Date());
+        const dateB = parse(b['日期（年月）'] as string, 'yyyy年M月', new Date());
+        return dateA.getTime() - dateB.getTime();
+    });
     
     return { headers, rows };
   }, [combinedData, summarySelectedCategories, searchQuery]);
