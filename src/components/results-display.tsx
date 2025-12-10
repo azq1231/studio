@@ -191,6 +191,15 @@ function CashTransactionForm({ availableCategories, onSubmit, user }: CashTransa
         defaultValues: { description: '', category: '', notes: '', type: 'expense' },
     });
 
+    const { formState: { isSubmitSuccessful } } = form;
+
+    useEffect(() => {
+        if (isSubmitSuccessful) {
+            form.reset();
+        }
+    }, [isSubmitSuccessful, form]);
+
+
     const handleSubmit = (values: CashTransactionFormData) => {
         onSubmit({
             date: format(values.date, 'yyyy/MM/dd'),
@@ -200,7 +209,6 @@ function CashTransactionForm({ availableCategories, onSubmit, user }: CashTransa
             notes: values.notes,
             type: values.type,
         });
-        form.reset();
     };
 
     return (
@@ -728,5 +736,3 @@ export function ResultsDisplay({
         </Card>
     );
 }
-
-    
