@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useUser, useFirestore, useCollection, useDoc, useMemoFirebase } from '@/firebase';
 import { collection, writeBatch, doc, getDocs, query, setDoc, serverTimestamp, updateDoc, deleteDoc, getDoc } from 'firebase/firestore';
 import { useToast } from "@/hooks/use-toast"
@@ -31,7 +31,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Calendar } from "@/components/ui/calendar";
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
-import { Download, AlertCircle, Trash2, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2, FileText, Combine, Search, ChevronsLeft, ChevronsRight, ArrowRight, Loader2, Calendar as CalendarIcon, Settings, PlusCircle, RotateCcw, DatabaseZap, Text, ClipboardCopy } from 'lucide-react';
+import { Download, AlertCircle, Trash2, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2, FileText, Combine, Search, ChevronsLeft, ChevronsRight, ArrowRight, Loader2, Calendar as CalendarIcon, Settings, PlusCircle, RotateCcw, DatabaseZap, Text, ClipboardCopy, Upload, Download as DownloadIcon, FileUp } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 
 // =======================================================================
@@ -131,6 +131,7 @@ function SettingsManager({
     const [newCategory, setNewCategory] = useState('');
     const [sortKey, setSortKey] = useState<SortKey | null>(null);
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [availableCategories, setAvailableCategories] = useState(settings.availableCategories);
 
@@ -208,6 +209,68 @@ function SettingsManager({
         toast({ title: '所有設定已重置為預設值', description: '請記得點擊儲存來保存變更。' });
     };
 
+    const handleExportSettings = () => {
+      try {
+        const currentSettings: AppSettings = {
+          ...settingsForm.getValues(),
+          availableCategories: availableCategories
+        };
+        const jsonString = JSON.stringify(currentSettings, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'finance-flow-settings.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast({ title: '設定已匯出' });
+      } catch (error) {
+        toast({ variant: 'destructive', title: '匯出失敗', description: '匯出設定時發生錯誤。' });
+      }
+    };
+
+    const handleImportFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const text = e.target?.result;
+          if (typeof text !== 'string') {
+            throw new Error('無法讀取檔案內容');
+          }
+          const importedSettings = JSON.parse(text) as AppSettings;
+
+          // Basic validation
+          if (
+            !importedSettings ||
+            !Array.isArray(importedSettings.availableCategories) ||
+            !Array.isArray(importedSettings.replacementRules) ||
+            !Array.isArray(importedSettings.categoryRules) ||
+            !Array.isArray(importedSettings.quickFilters)
+          ) {
+            throw new Error('檔案格式不符');
+          }
+
+          replaceReplacementRules(importedSettings.replacementRules);
+          replaceCategoryRules(importedSettings.categoryRules);
+          replaceQuickFilters(importedSettings.quickFilters);
+          setAvailableCategories(importedSettings.availableCategories);
+
+          toast({ title: '設定已成功匯入', description: '請檢查匯入的規則，並點擊「儲存設定」以保存變更。' });
+
+        } catch (error: any) {
+          toast({ variant: 'destructive', title: '匯入失敗', description: error.message || '無法解析設定檔案，請確認檔案是否正確。' });
+        } finally {
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+      };
+      reader.readAsText(file);
+    };
+
     if (!user) {
         return (
             <Card>
@@ -228,24 +291,13 @@ function SettingsManager({
     return (
         <Card>
             <CardHeader>
-                <div className="flex justify-between items-center">
-                    <div>
-                        <CardTitle>規則設定</CardTitle>
-                        <CardDescription>管理報表處理、分類和資料的規則。您的設定將會自動儲存到雲端。</CardDescription>
-                    </div>
-                    <AlertDialog>
-                        <AlertDialogTrigger asChild><Button type="button" variant="outline"><RotateCcw className="mr-2 h-4 w-4" />全部重置為預設</Button></AlertDialogTrigger>
-                        <AlertDialogContent>
-                            <AlertDialogHeader><AlertDialogTitle>確定要重置所有設定嗎？</AlertDialogTitle><AlertDialogDescription>此操作將會清除您所有自訂的規則與類型，並恢復為系統預設值。此動作無法復原。</AlertDialogDescription></AlertDialogHeader>
-                            <AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction onClick={resetAllSettings}>確定重置</AlertDialogAction></AlertDialogFooter>
-                        </AlertDialogContent>
-                    </AlertDialog>
-                </div>
+                <CardTitle>規則設定</CardTitle>
+                <CardDescription>管理報表處理、分類和資料的規則。您的設定將會自動儲存到雲端。</CardDescription>
             </CardHeader>
             <CardContent>
               <Form {...settingsForm}>
                 <form onSubmit={settingsForm.handleSubmit(handleSaveSettings)} className="space-y-6">
-                  <Accordion type="single" collapsible className="w-full">
+                  <Accordion type="single" collapsible className="w-full" defaultValue="replacement">
                     <AccordionItem value="replacement">
                       <AccordionTrigger>取代規則</AccordionTrigger>
                       <AccordionContent>
@@ -346,22 +398,46 @@ function SettingsManager({
                           </div>
                       </AccordionContent>
                     </AccordionItem>
-                     <AccordionItem value="data-management">
-                        <AccordionTrigger>資料管理</AccordionTrigger>
-                        <AccordionContent>
-                            <CardDescription className="mb-4">執行永久性的資料操作。請謹慎使用。</CardDescription>
-                              <Card className="border-destructive">
-                                <CardHeader><CardTitle className="text-destructive">危險區域</CardTitle></CardHeader>
-                                <CardContent>
-                                  <p className="text-sm mb-4">此操作將會永久刪除您帳戶中**所有**的交易紀錄，包含信用卡、活存帳戶與現金收支。此動作無法復原。</p>
-                                  <AlertDialog>
-                                    <AlertDialogTrigger asChild><Button type="button" variant="destructive" disabled={!user || isProcessing}><DatabaseZap className="mr-2 h-4 w-4" />刪除所有交易資料</Button></AlertDialogTrigger>
-                                    <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>您確定嗎？</AlertDialogTitle><AlertDialogDescription>您即將永久刪除所有交易資料。此動作無法復原，所有已儲存的報表資料都將遺失。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction onClick={onDeleteAllData}>確定刪除</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
-                                  </AlertDialog>
+                    <AccordionItem value="data-management">
+                      <AccordionTrigger>資料管理</AccordionTrigger>
+                      <AccordionContent>
+                          <CardDescription className="mb-4">執行永久性的資料操作。請謹慎使用。</CardDescription>
+                          <div className="space-y-4">
+                            <Card>
+                                <CardHeader><CardTitle>匯入/匯出設定</CardTitle></CardHeader>
+                                <CardContent className="flex gap-4">
+                                    <input type="file" ref={fileInputRef} onChange={handleImportFileSelected} className="hidden" accept=".json" />
+                                    <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}><FileUp className="mr-2 h-4 w-4" />匯入設定</Button>
+                                    <Button type="button" variant="outline" onClick={handleExportSettings}><DownloadIcon className="mr-2 h-4 w-4" />匯出設定</Button>
                                 </CardContent>
-                              </Card>
-                        </AccordionContent>
-                     </AccordionItem>
+                            </Card>
+                            <Card>
+                              <CardHeader>
+                                <CardTitle>重置</CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild><Button type="button" variant="outline"><RotateCcw className="mr-2 h-4 w-4" />全部重置為預設</Button></AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader><AlertDialogTitle>確定要重置所有設定嗎？</AlertDialogTitle><AlertDialogDescription>此操作將會清除您所有自訂的規則與類型，並恢復為系統預設值。此動作無法復原。</AlertDialogDescription></AlertDialogHeader>
+                                        <AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction onClick={resetAllSettings}>確定重置</AlertDialogAction></AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                              </CardContent>
+                            </Card>
+                            <Card className="border-destructive">
+                              <CardHeader><CardTitle className="text-destructive">危險區域</CardTitle></CardHeader>
+                              <CardContent>
+                                <p className="text-sm mb-4">此操作將會永久刪除您帳戶中**所有**的交易紀錄，包含信用卡、活存帳戶與現金收支。此動作無法復原。</p>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild><Button type="button" variant="destructive" disabled={!user || isProcessing}><DatabaseZap className="mr-2 h-4 w-4" />刪除所有交易資料</Button></AlertDialogTrigger>
+                                  <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>您確定嗎？</AlertDialogTitle><AlertDialogDescription>您即將永久刪除所有交易資料。此動作無法復原，所有已儲存的報表資料都將遺失。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction onClick={onDeleteAllData}>確定刪除</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+                                </AlertDialog>
+                              </CardContent>
+                            </Card>
+                          </div>
+                      </AccordionContent>
+                    </AccordionItem>
                   </Accordion>
                   <div className="flex justify-end items-center mt-6"><Button type="submit" disabled={isProcessing}>
                     {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -711,6 +787,7 @@ export function FinanceFlowClient() {
   const [cashData, setCashData] = useState<CashData[]>([]);
 
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [activeTab, setActiveTab] = useState("importer");
 
   // --- Data Fetching ---
   const creditTransactionsQuery = useMemoFirebase(() => user && firestore ? collection(firestore, 'users', user.uid, 'creditCardTransactions') : null, [user, firestore]);
@@ -750,7 +827,9 @@ export function FinanceFlowClient() {
                 // Check one more time to prevent race conditions
                 getDoc(settingsDocRef).then(docSnap => {
                     if (!docSnap.exists()) {
-                        setDoc(settingsDocRef, DEFAULT_SETTINGS, { merge: true }).catch(console.error);
+                       // Only set default settings if the document truly does not exist.
+                       // Avoids overwriting existing settings during hot-reloads or temporary network issues.
+                       setDoc(settingsDocRef, DEFAULT_SETTINGS, { merge: true }).catch(console.error);
                     }
                 });
             }
@@ -832,6 +911,7 @@ export function FinanceFlowClient() {
     
     setIsLoading(false);
     setHasProcessed(true);
+    setActiveTab("results");
   }, [user, firestore, toast, settings, handleSaveSettings]);
 
   const handleAddCashTransaction = useCallback(async (newTransactionData: Omit<CashData, 'id' | 'amount'> & {amount: number, type: 'expense' | 'income'}) => {
@@ -898,7 +978,7 @@ export function FinanceFlowClient() {
   const showResults = (hasProcessed && hasData) || (!isUserLoading && !hasProcessed && hasData && !isLoadingData);
 
   return (
-    <Tabs defaultValue="importer" className="w-full">
+    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
       <TabsList className="grid w-full grid-cols-3">
         <TabsTrigger value="importer">
             <ClipboardCopy className="mr-2" />
