@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useUser, useFirestore, useCollection, useDoc, useMemoFirebase } from '@/firebase';
-import { collection, writeBatch, doc, getDocs, query, setDoc, serverTimestamp, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, writeBatch, doc, getDocs, query, setDoc, serverTimestamp, updateDoc, deleteDoc, getDoc } from 'firebase/firestore';
 import { useToast } from "@/hooks/use-toast"
 import { processBankStatement, type ReplacementRule, type CategoryRule } from '@/app/actions';
 import type { CreditData, DepositData, CashData } from '@/lib/parser';
@@ -737,24 +737,29 @@ export function FinanceFlowClient() {
             const mergedSettings = {
                 ...DEFAULT_SETTINGS,
                 ...savedSettings,
-                availableCategories: savedSettings.availableCategories || DEFAULT_SETTINGS.availableCategories,
-                replacementRules: savedSettings.replacementRules || DEFAULT_SETTINGS.replacementRules,
-                categoryRules: savedSettings.categoryRules || DEFAULT_SETTINGS.categoryRules,
-                quickFilters: savedSettings.quickFilters || DEFAULT_SETTINGS.quickFilters,
+                availableCategories: savedSettings.availableCategories && savedSettings.availableCategories.length > 0 ? savedSettings.availableCategories : DEFAULT_SETTINGS.availableCategories,
+                replacementRules: savedSettings.replacementRules && savedSettings.replacementRules.length > 0 ? savedSettings.replacementRules : DEFAULT_SETTINGS.replacementRules,
+                categoryRules: savedSettings.categoryRules && savedSettings.categoryRules.length > 0 ? savedSettings.categoryRules : DEFAULT_SETTINGS.categoryRules,
+                quickFilters: savedSettings.quickFilters && savedSettings.quickFilters.length > 0 ? savedSettings.quickFilters : DEFAULT_SETTINGS.quickFilters,
             };
             setSettings(mergedSettings);
         } else {
-            // No settings found in Firestore, use default and maybe save them
-            setSettings(DEFAULT_SETTINGS);
+             // This block now only runs if savedSettings is definitively null after loading,
+             // which implies the document doesn't exist.
             if (firestore && settingsDocRef) {
-                // Save default settings for new user
-                setDoc(settingsDocRef, DEFAULT_SETTINGS, { merge: true }).catch(console.error);
+                // Check one more time to prevent race conditions
+                getDoc(settingsDocRef).then(docSnap => {
+                    if (!docSnap.exists()) {
+                        setDoc(settingsDocRef, DEFAULT_SETTINGS, { merge: true }).catch(console.error);
+                    }
+                });
             }
+            setSettings(DEFAULT_SETTINGS);
         }
     } else if (!user) {
         setSettings(DEFAULT_SETTINGS); // Reset to default if user logs out
     }
-  }, [user, savedSettings, isLoadingSettings, firestore, settingsDocRef]);
+}, [user, savedSettings, isLoadingSettings, firestore, settingsDocRef]);
 
 
   const handleSaveSettings = useCallback(async (newSettings: AppSettings) => {
