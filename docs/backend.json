@@ -121,6 +121,52 @@
         "description",
         "amount"
       ]
+    },
+    "AppSettings": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "AppSettings",
+      "type": "object",
+      "description": "Stores user-specific application settings, including rules and filters.",
+      "properties": {
+        "replacementRules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "find": { "type": "string" },
+              "replace": { "type": "string" },
+              "deleteRow": { "type": "boolean" }
+            },
+            "required": ["find", "replace"]
+          }
+        },
+        "categoryRules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "keyword": { "type": "string" },
+              "category": { "type": "string" }
+            },
+            "required": ["keyword", "category"]
+          }
+        },
+        "quickFilters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "categories": { "type": "array", "items": { "type": "string" } }
+            },
+            "required": ["name", "categories"]
+          }
+        },
+        "availableCategories": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
     }
   },
   "auth": {
@@ -187,6 +233,26 @@
             {
               "name": "transactionId",
               "description": "The unique identifier of the cash transaction."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/settings/{settingId}",
+        "definition": {
+          "entityName": "AppSettings",
+          "schema": {
+            "$ref": "#/backend/entities/AppSettings"
+          },
+          "description": "Stores user-specific settings. A single document per user identified by a fixed ID like 'user-settings'.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user."
+            },
+            {
+              "name": "settingId",
+              "description": "A fixed ID for the settings document, e.g., 'user-settings'."
             }
           ]
         }

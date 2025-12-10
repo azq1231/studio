@@ -109,5 +109,16 @@ service cloud.firestore {
       allow get, list: if isOwner(userId);
       allow create, update, delete: if isOwner(userId);
     }
+
+    /**
+     * @description Secures a user's private settings. Only the user who owns this data can access it.
+     * @path /users/USER_123/settings/user-settings
+     * @allow A user with auth.uid 'USER_123' can read, create, and update their own settings document.
+     * @deny A different user is blocked. Deletion is disallowed to prevent accidental loss of settings.
+     */
+    match /users/{userId}/settings/{settingId} {
+        allow get, list, create, update: if isOwner(userId);
+        allow delete: if false;
+    }
   }
 }

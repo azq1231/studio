@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { useUser, useFirestore, useCollection, useDoc, useMemoFirebase } from '@/firebase';
 import { collection, writeBatch, doc, getDocs, query, setDoc, serverTimestamp, updateDoc, deleteDoc } from 'firebase/firestore';
 import { useToast } from "@/hooks/use-toast"
 import { processBankStatement, type ReplacementRule, type CategoryRule } from '@/app/actions';
@@ -56,7 +56,7 @@ async function sha1(str: string): Promise<string> {
 
 
 // =======================================================================
-// COMPONENT: SettingsAccordion
+// COMPONENT: SettingsManager
 // =======================================================================
 const replacementRuleSchema = z.object({
   find: z.string().min(1, { message: '請輸入要尋找的文字' }),
@@ -80,6 +80,12 @@ const settingsFormSchema = z.object({
   quickFilters: z.array(quickFilterSchema),
 });
 
+export type AppSettings = {
+    availableCategories: string[];
+    replacementRules: ReplacementRule[];
+    categoryRules: CategoryRule[];
+    quickFilters: QuickFilter[];
+};
 type SettingsFormData = z.infer<typeof settingsFormSchema>;
 type SortKey = 'keyword' | 'category';
 type SortDirection = 'asc' | 'desc';
@@ -99,63 +105,66 @@ const DEFAULT_QUICK_FILTERS: QuickFilter[] = [
   { name: '篩選二', categories: ['方', '蘇'] },
 ];
 
+const DEFAULT_CATEGORIES = ['方', '吃', '家', '固定', '蘇', '秀', '弟', '玩', '姊', '收入', '華'];
+
+export const DEFAULT_SETTINGS: AppSettings = {
+    availableCategories: DEFAULT_CATEGORIES,
+    replacementRules: DEFAULT_REPLACEMENT_RULES,
+    categoryRules: DEFAULT_CATEGORY_RULES,
+    quickFilters: DEFAULT_QUICK_FILTERS,
+};
+
 function SettingsManager({ 
-    onDeleteAllData, 
+    onDeleteAllData,
+    onSaveSettings,
     isProcessing, 
     user, 
-    availableCategories, 
-    setAvailableCategories,
-    quickFilters,
-    setQuickFilters,
-    replacementRules,
-    setReplacementRules,
-    categoryRules,
-    setCategoryRules
+    settings
 }: {
     onDeleteAllData: () => Promise<void>;
+    onSaveSettings: (newSettings: AppSettings) => Promise<void>;
     isProcessing: boolean;
     user: User | null;
-    availableCategories: string[];
-    setAvailableCategories: (value: string[]) => void;
-    quickFilters: QuickFilter[];
-    setQuickFilters: (value: QuickFilter[]) => void;
-    replacementRules: ReplacementRule[];
-    setReplacementRules: (value: ReplacementRule[]) => void;
-    categoryRules: CategoryRule[];
-    setCategoryRules: (value: CategoryRule[]) => void;
+    settings: AppSettings;
 }) {
     const { toast } = useToast();
     const [newCategory, setNewCategory] = useState('');
     const [sortKey, setSortKey] = useState<SortKey | null>(null);
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
+    const [availableCategories, setAvailableCategories] = useState(settings.availableCategories);
+
     const settingsForm = useForm<SettingsFormData>({
         resolver: zodResolver(settingsFormSchema),
         values: {
-            replacementRules,
-            categoryRules,
-            quickFilters,
+            replacementRules: settings.replacementRules,
+            categoryRules: settings.categoryRules,
+            quickFilters: settings.quickFilters,
         }
     });
+
+    useEffect(() => {
+        setAvailableCategories(settings.availableCategories);
+        settingsForm.reset({
+            replacementRules: settings.replacementRules,
+            categoryRules: settings.categoryRules,
+            quickFilters: settings.quickFilters,
+        });
+    }, [settings, settingsForm]);
 
     const { fields: replacementFields, append: appendReplacement, remove: removeReplacement, replace: replaceReplacementRules } = useFieldArray({ control: settingsForm.control, name: 'replacementRules' });
     const { fields: categoryFields, append: appendCategory, remove: removeCategory, replace: replaceCategoryRules } = useFieldArray({ control: settingsForm.control, name: 'categoryRules' });
     const { fields: quickFilterFields, append: appendQuickFilter, remove: removeQuickFilter, replace: replaceQuickFilters } = useFieldArray({ control: settingsForm.control, name: "quickFilters" });
 
-
-    const handleSaveSettings = (data: SettingsFormData) => {
-        try {
-            const uniqueReplacementRules = Array.from(new Map(data.replacementRules.map(r => [r.find, r])).values());
-            const uniqueCategoryRules = Array.from(new Map(data.categoryRules.map(r => [r.keyword, r])).values());
-            
-            setReplacementRules(uniqueReplacementRules);
-            setCategoryRules(uniqueCategoryRules);
-            setQuickFilters(data.quickFilters);
-
-            toast({ title: "設定已儲存", description: "您的規則已成功儲存。" });
-        } catch (e) {
-           toast({ variant: "destructive", title: "儲存失敗", description: "無法儲存設定到您的瀏覽器。" });
-        }
+    const handleSaveSettings = async (data: SettingsFormData) => {
+        const newSettings: AppSettings = {
+            replacementRules: data.replacementRules,
+            categoryRules: data.categoryRules,
+            quickFilters: data.quickFilters,
+            availableCategories: availableCategories,
+        };
+        await onSaveSettings(newSettings);
+        toast({ title: "設定已儲存", description: "您的規則已成功儲存到雲端。" });
     };
     
     const handleAddCategory = () => {
@@ -163,7 +172,7 @@ function SettingsManager({
             const updatedCategories = [...availableCategories, newCategory];
             setAvailableCategories(updatedCategories);
             setNewCategory('');
-            toast({ title: '類型已新增', description: `「${newCategory}」已成功新增。` });
+            toast({ title: '類型已新增', description: `「${newCategory}」已成功新增。下次儲存設定時將會一併儲存。` });
         } else if (availableCategories.includes(newCategory)) {
             toast({ variant: 'destructive', title: '新增失敗', description: '此類型已存在。' });
         }
@@ -173,7 +182,7 @@ function SettingsManager({
         const updatedCategories = availableCategories.filter(c => c !== categoryToRemove);
         setAvailableCategories(updatedCategories);
         settingsForm.setValue('categoryRules', settingsForm.getValues('categoryRules').filter(rule => rule.category !== categoryToRemove));
-        toast({ title: '類型已刪除', description: `「${categoryToRemove}」已被移除。` });
+        toast({ title: '類型已刪除', description: `「${categoryToRemove}」已被移除。下次儲存設定時將會一併儲存。` });
     };
 
     const handleSort = (key: SortKey) => {
@@ -191,15 +200,47 @@ function SettingsManager({
         });
     }, [categoryFields, sortKey, sortDirection, settingsForm]);
 
-    const resetReplacementRules = () => { replaceReplacementRules(DEFAULT_REPLACEMENT_RULES); toast({ title: '取代規則已重置' }); };
-    const resetCategoryRules = () => { replaceCategoryRules(DEFAULT_CATEGORY_RULES); toast({ title: '分類規則已重置' }); };
-    const resetQuickFilters = () => { replaceQuickFilters(DEFAULT_QUICK_FILTERS); toast({ title: '快速篩選已重置' }); };
+    const resetAllSettings = () => {
+        replaceReplacementRules(DEFAULT_REPLACEMENT_RULES);
+        replaceCategoryRules(DEFAULT_CATEGORY_RULES);
+        replaceQuickFilters(DEFAULT_QUICK_FILTERS);
+        setAvailableCategories(DEFAULT_CATEGORIES);
+        toast({ title: '所有設定已重置為預設值', description: '請記得點擊儲存來保存變更。' });
+    };
+
+    if (!user) {
+        return (
+            <Card>
+                <CardHeader>
+                    <CardTitle>規則設定</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="text-center py-10">
+                        <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground" />
+                        <h3 className="mt-4 text-lg font-semibold">請先登入</h3>
+                        <p className="mt-2 text-sm text-muted-foreground">登入後即可管理您的個人化規則設定。</p>
+                    </div>
+                </CardContent>
+            </Card>
+        );
+    }
 
     return (
         <Card>
             <CardHeader>
-                <CardTitle>規則設定</CardTitle>
-                <CardDescription>管理報表處理、分類和資料的規則。</CardDescription>
+                <div className="flex justify-between items-center">
+                    <div>
+                        <CardTitle>規則設定</CardTitle>
+                        <CardDescription>管理報表處理、分類和資料的規則。您的設定將會自動儲存到雲端。</CardDescription>
+                    </div>
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild><Button type="button" variant="outline"><RotateCcw className="mr-2 h-4 w-4" />全部重置為預設</Button></AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader><AlertDialogTitle>確定要重置所有設定嗎？</AlertDialogTitle><AlertDialogDescription>此操作將會清除您所有自訂的規則與類型，並恢復為系統預設值。此動作無法復原。</AlertDialogDescription></AlertDialogHeader>
+                            <AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction onClick={resetAllSettings}>確定重置</AlertDialogAction></AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                </div>
             </CardHeader>
             <CardContent>
               <Form {...settingsForm}>
@@ -208,13 +249,7 @@ function SettingsManager({
                     <AccordionItem value="replacement">
                       <AccordionTrigger>取代規則</AccordionTrigger>
                       <AccordionContent>
-                          <div className="flex justify-between items-center mb-4">
-                            <CardDescription>設定自動取代或刪除規則。勾選「刪除整筆資料」後，符合條件的資料將被整筆移除。</CardDescription>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild><Button type="button" variant="outline" size="sm"><RotateCcw className="mr-2 h-4 w-4" />重置</Button></AlertDialogTrigger>
-                              <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>確定要重置取代規則嗎？</AlertDialogTitle><AlertDialogDescription>此操作將會清除所有您自訂的取代規則，並恢復為系統預設值。此動作無法復原。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction onClick={resetReplacementRules}>確定重置</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
-                            </AlertDialog>
-                          </div>
+                          <CardDescription className="mb-4">設定自動取代或刪除規則。勾選「刪除整筆資料」後，符合條件的資料將被整筆移除。</CardDescription>
                           <div className="rounded-md border">
                             <Table>
                               <TableHeader><TableRow><TableHead className="w-2/5">尋找文字</TableHead><TableHead className="w-2_5">取代為</TableHead><TableHead className="w-1/5 text-center">刪除整筆資料</TableHead><TableHead className="w-[50px]">操作</TableHead></TableRow></TableHeader>
@@ -236,13 +271,7 @@ function SettingsManager({
                     <AccordionItem value="category">
                        <AccordionTrigger>分類規則</AccordionTrigger>
                        <AccordionContent>
-                          <div className="flex justify-between items-center mb-4">
-                            <CardDescription>設定交易項目關鍵字與對應的類型。處理報表時，將會自動帶入符合的第一個類型。</CardDescription>
-                            <AlertDialog>
-                                <AlertDialogTrigger asChild><Button type="button" variant="outline" size="sm"><RotateCcw className="mr-2 h-4 w-4" />重置</Button></AlertDialogTrigger>
-                                <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>確定要重置分類規則嗎？</AlertDialogTitle><AlertDialogDescription>此操作將會清除所有您自訂的分類規則，並恢復為系統預設值。此動作無法復原。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction onClick={resetCategoryRules}>確定重置</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
-                            </AlertDialog>
-                          </div>
+                          <CardDescription className="mb-4">設定交易項目關鍵字與對應的類型。處理報表時，將會自動帶入符合的第一個類型。</CardDescription>
                           <div className="rounded-md border">
                             <Table>
                               <TableHeader><TableRow>
@@ -271,13 +300,7 @@ function SettingsManager({
                     <AccordionItem value="quick-filters">
                        <AccordionTrigger>快速篩選</AccordionTrigger>
                        <AccordionContent>
-                          <div className="flex justify-between items-center mb-4">
-                            <CardDescription>自訂彙總報表中的快速篩選按鈕，方便您一鍵切換常用的類別組合。</CardDescription>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild><Button type="button" variant="outline" size="sm"><RotateCcw className="mr-2 h-4 w-4" />重置</Button></AlertDialogTrigger>
-                              <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>確定要重置快速篩選嗎？</AlertDialogTitle><AlertDialogDescription>此操作將會清除所有您自訂的快速篩選，並恢復為系統預設值。此動作無法復原。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction onClick={resetQuickFilters}>確定重置</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
-                            </AlertDialog>
-                          </div>
+                          <CardDescription className="mb-4">自訂彙總報表中的快速篩選按鈕，方便您一鍵切換常用的類別組合。</CardDescription>
                           <div className="space-y-4">
                             {quickFilterFields.map((field, index) => (
                               <Card key={field.id} className="p-4 relative">
@@ -340,7 +363,10 @@ function SettingsManager({
                         </AccordionContent>
                      </AccordionItem>
                   </Accordion>
-                  <div className="flex justify-end items-center mt-6"><Button type="submit">儲存設定</Button></div>
+                  <div className="flex justify-end items-center mt-6"><Button type="submit" disabled={isProcessing}>
+                    {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    儲存設定
+                  </Button></div>
                 </form>
               </Form>
             </CardContent>
@@ -677,17 +703,14 @@ export function FinanceFlowClient() {
   const { toast } = useToast();
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [hasProcessed, setHasProcessed] = useState(false);
   
   const [creditData, setCreditData] = useState<CreditData[]>([]);
   const [depositData, setDepositData] = useState<DepositData[]>([]);
   const [cashData, setCashData] = useState<CashData[]>([]);
-  
-  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
-  const [quickFilters, setQuickFilters] = useState<QuickFilter[]>([]);
-  const [replacementRules, setReplacementRules] = useState<ReplacementRule[]>([]);
-  const [categoryRules, setCategoryRules] = useState<CategoryRule[]>([]);
 
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
 
   // --- Data Fetching ---
   const creditTransactionsQuery = useMemoFirebase(() => user && firestore ? collection(firestore, 'users', user.uid, 'creditCardTransactions') : null, [user, firestore]);
@@ -698,75 +721,73 @@ export function FinanceFlowClient() {
 
   const cashTransactionsQuery = useMemoFirebase(() => user && firestore ? collection(firestore, 'users', user.uid, 'cashTransactions') : null, [user, firestore]);
   const { data: savedCashTransactions, isLoading: isLoadingCash } = useCollection<CashData>(cashTransactionsQuery);
+  
+  const settingsDocRef = useMemoFirebase(() => user && firestore ? doc(firestore, 'users', user.uid, 'settings', 'user-settings') : null, [user, firestore]);
+  const { data: savedSettings, isLoading: isLoadingSettings } = useDoc<AppSettings>(settingsDocRef);
+
 
   useEffect(() => { if (savedCreditTransactions) setCreditData(savedCreditTransactions); }, [savedCreditTransactions]);
   useEffect(() => { if (savedDepositTransactions) setDepositData(savedDepositTransactions); }, [savedDepositTransactions]);
   useEffect(() => { if (savedCashTransactions) setCashData(savedCashTransactions); }, [savedCashTransactions]);
 
   useEffect(() => {
-    try {
-        const savedCategories = localStorage.getItem('availableCategories');
-        if (savedCategories) {
-            setAvailableCategories(JSON.parse(savedCategories));
+    if (user && !isLoadingSettings) {
+        if (savedSettings) {
+            // Merge default settings with saved settings to ensure all keys are present
+            const mergedSettings = {
+                ...DEFAULT_SETTINGS,
+                ...savedSettings,
+                availableCategories: savedSettings.availableCategories || DEFAULT_SETTINGS.availableCategories,
+                replacementRules: savedSettings.replacementRules || DEFAULT_SETTINGS.replacementRules,
+                categoryRules: savedSettings.categoryRules || DEFAULT_SETTINGS.categoryRules,
+                quickFilters: savedSettings.quickFilters || DEFAULT_SETTINGS.quickFilters,
+            };
+            setSettings(mergedSettings);
         } else {
-            const defaultCategories = ['方', '吃', '家', '固定', '蘇', '秀', '弟', '玩', '姊', '收入', '華'];
-            setAvailableCategories(defaultCategories);
-            localStorage.setItem('availableCategories', JSON.stringify(defaultCategories));
+            // No settings found in Firestore, use default and maybe save them
+            setSettings(DEFAULT_SETTINGS);
+            if (firestore && settingsDocRef) {
+                // Save default settings for new user
+                setDoc(settingsDocRef, DEFAULT_SETTINGS, { merge: true }).catch(console.error);
+            }
         }
-        
-        const savedReplacementRules = localStorage.getItem('replacementRules');
-        setReplacementRules(savedReplacementRules ? JSON.parse(savedReplacementRules) : DEFAULT_REPLACEMENT_RULES);
-        
-        const savedCategoryRulesRaw = localStorage.getItem('categoryRules');
-        let finalCategoryRules = [...DEFAULT_CATEGORY_RULES];
-        if (savedCategoryRulesRaw) {
-            try {
-                const savedRules = JSON.parse(savedCategoryRulesRaw) as CategoryRule[];
-                const finalRulesMap = new Map(finalCategoryRules.map(r => [r.keyword, r]));
-                savedRules.forEach(savedRule => finalRulesMap.set(savedRule.keyword, savedRule));
-                finalCategoryRules = Array.from(finalRulesMap.values());
-            } catch {}
-        }
-        setCategoryRules(finalCategoryRules);
-        localStorage.setItem('categoryRules', JSON.stringify(finalCategoryRules));
+    } else if (!user) {
+        setSettings(DEFAULT_SETTINGS); // Reset to default if user logs out
+    }
+  }, [user, savedSettings, isLoadingSettings, firestore, settingsDocRef]);
 
-        const savedQuickFilters = localStorage.getItem('quickFilters');
-        setQuickFilters(savedQuickFilters ? JSON.parse(savedQuickFilters) : DEFAULT_QUICK_FILTERS);
 
-    } catch (e) { console.error("Failed to load settings from localStorage", e); }
-  }, []);
-
-  const handleSetAvailableCategories = (value: string[]) => {
-      setAvailableCategories(value);
-      localStorage.setItem('availableCategories', JSON.stringify(value));
-  };
-  const handleSetQuickFilters = (value: QuickFilter[]) => {
-      setQuickFilters(value);
-      localStorage.setItem('quickFilters', JSON.stringify(value));
-  };
-  const handleSetReplacementRules = (value: ReplacementRule[]) => {
-      setReplacementRules(value);
-      localStorage.setItem('replacementRules', JSON.stringify(value));
-  };
-  const handleSetCategoryRules = (value: CategoryRule[]) => {
-      setCategoryRules(value);
-      localStorage.setItem('categoryRules', JSON.stringify(value));
-  };
+  const handleSaveSettings = useCallback(async (newSettings: AppSettings) => {
+    if (!user || !firestore || !settingsDocRef) {
+      toast({ variant: "destructive", title: "儲存失敗", description: "請先登入才能儲存設定。" });
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await setDoc(settingsDocRef, newSettings, { merge: true });
+      setSettings(newSettings); // Optimistically update local state
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "儲存失敗", description: e.message || "無法將設定儲存到資料庫。" });
+    } finally {
+      setIsSaving(false);
+    }
+  }, [user, firestore, settingsDocRef, toast]);
 
 
   const handleProcessAndSave = useCallback(async ({ text, excelData }: { text?: string; excelData?: any[][] }) => {
     setIsLoading(true);
     setHasProcessed(false);
     
-    const result = await processBankStatement(text || '', replacementRules, categoryRules, !!excelData, excelData);
+    const result = await processBankStatement(text || '', settings.replacementRules, settings.categoryRules, !!excelData, excelData);
     
     if (result.success) {
       if (result.detectedCategories.length > 0) {
-        const currentCats = availableCategories;
+        const currentCats = settings.availableCategories;
         const newCats = result.detectedCategories.filter(c => !currentCats.includes(c));
         if (newCats.length > 0) {
-            const updated = [...currentCats, ...newCats];
-            handleSetAvailableCategories(updated);
+            const updatedCategories = [...currentCats, ...newCats];
+            const newSettings = {...settings, availableCategories: updatedCategories};
+            await handleSaveSettings(newSettings);
             toast({ title: '自動新增類型', description: `已新增：${newCats.join(', ')}`});
         }
       }
@@ -806,7 +827,7 @@ export function FinanceFlowClient() {
     
     setIsLoading(false);
     setHasProcessed(true);
-  }, [user, firestore, toast, replacementRules, categoryRules, availableCategories, handleSetAvailableCategories]);
+  }, [user, firestore, toast, settings, handleSaveSettings]);
 
   const handleAddCashTransaction = useCallback(async (newTransactionData: Omit<CashData, 'id' | 'amount'> & {amount: number, type: 'expense' | 'income'}) => {
     if (!user || !firestore) { toast({ variant: 'destructive', title: '錯誤', description: '請先登入' }); return; }
@@ -867,9 +888,9 @@ export function FinanceFlowClient() {
         }
     }, [user, firestore, toast]);
 
-  const isLoadingTransactions = isLoadingCredit || isLoadingDeposit || isLoadingCash;
+  const isLoadingData = isLoadingCredit || isLoadingDeposit || isLoadingCash || (user && isLoadingSettings);
   const hasData = creditData.length > 0 || depositData.length > 0 || cashData.length > 0;
-  const showResults = (hasProcessed && hasData) || (!isUserLoading && !hasProcessed && hasData && !isLoadingTransactions);
+  const showResults = (hasProcessed && hasData) || (!isUserLoading && !hasProcessed && hasData && !isLoadingData);
 
   return (
     <Tabs defaultValue="importer" className="w-full">
@@ -891,35 +912,36 @@ export function FinanceFlowClient() {
         <StatementImporter isProcessing={isLoading} onProcess={handleProcessAndSave} user={user} />
       </TabsContent>
       <TabsContent value="settings" className="mt-4">
-        <SettingsManager 
-            onDeleteAllData={handleDeleteAllData} 
-            isProcessing={isLoading} 
-            user={user} 
-            availableCategories={availableCategories} 
-            setAvailableCategories={handleSetAvailableCategories}
-            quickFilters={quickFilters}
-            setQuickFilters={handleSetQuickFilters}
-            replacementRules={replacementRules}
-            setReplacementRules={handleSetReplacementRules}
-            categoryRules={categoryRules}
-            setCategoryRules={handleSetCategoryRules}
-        />
+        {isLoadingData && user ? (
+            <div className="space-y-4 pt-4">
+                <Card><CardHeader><Skeleton className="h-8 w-48 rounded-md" /></CardHeader>
+                <CardContent className="space-y-4"><Skeleton className="h-48 w-full rounded-md" /></CardContent></Card>
+            </div>
+        ) : (
+            <SettingsManager 
+                onDeleteAllData={handleDeleteAllData} 
+                onSaveSettings={handleSaveSettings}
+                isProcessing={isLoading || isSaving}
+                user={user}
+                settings={settings}
+            />
+        )}
       </TabsContent>
       <TabsContent value="results" className="mt-4">
-        {(isLoading || (showResults && !isLoadingTransactions)) ? (
+        {(isLoading || (showResults && !isLoadingData)) ? (
             <ResultsDisplay
                 creditData={creditData}
                 depositData={depositData}
                 cashData={cashData}
-                availableCategories={availableCategories}
-                quickFilters={quickFilters}
+                availableCategories={settings.availableCategories}
+                quickFilters={settings.quickFilters}
                 onAddCashTransaction={handleAddCashTransaction}
                 onUpdateTransaction={handleUpdateTransaction}
                 onDeleteTransaction={handleDeleteTransaction}
                 hasProcessed={hasProcessed}
                 user={user}
             />
-        ) : (isLoadingTransactions && !hasData) ? (
+        ) : (isLoadingData && !hasData) ? (
             <div className="space-y-4 pt-4">
                 <Card>
                     <CardHeader>
@@ -946,7 +968,3 @@ export function FinanceFlowClient() {
     </Tabs>
   );
 }
-
-      
-
-    
