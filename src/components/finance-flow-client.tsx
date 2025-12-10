@@ -82,7 +82,7 @@ const settingsFormSchema = z.object({
 type SettingsFormData = z.infer<typeof settingsFormSchema>;
 type SortKey = 'keyword' | 'category';
 type SortDirection = 'asc' | 'desc';
-type QuickFilter = z.infer<typeof quickFilterSchema>;
+export type QuickFilter = z.infer<typeof quickFilterSchema>;
 
 const DEFAULT_REPLACEMENT_RULES: ReplacementRule[] = [
   { find: '行銀非約跨優', replace: '', deleteRow: false },
@@ -98,82 +98,59 @@ const DEFAULT_QUICK_FILTERS: QuickFilter[] = [
   { name: '篩選二', categories: ['方', '蘇'] },
 ];
 
-function SettingsAccordion({ onDeleteAllData, isProcessing, user, availableCategories, setAvailableCategories }: {
+function SettingsAccordion({ 
+    onDeleteAllData, 
+    isProcessing, 
+    user, 
+    availableCategories, 
+    setAvailableCategories,
+    quickFilters,
+    setQuickFilters,
+    replacementRules,
+    setReplacementRules,
+    categoryRules,
+    setCategoryRules
+}: {
     onDeleteAllData: () => Promise<void>;
     isProcessing: boolean;
     user: User | null;
     availableCategories: string[];
-    setAvailableCategories: React.Dispatch<React.SetStateAction<string[]>>;
+    setAvailableCategories: (value: string[]) => void;
+    quickFilters: QuickFilter[];
+    setQuickFilters: (value: QuickFilter[]) => void;
+    replacementRules: ReplacementRule[];
+    setReplacementRules: (value: ReplacementRule[]) => void;
+    categoryRules: CategoryRule[];
+    setCategoryRules: (value: CategoryRule[]) => void;
 }) {
     const { toast } = useToast();
-    const [isClient, setIsClient] = useState(false);
     const [newCategory, setNewCategory] = useState('');
     const [sortKey, setSortKey] = useState<SortKey | null>(null);
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
     const settingsForm = useForm<SettingsFormData>({
         resolver: zodResolver(settingsFormSchema),
-        defaultValues: {
-            replacementRules: [],
-            categoryRules: [],
-            quickFilters: [],
-        },
+        values: {
+            replacementRules,
+            categoryRules,
+            quickFilters,
+        }
     });
 
     const { fields: replacementFields, append: appendReplacement, remove: removeReplacement, replace: replaceReplacementRules } = useFieldArray({ control: settingsForm.control, name: 'replacementRules' });
     const { fields: categoryFields, append: appendCategory, remove: removeCategory, replace: replaceCategoryRules } = useFieldArray({ control: settingsForm.control, name: 'categoryRules' });
     const { fields: quickFilterFields, append: appendQuickFilter, remove: removeQuickFilter, replace: replaceQuickFilters } = useFieldArray({ control: settingsForm.control, name: "quickFilters" });
 
-    useEffect(() => {
-        setIsClient(true);
-    }, []);
-
-    useEffect(() => {
-        if (isClient) {
-            try {
-                const savedCategories = localStorage.getItem('availableCategories');
-                if (savedCategories) {
-                    setAvailableCategories(JSON.parse(savedCategories));
-                } else {
-                    const defaultCategories = ['方', '吃', '家', '固定', '蘇', '秀', '弟', '玩', '姊', '收入', '華'];
-                    setAvailableCategories(defaultCategories);
-                    localStorage.setItem('availableCategories', JSON.stringify(defaultCategories));
-                }
-                
-                const savedReplacementRules = localStorage.getItem('replacementRules');
-                settingsForm.setValue('replacementRules', savedReplacementRules ? JSON.parse(savedReplacementRules) : DEFAULT_REPLACEMENT_RULES);
-                
-                const savedCategoryRulesRaw = localStorage.getItem('categoryRules');
-                let finalCategoryRules = [...DEFAULT_CATEGORY_RULES];
-                if (savedCategoryRulesRaw) {
-                    try {
-                        const savedRules = JSON.parse(savedCategoryRulesRaw) as CategoryRule[];
-                        const finalRulesMap = new Map(finalCategoryRules.map(r => [r.keyword, r]));
-                        savedRules.forEach(savedRule => finalRulesMap.set(savedRule.keyword, savedRule));
-                        finalCategoryRules = Array.from(finalRulesMap.values());
-                    } catch {}
-                }
-                settingsForm.setValue('categoryRules', finalCategoryRules);
-                localStorage.setItem('categoryRules', JSON.stringify(finalCategoryRules));
-
-                const savedQuickFilters = localStorage.getItem('quickFilters');
-                settingsForm.setValue('quickFilters', savedQuickFilters ? JSON.parse(savedQuickFilters) : DEFAULT_QUICK_FILTERS);
-
-            } catch (e) { console.error("Failed to load settings from localStorage", e); }
-        }
-    }, [isClient, settingsForm, setAvailableCategories]);
-
 
     const handleSaveSettings = (data: SettingsFormData) => {
         try {
             const uniqueReplacementRules = Array.from(new Map(data.replacementRules.map(r => [r.find, r])).values());
             const uniqueCategoryRules = Array.from(new Map(data.categoryRules.map(r => [r.keyword, r])).values());
-
-            localStorage.setItem('replacementRules', JSON.stringify(uniqueReplacementRules));
-            localStorage.setItem('categoryRules', JSON.stringify(uniqueCategoryRules));
-            localStorage.setItem('quickFilters', JSON.stringify(data.quickFilters));
             
-            settingsForm.reset({ replacementRules: uniqueReplacementRules, categoryRules: uniqueCategoryRules, quickFilters: data.quickFilters });
+            setReplacementRules(uniqueReplacementRules);
+            setCategoryRules(uniqueCategoryRules);
+            setQuickFilters(data.quickFilters);
+
             toast({ title: "設定已儲存", description: "您的規則已成功儲存。" });
         } catch (e) {
            toast({ variant: "destructive", title: "儲存失敗", description: "無法儲存設定到您的瀏覽器。" });
@@ -184,7 +161,6 @@ function SettingsAccordion({ onDeleteAllData, isProcessing, user, availableCateg
         if (newCategory && !availableCategories.includes(newCategory)) {
             const updatedCategories = [...availableCategories, newCategory];
             setAvailableCategories(updatedCategories);
-            localStorage.setItem('availableCategories', JSON.stringify(updatedCategories));
             setNewCategory('');
             toast({ title: '類型已新增', description: `「${newCategory}」已成功新增。` });
         } else if (availableCategories.includes(newCategory)) {
@@ -195,7 +171,6 @@ function SettingsAccordion({ onDeleteAllData, isProcessing, user, availableCateg
     const handleRemoveCategory = (categoryToRemove: string) => {
         const updatedCategories = availableCategories.filter(c => c !== categoryToRemove);
         setAvailableCategories(updatedCategories);
-        localStorage.setItem('availableCategories', JSON.stringify(updatedCategories));
         settingsForm.setValue('categoryRules', settingsForm.getValues('categoryRules').filter(rule => rule.category !== categoryToRemove));
         toast({ title: '類型已刪除', description: `「${categoryToRemove}」已被移除。` });
     };
@@ -215,11 +190,9 @@ function SettingsAccordion({ onDeleteAllData, isProcessing, user, availableCateg
         });
     }, [categoryFields, sortKey, sortDirection, settingsForm]);
 
-    const resetReplacementRules = () => { replaceReplacementRules(DEFAULT_REPLACEMENT_RULES); localStorage.setItem('replacementRules', JSON.stringify(DEFAULT_REPLACEMENT_RULES)); toast({ title: '取代規則已重置' }); };
-    const resetCategoryRules = () => { replaceCategoryRules(DEFAULT_CATEGORY_RULES); localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES)); toast({ title: '分類規則已重置' }); };
-    const resetQuickFilters = () => { replaceQuickFilters(DEFAULT_QUICK_FILTERS); localStorage.setItem('quickFilters', JSON.stringify(DEFAULT_QUICK_FILTERS)); toast({ title: '快速篩選已重置' }); };
-
-    if (!isClient) return null;
+    const resetReplacementRules = () => { replaceReplacementRules(DEFAULT_REPLACEMENT_RULES); toast({ title: '取代規則已重置' }); };
+    const resetCategoryRules = () => { replaceCategoryRules(DEFAULT_CATEGORY_RULES); toast({ title: '分類規則已重置' }); };
+    const resetQuickFilters = () => { replaceQuickFilters(DEFAULT_QUICK_FILTERS); toast({ title: '快速篩選已重置' }); };
 
     return (
       <Accordion type="single" collapsible>
@@ -696,6 +669,9 @@ export function FinanceFlowClient() {
   
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
   const [quickFilters, setQuickFilters] = useState<QuickFilter[]>([]);
+  const [replacementRules, setReplacementRules] = useState<ReplacementRule[]>([]);
+  const [categoryRules, setCategoryRules] = useState<CategoryRule[]>([]);
+
 
   // --- Data Fetching ---
   const creditTransactionsQuery = useMemoFirebase(() => user && firestore ? collection(firestore, 'users', user.uid, 'creditCardTransactions') : null, [user, firestore]);
@@ -712,37 +688,69 @@ export function FinanceFlowClient() {
   useEffect(() => { if (savedCashTransactions) setCashData(savedCashTransactions); }, [savedCashTransactions]);
 
   useEffect(() => {
-    // This effect now ONLY runs on the client
     try {
+        const savedCategories = localStorage.getItem('availableCategories');
+        if (savedCategories) {
+            setAvailableCategories(JSON.parse(savedCategories));
+        } else {
+            const defaultCategories = ['方', '吃', '家', '固定', '蘇', '秀', '弟', '玩', '姊', '收入', '華'];
+            setAvailableCategories(defaultCategories);
+            localStorage.setItem('availableCategories', JSON.stringify(defaultCategories));
+        }
+        
+        const savedReplacementRules = localStorage.getItem('replacementRules');
+        setReplacementRules(savedReplacementRules ? JSON.parse(savedReplacementRules) : DEFAULT_REPLACEMENT_RULES);
+        
+        const savedCategoryRulesRaw = localStorage.getItem('categoryRules');
+        let finalCategoryRules = [...DEFAULT_CATEGORY_RULES];
+        if (savedCategoryRulesRaw) {
+            try {
+                const savedRules = JSON.parse(savedCategoryRulesRaw) as CategoryRule[];
+                const finalRulesMap = new Map(finalCategoryRules.map(r => [r.keyword, r]));
+                savedRules.forEach(savedRule => finalRulesMap.set(savedRule.keyword, savedRule));
+                finalCategoryRules = Array.from(finalRulesMap.values());
+            } catch {}
+        }
+        setCategoryRules(finalCategoryRules);
+        localStorage.setItem('categoryRules', JSON.stringify(finalCategoryRules));
+
         const savedQuickFilters = localStorage.getItem('quickFilters');
-        if (savedQuickFilters) setQuickFilters(JSON.parse(savedQuickFilters));
-    } catch(e) {
-        console.error("Failed to load quick filters from localStorage", e);
-    }
+        setQuickFilters(savedQuickFilters ? JSON.parse(savedQuickFilters) : DEFAULT_QUICK_FILTERS);
+
+    } catch (e) { console.error("Failed to load settings from localStorage", e); }
   }, []);
+
+  const handleSetAvailableCategories = (value: string[]) => {
+      setAvailableCategories(value);
+      localStorage.setItem('availableCategories', JSON.stringify(value));
+  };
+  const handleSetQuickFilters = (value: QuickFilter[]) => {
+      setQuickFilters(value);
+      localStorage.setItem('quickFilters', JSON.stringify(value));
+  };
+  const handleSetReplacementRules = (value: ReplacementRule[]) => {
+      setReplacementRules(value);
+      localStorage.setItem('replacementRules', JSON.stringify(value));
+  };
+  const handleSetCategoryRules = (value: CategoryRule[]) => {
+      setCategoryRules(value);
+      localStorage.setItem('categoryRules', JSON.stringify(value));
+  };
+
 
   const handleProcessAndSave = useCallback(async ({ text, excelData }: { text?: string; excelData?: any[][] }) => {
     setIsLoading(true);
     setHasProcessed(false);
     
-    // Safely get rules from localStorage, only on the client.
-    let replacementRules: ReplacementRule[] = [];
-    let categoryRules: CategoryRule[] = [];
-    if (typeof window !== 'undefined') {
-        replacementRules = JSON.parse(localStorage.getItem('replacementRules') || '[]');
-        categoryRules = JSON.parse(localStorage.getItem('categoryRules') || '[]');
-    }
-    
     const result = await processBankStatement(text || '', replacementRules, categoryRules, !!excelData, excelData);
     
     if (result.success) {
-      if (result.detectedCategories.length > 0 && typeof window !== 'undefined') {
-        const currentCats = JSON.parse(localStorage.getItem('availableCategories') || '[]');
+      if (result.detectedCategories.length > 0) {
+        const currentCats = availableCategories;
         const newCats = result.detectedCategories.filter(c => !currentCats.includes(c));
         if (newCats.length > 0) {
             const updated = [...currentCats, ...newCats];
-            setAvailableCategories(updated);
-            localStorage.setItem('availableCategories', JSON.stringify(updated));
+            handleSetAvailableCategories(updated);
             toast({ title: '自動新增類型', description: `已新增：${newCats.join(', ')}`});
         }
       }
@@ -782,7 +790,7 @@ export function FinanceFlowClient() {
     
     setIsLoading(false);
     setHasProcessed(true);
-  }, [user, firestore, toast]);
+  }, [user, firestore, toast, replacementRules, categoryRules, availableCategories]);
 
   const handleAddCashTransaction = useCallback(async (newTransactionData: Omit<CashData, 'id' | 'amount'> & {amount: number, type: 'expense' | 'income'}) => {
     if (!user || !firestore) { toast({ variant: 'destructive', title: '錯誤', description: '請先登入' }); return; }
@@ -850,7 +858,19 @@ export function FinanceFlowClient() {
   return (
     <div className="space-y-4">
         <StatementImporter isProcessing={isLoading} onProcess={handleProcessAndSave} user={user} />
-        <SettingsAccordion onDeleteAllData={handleDeleteAllData} isProcessing={isLoading} user={user} availableCategories={availableCategories} setAvailableCategories={setAvailableCategories} />
+        <SettingsAccordion 
+            onDeleteAllData={handleDeleteAllData} 
+            isProcessing={isLoading} 
+            user={user} 
+            availableCategories={availableCategories} 
+            setAvailableCategories={handleSetAvailableCategories}
+            quickFilters={quickFilters}
+            setQuickFilters={handleSetQuickFilters}
+            replacementRules={replacementRules}
+            setReplacementRules={handleSetReplacementRules}
+            categoryRules={categoryRules}
+            setCategoryRules={handleSetCategoryRules}
+        />
         {(isLoading || (showResults && !isLoadingTransactions)) ? (
             <ResultsDisplay
                 creditData={creditData}
