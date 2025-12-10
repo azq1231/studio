@@ -7,7 +7,6 @@ import { useToast } from "@/hooks/use-toast"
 import { processBankStatement, type ReplacementRule, type CategoryRule } from '@/app/actions';
 import type { CreditData, DepositData, CashData } from '@/lib/parser';
 import { StatementImporter } from '@/components/statement-importer';
-import { createHash } from 'crypto';
 
 import { useForm, useFieldArray } from 'react-hook-form';
 import { z } from 'zod';
@@ -48,8 +47,9 @@ async function sha1(str: string): Promise<string> {
         const hash = await window.crypto.subtle.digest('SHA-1', buffer);
         return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
     } else {
-        // Node.js environment
-        return createHash('sha1').update(str).digest('hex');
+        // Node.js environment - This part is not used in this client component, but makes the function universal.
+        // The actual Node.js crypto module should be imported in server-side files.
+        throw new Error('sha1 function running in a non-browser environment without Node.js crypto module.');
     }
 }
 
@@ -790,7 +790,7 @@ export function FinanceFlowClient() {
     
     setIsLoading(false);
     setHasProcessed(true);
-  }, [user, firestore, toast, replacementRules, categoryRules, availableCategories]);
+  }, [user, firestore, toast, replacementRules, categoryRules, availableCategories, handleSetAvailableCategories]);
 
   const handleAddCashTransaction = useCallback(async (newTransactionData: Omit<CashData, 'id' | 'amount'> & {amount: number, type: 'expense' | 'income'}) => {
     if (!user || !firestore) { toast({ variant: 'destructive', title: '錯誤', description: '請先登入' }); return; }
