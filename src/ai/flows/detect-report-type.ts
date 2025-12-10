@@ -1,61 +1,65 @@
-'use server';
-
-/**
- * @fileOverview This file defines a Genkit flow to detect the type of bank report (credit card or deposit account).
- *
- * It exports:
- * - `detectReportType`: An async function that takes text as input and returns the detected report type.
- * - `DetectReportTypeInput`: The input type for the detectReportType function.
- * - `DetectReportTypeOutput`: The output type for the detectReportType function.
- */
-
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
-
-const DetectReportTypeInputSchema = z.object({
-  text: z.string().describe('The bank statement text to analyze.'),
-});
-export type DetectReportTypeInput = z.infer<typeof DetectReportTypeInputSchema>;
-
-const DetectReportTypeOutputSchema = z.object({
-  reportType: z
-    .enum(['credit_card', 'deposit_account', 'unknown'])
-    .describe('The detected type of bank report.'),
-});
-export type DetectReportTypeOutput = z.infer<typeof DetectReportTypeOutputSchema>;
-
-export async function detectReportType(input: DetectReportTypeInput): Promise<DetectReportTypeOutput> {
-  return detectReportTypeFlow(input);
-}
-
-const detectReportTypePrompt = ai.definePrompt({
-  name: 'detectReportTypePrompt',
-  input: {schema: DetectReportTypeInputSchema},
-  output: {schema: DetectReportTypeOutputSchema},
-  prompt: `You are an expert in financial document analysis.
-  Your task is to determine whether the provided text is a credit card statement or a deposit account statement.
-  If you cannot determine the type of statement, return "unknown".
-  Analyze the following text and determine if it looks more like a credit card statement or a deposit account statement.
-
-  Credit card statements usually have columns like "Transaction Date", "Posting Date", "Description", and "Amount".
-  Deposit account statements usually have columns like "Date", "Time", "Withdrawal", "Deposit", and "Balance".
-
-  Analyze the following text:
-  {{text}}
-
-  Return the "reportType" field as "credit_card", "deposit_account", or "unknown".
-  If there is any ambiguity, default to "credit_card".
-  `,
-});
-
-const detectReportTypeFlow = ai.defineFlow(
-  {
-    name: 'detectReportTypeFlow',
-    inputSchema: DetectReportTypeInputSchema,
-    outputSchema: DetectReportTypeOutputSchema,
+{
+  "name": "nextn",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": "20"
   },
-  async input => {
-    const {output} = await detectReportTypePrompt(input);
-    return output!;
+  "scripts": {
+    "dev": "next dev --turbopack -p 9002",
+    "build": "NODE_ENV=production next build",
+    "start": "npm run build && next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^4.1.3",
+    "@radix-ui/react-accordion": "^1.2.3",
+    "@radix-ui/react-alert-dialog": "^1.1.6",
+    "@radix-ui/react-avatar": "^1.1.3",
+    "@radix-ui/react-checkbox": "^1.1.4",
+    "@radix-ui/react-collapsible": "^1.1.11",
+    "@radix-ui/react-dialog": "^1.1.6",
+    "@radix-ui/react-dropdown-menu": "^2.1.6",
+    "@radix-ui/react-label": "^2.1.2",
+    "@radix-ui/react-menubar": "^1.1.6",
+    "@radix-ui/react-popover": "^1.1.6",
+    "@radix-ui/react-progress": "^1.1.2",
+    "@radix-ui/react-radio-group": "^1.2.3",
+    "@radix-ui/react-scroll-area": "^1.2.3",
+    "@radix-ui/react-select": "^2.1.6",
+    "@radix-ui/react-separator": "^1.1.2",
+    "@radix-ui/react-slider": "^1.2.3",
+    "@radix-ui/react-slot": "^1.2.3",
+    "@radix-ui/react-switch": "^1.1.3",
+    "@radix-ui/react-tabs": "^1.1.3",
+    "@radix-ui/react-toast": "^1.2.6",
+    "@radix-ui/react-tooltip": "^1.1.8",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "date-fns": "^3.6.0",
+    "dotenv": "^16.5.0",
+    "embla-carousel-react": "^8.6.0",
+    "firebase": "^11.9.1",
+    "lucide-react": "^0.475.0",
+    "next": "14.2.5",
+    "patch-package": "^8.0.0",
+    "react": "^18",
+    "react-day-picker": "^8.10.1",
+    "react-dom": "^18",
+    "react-hook-form": "^7.54.2",
+    "recharts": "^2.15.1",
+    "tailwind-merge": "^3.0.1",
+    "tailwindcss-animate": "^1.0.7",
+    "xlsx": "^0.18.5",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "postcss": "^8",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5"
   }
-);
+}
