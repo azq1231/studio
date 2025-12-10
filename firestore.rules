@@ -88,12 +88,9 @@ service cloud.firestore {
      * @deny A different user with auth.uid 'USER_456' is blocked from all operations on this path.
      * @principle Restricts access to a user's own data tree. All operations are scoped to the authenticated owner.
      */
-    match /users/{userId}/creditCardTransactions/{transactionId} {
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
+    match /users/{userId}/creditCardTransactions/{document=**} {
+      allow get, list: if isOwner(userId);
+      allow create, update, delete: if isOwner(userId);
     }
 
     /**
@@ -103,20 +100,14 @@ service cloud.firestore {
      * @deny A different user with auth.uid 'USER_456' is blocked from all operations on this path.
      * @principle Restricts access to a user's own data tree. All operations are scoped to the authenticated owner.
      */
-    match /users/{userId}/depositAccountTransactions/{transactionId} {
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
+    match /users/{userId}/depositAccountTransactions/{document=**} {
+      allow get, list: if isOwner(userId);
+      allow create, update, delete: if isOwner(userId);
     }
     
-    match /users/{userId}/cashTransactions/{transactionId} {
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
+    match /users/{userId}/cashTransactions/{document=**} {
+      allow get, list: if isOwner(userId);
+      allow create, update, delete: if isOwner(userId);
     }
   }
 }
