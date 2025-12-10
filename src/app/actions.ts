@@ -1,6 +1,7 @@
 'use server';
 
 import { parseCreditCard, parseDepositAccount, type CreditData, type DepositData, type CashData, ParsedCreditDataWithCategory, parseExcelData } from '@/lib/parser';
+import { createHash } from 'crypto';
 
 export type ReplacementRule = {
     find: string;
@@ -12,6 +13,11 @@ export type CategoryRule = {
     keyword: string;
     category: string;
 };
+
+// Helper function to create a SHA-1 hash for generating consistent IDs
+async function sha1(str: string): Promise<string> {
+    return createHash('sha1').update(str).digest('hex');
+}
 
 function applyReplacementRules(description: string, rules: ReplacementRule[]): { processedText: string, shouldDelete: boolean } {
     let processedText = description;

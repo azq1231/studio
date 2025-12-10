@@ -14,7 +14,7 @@ import { Form, FormControl, FormField, FormItem, FormMessage } from '@/component
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Upload } from 'lucide-react';
-import type { ReplacementRule, CategoryRule } from '@/app/actions';
+
 
 const statementFormSchema = z.object({
   statement: z.string().min(10, { message: '報表內容至少需要10個字元。' }),
@@ -24,7 +24,7 @@ type StatementFormData = z.infer<typeof statementFormSchema>;
 
 type StatementImporterProps = {
     isProcessing: boolean;
-    onProcess: (data: { text?: string; excelData?: any[][], replacementRules: ReplacementRule[], categoryRules: CategoryRule[] }) => Promise<void>;
+    onProcess: (data: { text?: string; excelData?: any[][] }) => Promise<void>;
     user: User | null;
 }
 
@@ -52,10 +52,7 @@ export function StatementImporter({ isProcessing, onProcess, user }: StatementIm
               const worksheet = workbook.Sheets[worksheetName];
               const excelData = XLSX.utils.sheet_to_json<any>(worksheet, { header: 1, defval: '', raw: false });
               
-              const replacementRules = JSON.parse(localStorage.getItem('replacementRules') || '[]');
-              const categoryRules = JSON.parse(localStorage.getItem('categoryRules') || '[]');
-
-              await onProcess({ excelData, replacementRules, categoryRules });
+              await onProcess({ excelData });
             }
           } catch (error) {
             toast({ variant: "destructive", title: "檔案解析失敗", description: "無法讀取或解析您提供的檔案，請確認格式是否正確。" });
@@ -67,9 +64,7 @@ export function StatementImporter({ isProcessing, onProcess, user }: StatementIm
     };
 
     async function onSubmit(values: StatementFormData) {
-        const replacementRules = JSON.parse(localStorage.getItem('replacementRules') || '[]');
-        const categoryRules = JSON.parse(localStorage.getItem('categoryRules') || '[]');
-        await onProcess({ text: values.statement, replacementRules, categoryRules });
+        await onProcess({ text: values.statement });
         statementForm.reset({ statement: '' });
     }
 

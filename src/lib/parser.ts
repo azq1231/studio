@@ -1,11 +1,10 @@
 import type { ReplacementRule, CategoryRule } from '@/app/actions';
 import { format, parse } from 'date-fns';
+import { createHash } from 'crypto';
 
 // Helper function to create a SHA-1 hash for generating consistent IDs
 async function sha1(str: string): Promise<string> {
-    const buffer = new TextEncoder().encode(str);
-    const hash = await crypto.subtle.digest('SHA-1', buffer);
-    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+    return createHash('sha1').update(str).digest('hex');
 }
 
 

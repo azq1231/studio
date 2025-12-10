@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useId } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection, writeBatch, doc, getDocs, query, setDoc, serverTimestamp, updateDoc, deleteDoc } from 'firebase/firestore';
 import { useToast } from "@/hooks/use-toast"
 import { processBankStatement, type ReplacementRule, type CategoryRule } from '@/app/actions';
 import type { CreditData, DepositData, CashData } from '@/lib/parser';
 import { StatementImporter } from '@/components/statement-importer';
+import { createHash } from 'crypto';
 
 import { useForm, useFieldArray } from 'react-hook-form';
 import { z } from 'zod';
@@ -37,9 +38,17 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 // HELPER: sha1
 // =======================================================================
 async function sha1(str: string): Promise<string> {
-    const buffer = new TextEncoder().encode(str);
-    const hash = await crypto.subtle.digest('SHA-1', buffer);
-    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+    // This function now uses Node.js crypto module.
+    // However, to avoid breaking client-side usage, we'll check for crypto.subtle first.
+    if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle) {
+        const buffer = new TextEncoder().encode(str);
+        const hash = await window.crypto.subtle.digest('SHA-1', buffer);
+        return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+    } else {
+        // This part is for server-side or environments without crypto.subtle
+        // It requires the 'crypto' module to be available.
+        return createHash('sha1').update(str).digest('hex');
+    }
 }
 
 
@@ -115,36 +124,42 @@ function SettingsAccordion({ onDeleteAllData, isProcessing, user, availableCateg
 
     useEffect(() => {
         setIsClient(true);
-        try {
-            const savedCategories = localStorage.getItem('availableCategories');
-            if (savedCategories) setAvailableCategories(JSON.parse(savedCategories));
-            else {
-                const defaultCategories = ['方', '吃', '家', '固定', '蘇', '秀', '弟', '玩', '姊', '收入', '華'];
-                setAvailableCategories(defaultCategories);
-                localStorage.setItem('availableCategories', JSON.stringify(defaultCategories));
-            }
-            
-            const savedReplacementRules = localStorage.getItem('replacementRules');
-            settingsForm.setValue('replacementRules', savedReplacementRules ? JSON.parse(savedReplacementRules) : DEFAULT_REPLACEMENT_RULES);
-            
-            const savedCategoryRulesRaw = localStorage.getItem('categoryRules');
-            let finalCategoryRules = [...DEFAULT_CATEGORY_RULES];
-            if (savedCategoryRulesRaw) {
-                try {
-                    const savedRules = JSON.parse(savedCategoryRulesRaw) as CategoryRule[];
-                    const finalRulesMap = new Map(finalCategoryRules.map(r => [r.keyword, r]));
-                    savedRules.forEach(savedRule => finalRulesMap.set(savedRule.keyword, savedRule));
-                    finalCategoryRules = Array.from(finalRulesMap.values());
-                } catch {}
-            }
-            settingsForm.setValue('categoryRules', finalCategoryRules);
-            localStorage.setItem('categoryRules', JSON.stringify(finalCategoryRules));
+    }, []);
 
-            const savedQuickFilters = localStorage.getItem('quickFilters');
-            settingsForm.setValue('quickFilters', savedQuickFilters ? JSON.parse(savedQuickFilters) : DEFAULT_QUICK_FILTERS);
+    useEffect(() => {
+        if (isClient) {
+            try {
+                const savedCategories = localStorage.getItem('availableCategories');
+                if (savedCategories) {
+                    setAvailableCategories(JSON.parse(savedCategories));
+                } else {
+                    const defaultCategories = ['方', '吃', '家', '固定', '蘇', '秀', '弟', '玩', '姊', '收入', '華'];
+                    setAvailableCategories(defaultCategories);
+                    localStorage.setItem('availableCategories', JSON.stringify(defaultCategories));
+                }
+                
+                const savedReplacementRules = localStorage.getItem('replacementRules');
+                settingsForm.setValue('replacementRules', savedReplacementRules ? JSON.parse(savedReplacementRules) : DEFAULT_REPLACEMENT_RULES);
+                
+                const savedCategoryRulesRaw = localStorage.getItem('categoryRules');
+                let finalCategoryRules = [...DEFAULT_CATEGORY_RULES];
+                if (savedCategoryRulesRaw) {
+                    try {
+                        const savedRules = JSON.parse(savedCategoryRulesRaw) as CategoryRule[];
+                        const finalRulesMap = new Map(finalCategoryRules.map(r => [r.keyword, r]));
+                        savedRules.forEach(savedRule => finalRulesMap.set(savedRule.keyword, savedRule));
+                        finalCategoryRules = Array.from(finalRulesMap.values());
+                    } catch {}
+                }
+                settingsForm.setValue('categoryRules', finalCategoryRules);
+                localStorage.setItem('categoryRules', JSON.stringify(finalCategoryRules));
 
-        } catch (e) { console.error("Failed to load settings from localStorage", e); }
-    }, [settingsForm, setAvailableCategories]);
+                const savedQuickFilters = localStorage.getItem('quickFilters');
+                settingsForm.setValue('quickFilters', savedQuickFilters ? JSON.parse(savedQuickFilters) : DEFAULT_QUICK_FILTERS);
+
+            } catch (e) { console.error("Failed to load settings from localStorage", e); }
+        }
+    }, [isClient, settingsForm, setAvailableCategories]);
 
 
     const handleSaveSettings = (data: SettingsFormData) => {
@@ -176,8 +191,9 @@ function SettingsAccordion({ onDeleteAllData, isProcessing, user, availableCateg
     };
 
     const handleRemoveCategory = (categoryToRemove: string) => {
-        setAvailableCategories(prev => prev.filter(c => c !== categoryToRemove));
-        localStorage.setItem('availableCategories', JSON.stringify(availableCategories.filter(c => c !== categoryToRemove)));
+        const updatedCategories = availableCategories.filter(c => c !== categoryToRemove);
+        setAvailableCategories(updatedCategories);
+        localStorage.setItem('availableCategories', JSON.stringify(updatedCategories));
         settingsForm.setValue('categoryRules', settingsForm.getValues('categoryRules').filter(rule => rule.category !== categoryToRemove));
         toast({ title: '類型已刪除', description: `「${categoryToRemove}」已被移除。` });
     };
@@ -443,11 +459,13 @@ const CashTransactionForm = ({ availableCategories, onSubmit, user }: {
         defaultValues: { description: '', category: '', notes: '', type: 'expense' },
     });
     const { formState: { isSubmitSuccessful } } = form;
+    
     useEffect(() => {
         if (isSubmitSuccessful) {
             form.reset({ description: '', category: '', notes: '', type: 'expense', date: undefined, amount: undefined });
         }
     }, [isSubmitSuccessful, form]);
+    
     const handleSubmit = (values: CashTransactionFormData) => {
         onSubmit({
             date: format(values.date, 'yyyy/MM/dd'),
@@ -458,6 +476,7 @@ const CashTransactionForm = ({ availableCategories, onSubmit, user }: {
             type: values.type,
         });
     };
+
     return (
         <Card className="mb-4">
             <CardHeader><CardTitle>新增現金交易</CardTitle></CardHeader>
@@ -518,7 +537,9 @@ function ResultsDisplay({
     const [detailViewTitle, setDetailViewTitle] = useState('');
     const [summarySelectedCategories, setSummarySelectedCategories] = useState<string[]>([]);
     const [isSummaryFilterOpen, setIsSummaryFilterOpen] = useState(false);
+    
     useEffect(() => { if (hasProcessed) setSummarySelectedCategories(availableCategories); }, [hasProcessed, availableCategories]);
+    
     const handleCreditSort = (key: keyof CreditData) => { setCreditPage(1); if (creditSortKey === key) setCreditSortDirection(prev => prev === 'asc' ? 'desc' : 'asc'); else { setCreditSortKey(key); setCreditSortDirection('desc'); } };
     const handleDepositSort = (key: keyof DepositData) => { setDepositPage(1); if (depositSortKey === key) setDepositSortDirection(prev => prev === 'asc' ? 'desc' : 'asc'); else { setDepositSortKey(key); setDepositSortDirection('desc'); } };
     const handleCashSort = (key: keyof CashData) => { setCashPage(1); if (cashSortKey === key) setCashSortDirection(prev => prev === 'asc' ? 'desc' : 'asc'); else { setCashSortKey(key); setCashSortDirection('desc'); } };
@@ -689,6 +710,7 @@ export function FinanceFlowClient() {
   useEffect(() => { if (savedCashTransactions) setCashData(savedCashTransactions); }, [savedCashTransactions]);
 
   useEffect(() => {
+    // This effect now ONLY runs on the client
     try {
         const savedQuickFilters = localStorage.getItem('quickFilters');
         if (savedQuickFilters) setQuickFilters(JSON.parse(savedQuickFilters));
@@ -697,16 +719,22 @@ export function FinanceFlowClient() {
     }
   }, []);
 
-  const handleProcessAndSave = useCallback(async ({ text, excelData }: { text?: string; excelData?: any[][], }) => {
+  const handleProcessAndSave = useCallback(async ({ text, excelData }: { text?: string; excelData?: any[][] }) => {
     setIsLoading(true);
     setHasProcessed(false);
     
-    const replacementRules = JSON.parse(localStorage.getItem('replacementRules') || '[]');
-    const categoryRules = JSON.parse(localStorage.getItem('categoryRules') || '[]');
+    // Safely get rules from localStorage, only on the client.
+    let replacementRules: ReplacementRule[] = [];
+    let categoryRules: CategoryRule[] = [];
+    if (typeof window !== 'undefined') {
+        replacementRules = JSON.parse(localStorage.getItem('replacementRules') || '[]');
+        categoryRules = JSON.parse(localStorage.getItem('categoryRules') || '[]');
+    }
+    
     const result = await processBankStatement(text || '', replacementRules, categoryRules, !!excelData, excelData);
     
     if (result.success) {
-      if (result.detectedCategories.length > 0) {
+      if (result.detectedCategories.length > 0 && typeof window !== 'undefined') {
         const currentCats = JSON.parse(localStorage.getItem('availableCategories') || '[]');
         const newCats = result.detectedCategories.filter(c => !currentCats.includes(c));
         if (newCats.length > 0) {
