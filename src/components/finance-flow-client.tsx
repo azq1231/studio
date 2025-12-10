@@ -56,7 +56,7 @@ import { Loader2, Download, AlertCircle, Trash2, PlusCircle, Settings, ChevronsU
 import { processBankStatement, type ReplacementRule, type CategoryRule } from '@/app/actions';
 import type { CreditData, DepositData, CashData } from '@/lib/parser';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, doc, writeBatch, updateDoc, deleteDoc, addDoc, getDocs, query } from 'firebase/firestore';
+import { collection, doc, writeBatch, updateDoc, deleteDoc, addDoc, getDocs, query, serverTimestamp } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 
 const statementFormSchema = z.object({
@@ -689,7 +689,7 @@ export function FinanceFlowClient() {
 
     const amount = values.type === 'expense' ? values.amount : -values.amount;
 
-    const idString = `${format(values.date, 'yyyy/MM/dd')}-${values.description}-${amount}`;
+    const idString = `${format(values.date, 'yyyy/MM/dd')}-${values.description}-${amount}-${Date.now()}`;
     const id = await sha1(idString);
 
     const newTransaction: CashData = {
@@ -703,7 +703,10 @@ export function FinanceFlowClient() {
 
     try {
       const cashCollectionRef = collection(firestore, 'users', user.uid, 'cashTransactions');
-      await addDoc(cashCollectionRef, newTransaction);
+      await setDoc(doc(cashCollectionRef, newTransaction.id), {
+        ...newTransaction,
+        createdAt: serverTimestamp(),
+      });
       
       toast({ title: '成功', description: '現金交易已新增' });
       cashTransactionForm.reset();
@@ -1303,9 +1306,13 @@ export function FinanceFlowClient() {
       
       return row;
     }).sort((a, b) => {
-        const dateA = parse(a['日期（年月）'] as string, 'yyyy年M月', new Date());
-        const dateB = parse(b['日期（年月）'] as string, 'yyyy年M月', new Date());
-        return dateA.getTime() - dateB.getTime();
+        try {
+            const dateA = parse(a['日期（年月）'] as string, 'yyyy年M月', new Date());
+            const dateB = parse(b['日期（年月）'] as string, 'yyyy年M月', new Date());
+            return dateA.getTime() - dateB.getTime();
+        } catch {
+            return (a['日期（年月）'] as string).localeCompare(b['日期（年月）'] as string);
+        }
     });
     
     return { headers, rows };
@@ -2593,4 +2600,3 @@ export function FinanceFlowClient() {
     </div>
   );
 }
-    
