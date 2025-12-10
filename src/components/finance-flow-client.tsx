@@ -59,7 +59,6 @@ import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebas
 import { collection, doc, writeBatch, updateDoc, deleteDoc, addDoc, getDocs, query } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 
-
 const statementFormSchema = z.object({
   statement: z.string().min(10, { message: '報表內容至少需要10個字元。' }),
 });
@@ -222,7 +221,6 @@ async function sha1(str: string): Promise<string> {
     const hash = await crypto.subtle.digest('SHA-1', buffer);
     return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
-
 
 export function FinanceFlowClient() {
   const getCreditDisplayDate = (dateString: string) => {
@@ -430,7 +428,7 @@ export function FinanceFlowClient() {
 
         return uniqueData;
     });
-}, [isUserLoading, savedCashTransactions]);
+  }, [isUserLoading, savedCashTransactions]);
 
 
   const resetReplacementRules = () => {
@@ -441,7 +439,7 @@ export function FinanceFlowClient() {
 
   const resetCategoryRules = () => {
     replaceCategoryRules(DEFAULT_CATEGORY_RULES);
-localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
+    localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
     toast({ title: '分類規則已重置', description: '已恢復為預設規則。' });
   };
   
@@ -2595,3 +2593,4 @@ localStorage.setItem('categoryRules', JSON.stringify(DEFAULT_CATEGORY_RULES));
     </div>
   );
 }
+    
