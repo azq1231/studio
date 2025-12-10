@@ -35,18 +35,20 @@ import { Download, AlertCircle, Trash2, ChevronsUpDown, ArrowDown, ArrowUp, BarC
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 
 // =======================================================================
-// HELPER: sha1
+// HELPER: sha1 (UNIVERSAL)
 // =======================================================================
+/**
+ * Creates a SHA-1 hash for generating consistent IDs.
+ * This function is safe to use in both Node.js (server-side) and browser environments.
+ */
 async function sha1(str: string): Promise<string> {
-    // This function now uses Node.js crypto module.
-    // However, to avoid breaking client-side usage, we'll check for crypto.subtle first.
     if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle) {
+        // Browser environment
         const buffer = new TextEncoder().encode(str);
         const hash = await window.crypto.subtle.digest('SHA-1', buffer);
         return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
     } else {
-        // This part is for server-side or environments without crypto.subtle
-        // It requires the 'crypto' module to be available.
+        // Node.js environment
         return createHash('sha1').update(str).digest('hex');
     }
 }
@@ -449,11 +451,11 @@ const SortableHeader = <T extends string>({ sortKey, currentSortKey, sortDirecti
     );
 };
 
-const CashTransactionForm = ({ availableCategories, onSubmit, user }: {
+function CashTransactionForm({ availableCategories, onSubmit, user }: {
     availableCategories: string[];
     onSubmit: (data: Omit<CashData, 'id'| 'amount'> & {amount: number, type: 'expense' | 'income'}) => void;
     user: User | null;
-}) => {
+}) {
     const form = useForm<CashTransactionFormData>({
         resolver: zodResolver(cashTransactionSchema),
         defaultValues: { description: '', category: '', notes: '', type: 'expense' },
@@ -510,7 +512,7 @@ const CashTransactionForm = ({ availableCategories, onSubmit, user }: {
             </CardContent>
         </Card>
     );
-};
+}
 
 function ResultsDisplay({
     creditData, depositData, cashData, availableCategories, onAddCashTransaction, onUpdateTransaction, onDeleteTransaction, hasProcessed, user, quickFilters
