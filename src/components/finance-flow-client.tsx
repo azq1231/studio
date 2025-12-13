@@ -674,9 +674,7 @@ function ResultsDisplay({
             if (summarySelectedCategories.length > 0 && !summarySelectedCategories.includes(transaction.category)) {
                 return;
             }
-            if (transaction.amount <= 0) {
-                return;
-            }
+            
             try {
                 const monthKey = format(transaction.dateObj, 'yyyy年M月');
                 if (!monthlyData[monthKey]) {
@@ -843,7 +841,10 @@ export function FinanceFlowClient() {
         setAvailableCategories(mergedSettings.availableCategories);
     } else if (user && !savedSettings && !isLoadingSettings) {
         // Only create default settings if we've finished loading and confirmed the doc doesn't exist.
-        handleSaveSettings(DEFAULT_SETTINGS);
+        // And if there are no existing rules in state (to prevent accidental overwrite on re-login)
+        if(settings.replacementRules.length === 0 && settings.categoryRules.length === 0) {
+            handleSaveSettings(DEFAULT_SETTINGS);
+        }
     } else if (!user) {
         setSettings(DEFAULT_SETTINGS);
         setAvailableCategories(DEFAULT_SETTINGS.availableCategories);
@@ -1066,5 +1067,6 @@ export function FinanceFlowClient() {
     </Tabs>
   );
 }
+
 
 
