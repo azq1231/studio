@@ -105,7 +105,7 @@ const DEFAULT_QUICK_FILTERS: QuickFilter[] = [
   { name: '篩選二', categories: ['方', '蘇'] },
 ];
 
-const DEFAULT_CATEGORIES = ['方', '吃', '家', '固定', '蘇', '秀', '弟', '玩', '姊', '收入', '華'];
+const DEFAULT_CATEGORIES = ['方', '吃', '家', '固定', '蘇', '秀', '弟', '玩', '姊', '收入', '華', '投資'];
 
 export const DEFAULT_SETTINGS: AppSettings = {
     availableCategories: DEFAULT_CATEGORIES,
@@ -119,21 +119,23 @@ function SettingsManager({
     onSaveSettings,
     isProcessing, 
     user, 
-    settings
+    settings,
+    availableCategories,
+    setAvailableCategories,
 }: {
     onDeleteAllData: () => Promise<void>;
     onSaveSettings: (newSettings: AppSettings) => Promise<void>;
     isProcessing: boolean;
     user: User | null;
     settings: AppSettings;
+    availableCategories: string[];
+    setAvailableCategories: React.Dispatch<React.SetStateAction<string[]>>;
 }) {
     const { toast } = useToast();
     const [newCategory, setNewCategory] = useState('');
     const [sortKey, setSortKey] = useState<SortKey | null>(null);
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
     const fileInputRef = useRef<HTMLInputElement>(null);
-
-    const [availableCategories, setAvailableCategories] = useState(settings.availableCategories);
 
     const settingsForm = useForm<SettingsFormData>({
         resolver: zodResolver(settingsFormSchema),
@@ -145,7 +147,6 @@ function SettingsManager({
     });
 
     useEffect(() => {
-        setAvailableCategories(settings.availableCategories);
         settingsForm.reset({
             replacementRules: settings.replacementRules,
             categoryRules: settings.categoryRules,
@@ -159,9 +160,7 @@ function SettingsManager({
 
     const handleSaveSettings = async (data: SettingsFormData) => {
         const newSettings: AppSettings = {
-            replacementRules: data.replacementRules,
-            categoryRules: data.categoryRules,
-            quickFilters: data.quickFilters,
+            ...data,
             availableCategories: availableCategories,
         };
         await onSaveSettings(newSettings);
@@ -173,7 +172,7 @@ function SettingsManager({
             const updatedCategories = [...availableCategories, newCategory];
             setAvailableCategories(updatedCategories);
             setNewCategory('');
-            toast({ title: '類型已新增', description: `「${newCategory}」已成功新增。下次儲存設定時將會一併儲存。` });
+            toast({ title: '類型已新增', description: `「${newCategory}」已成功新增。` });
         } else if (availableCategories.includes(newCategory)) {
             toast({ variant: 'destructive', title: '新增失敗', description: '此類型已存在。' });
         }
@@ -183,7 +182,7 @@ function SettingsManager({
         const updatedCategories = availableCategories.filter(c => c !== categoryToRemove);
         setAvailableCategories(updatedCategories);
         settingsForm.setValue('categoryRules', settingsForm.getValues('categoryRules').filter(rule => rule.category !== categoryToRemove));
-        toast({ title: '類型已刪除', description: `「${categoryToRemove}」已被移除。下次儲存設定時將會一併儲存。` });
+        toast({ title: '類型已刪除', description: `「${categoryToRemove}」已被移除。` });
     };
 
     const handleSort = (key: SortKey) => {
@@ -809,6 +808,7 @@ export function FinanceFlowClient() {
   const [cashData, setCashData] = useState<CashData[]>([]);
 
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [availableCategories, setAvailableCategories] = useState<string[]>(DEFAULT_SETTINGS.availableCategories);
   const [activeTab, setActiveTab] = useState("importer");
 
   // --- Data Fetching ---
@@ -830,26 +830,27 @@ export function FinanceFlowClient() {
   useEffect(() => { if (savedCashTransactions) setCashData(savedCashTransactions); }, [savedCashTransactions]);
 
   useEffect(() => {
-    if (user && !isLoadingSettings && savedSettings) {
-        // Merge default settings with saved settings to ensure all keys are present
-        const mergedSettings: AppSettings = {
-            availableCategories: savedSettings.availableCategories?.length ? savedSettings.availableCategories : DEFAULT_SETTINGS.availableCategories,
-            replacementRules: savedSettings.replacementRules?.length ? savedSettings.replacementRules : DEFAULT_SETTINGS.replacementRules,
-            categoryRules: savedSettings.categoryRules?.length ? savedSettings.categoryRules : DEFAULT_SETTINGS.categoryRules,
-            quickFilters: savedSettings.quickFilters?.length ? savedSettings.quickFilters : DEFAULT_SETTINGS.quickFilters,
-        };
-        setSettings(mergedSettings);
-    } else if (user && !isLoadingSettings && !savedSettings) {
-        // If the document doesn't exist after loading, set the default settings in Firestore.
-        // This should only happen once for a new user.
-        if (firestore && settingsDocRef) {
-            setDoc(settingsDocRef, DEFAULT_SETTINGS, { merge: true }).catch(console.error);
-        }
-        setSettings(DEFAULT_SETTINGS);
-    } else if (!user) {
-        setSettings(DEFAULT_SETTINGS); // Reset to default if user logs out
-    }
-  }, [user, savedSettings, isLoadingSettings, firestore, settingsDocRef]);
+      if (user && !isLoadingSettings) {
+          if (savedSettings) {
+              const mergedSettings: AppSettings = {
+                  availableCategories: savedSettings.availableCategories?.length ? savedSettings.availableCategories : DEFAULT_SETTINGS.availableCategories,
+                  replacementRules: savedSettings.replacementRules?.length ? savedSettings.replacementRules : DEFAULT_SETTINGS.replacementRules,
+                  categoryRules: savedSettings.categoryRules?.length ? savedSettings.categoryRules : DEFAULT_SETTINGS.categoryRules,
+                  quickFilters: savedSettings.quickFilters?.length ? savedSettings.quickFilters : DEFAULT_SETTINGS.quickFilters,
+              };
+              setSettings(mergedSettings);
+              setAvailableCategories(mergedSettings.availableCategories);
+          } else {
+              // If the settings doc doesn't exist, we can assume it's a new user or first time.
+              // We'll use the default settings and save them on the next settings-save operation.
+              setSettings(DEFAULT_SETTINGS);
+              setAvailableCategories(DEFAULT_SETTINGS.availableCategories);
+          }
+      } else if (!user) {
+          setSettings(DEFAULT_SETTINGS);
+          setAvailableCategories(DEFAULT_SETTINGS.availableCategories);
+      }
+  }, [user, savedSettings, isLoadingSettings]);
 
 
   const handleSaveSettings = useCallback(async (newSettings: AppSettings) => {
@@ -861,6 +862,7 @@ export function FinanceFlowClient() {
     try {
       await setDoc(settingsDocRef, newSettings, { merge: true });
       setSettings(newSettings); // Optimistically update local state
+      setAvailableCategories(newSettings.availableCategories);
     } catch (e: any) {
       toast({ variant: "destructive", title: "儲存失敗", description: e.message || "無法將設定儲存到資料庫。" });
     } finally {
@@ -1020,6 +1022,8 @@ export function FinanceFlowClient() {
                 isProcessing={isLoading || isSaving}
                 user={user}
                 settings={settings}
+                availableCategories={availableCategories}
+                setAvailableCategories={setAvailableCategories}
             />
         )}
       </TabsContent>
@@ -1029,7 +1033,7 @@ export function FinanceFlowClient() {
                 creditData={creditData}
                 depositData={depositData}
                 cashData={cashData}
-                availableCategories={settings.availableCategories}
+                availableCategories={availableCategories}
                 quickFilters={settings.quickFilters}
                 onAddCashTransaction={handleAddCashTransaction}
                 onUpdateTransaction={handleUpdateTransaction}
