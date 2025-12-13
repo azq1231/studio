@@ -97,7 +97,7 @@ const DEFAULT_REPLACEMENT_RULES: ReplacementRule[] = [
 ];
 
 const DEFAULT_CATEGORY_RULES: CategoryRule[] = [
-    { keyword: 'VULTR', category: '方' }, { keyword: '國外交易服務費', category: '方' }, { keyword: 'GOOGLE*CLOUD', category: '方' }, { keyword: '悠遊卡自動加值', category: '方' }, { keyword: 'REPLIT, INC.', category: '方' }, { keyword: '伯朗咖啡', category: '方' }, { keyword: '柒號洋樓', category: '方' }, { keyword: 'ＰＣＨＯＭＥ', category: '方' }, { keyword: 'OPENAI', category: '方' }, { keyword: '新東陽', category: '吃' }, { keyword: '全家', category: '吃' }, { keyword: '元心燃麻辣堂', category: '吃' }, { keyword: '統一超商', category: '吃' }, { keyword: '玉喜飯店', category: '吃' }, { keyword: '爭鮮', category: '吃' }, { keyword: '八方雲集', category: '吃' }, { keyword: '樂活養生健康鍋', category: '吃' }, { keyword: '順成西點麵包', category: '吃' }, { keyword: '誠品生活', category: '吃' }, { keyword: '星巴克－自動加值', category: '吃' }, { keyword: 'COMFORT BURGER', category: '吃' }, { keyword: '雙月食品社', category: '吃' }, { keyword: '秀泰全球影城', category: '吃' }, { keyword: '台灣麥當勞', category: '吃' }, { keyword: '筷子餐廳', category: '吃' }, { keyword: '怡客咖啡', category: '吃' }, { keyword: '起家雞', category: '吃' }, { keyword: '彼得好咖啡', category: '吃' }, { keyword: '御書園', category: '吃' }, { keyword: '五花馬水餃館', category: '吃' }, { keyword: '客美多咖啡', category: '吃' }, { keyword: '明曜百貨', category: '吃' }, { keyword: 'ＫＦＣ', category: '吃' }, { keyword: '鬥牛士經典牛排', category: '吃' }, { keyword: '街口電支', category: '吃' }, { keyword: '必勝客', category: '吃' }, { keyword: '丰禾', category: '吃' }, { keyword: '春水堂', category: '吃' }, { keyword: '上島珈琲店', category: '吃' }, { keyword: '加油站', category: '家' }, { keyword: '全聯', category: '家' }, { keyword: '55688', category: '家' }, { keyword: 'IKEA', category: '家' }, { keyword: '優步', category: '家' }, { keyword: 'OP錢包', category: '家' }, { keyword: 'NET', category: '家' }, { keyword: '威秀影城', category: '家' }, { keyword: '中油', category: '家' }, { keyword: '高鐵智慧型手機', category: '家' }, { keyword: 'Ｍｉｓｔｅｒ　Ｄｏｎｕｔ', category: '家' }, { keyword: '墊腳石圖書', category: '家' }, { keyword: '燦坤３Ｃ', category: '家' }, { keyword: '屈臣氏', category: '家' }, { keyword: 'APPLE.COM/BILL', category: '家' }, { keyword: '一之軒', category: '家' }, { keyword: '城市車旅', category: '家' }, { keyword: '台灣小米', category: '家' }, { keyword: '麗冠有線電視', category: '固定' }, { keyword: '09202***01', category: '固定' }, { keyword: '國都汽車', category: '固定' }, { keyword: '台灣電力', category: '固定' }, { keyword: '台北市自來水費', category: '固定' }, { keyword: '汽車驗車', category: '固定' }, { keyword: '大台北瓦斯費', category: '固定' }, { keyword: '大安文山有線電視', category: '固定' }, { keyword: '橙印良品', category: '蘇' }, { keyword: 'PayEasy', category: '蘇' }, { keyword: '樂購蝦皮', category: '蘇' }, { keyword: '饗賓餐旅', category: '蘇' }, { keyword: 'TAOBAO.COM', category: '蘇' }, { keyword: '拓元票務', category: '蘇' }, { keyword: '三創數位', category: '蘇' }, { keyword: '金玉堂', category: '秀' }, { keyword: '寶雅', category: '秀' }, { keyword: '特力屋', category: '秀' }, { keyword: '悠遊付－臺北市立大學', category: '秀' }, { keyword: '嘟嘟房', category: '弟' }, { keyword: '台東桂田喜來登酒店', category: '玩' }, { keyword: '家樂福', category: '玩' }, { keyword: '台東原生應用植物園', category: '玩' }, { keyword: '格上租車', category: '玩' }, { keyword: '悠勢科技股份有限公司', category: '收入' }, { keyword: '行政院發', category: '收入' }, { keyword: 'linePay繳好市多', category: '家' }, { keyword: '國保保費', category: '固定' }, { keyword: '怡秀跆拳道', category: '華' }, { keyword: 'iPassMoney儲值', category: '方' }, { keyword: '逸安中醫', category: '蘇' }, { keyword: '連結帳戶交易', category: '家' }, { keyword: '花都管理費', category: '固定' },
+    { keyword: 'VULTR', category: '方' }, { keyword: '國外交易服務費', category: '方' }, { keyword: 'GOOGLE*CLOUD', category: '方' }, { keyword: '悠遊卡自動加值', category: '方' }, { keyword: 'REPLIT, INC.', category: '方' }, { keyword: '伯朗咖啡', category: '方' }, { keyword: '柒號洋樓', category: '方' }, { keyword: 'ＰＣＨＯＭＥ', category: '方' }, { keyword: 'OPENAI', category: '方' }, { keyword: '新東陽', category: '吃' }, { keyword: '全家', category: '吃' }, { keyword: '元心燃麻辣堂', category: '吃' }, { keyword: '統一超商', category: '吃' }, { keyword: '玉喜飯店', category: '吃' }, { keyword: '爭鮮', category: '吃' }, { keyword: '八方雲集', category: '吃' }, { keyword: '樂活養生健康鍋', category: '吃' }, { keyword: '順成西點麵包', category: '吃' }, { keyword: '誠品生活', category: '吃' }, { keyword: '星巴克－自動加值', category: '吃' }, { keyword: 'COMFORT BURGER', category: '吃' }, { keyword: '雙月食品社', category: '吃' }, { keyword: '秀泰全球影城', category: '吃' }, { keyword: '台灣麥當勞', category: '吃' }, { keyword: '筷子餐廳', category: '吃' }, { keyword: '怡客咖啡', category: '吃' }, { keyword: '起家雞', category: '吃' }, { keyword: '彼得好咖啡', category: '吃' }, { keyword: '御書園', category: '吃' }, { keyword: '五花馬水餃館', category: '吃' }, { keyword: '客美多咖啡', category: '吃' }, { keyword: '明曜百貨', category: '吃' }, { keyword: 'ＫＦＣ', category: '吃' }, { keyword: '鬥牛士經典牛排', category: '吃' }, { keyword: '街口電支', category: '吃' }, { keyword: '必勝客', category: '吃' }, { keyword: '丰禾', category: '吃' }, { keyword: '春水堂', category: '吃' }, { keyword: '上島珈琲店', category: '吃' }, { keyword: '加油站', category: '家' }, { keyword: '全聯', category: '家' }, { keyword: '55688', category: '家' }, { keyword: 'IKEA', category: '家' }, { keyword: '優步', category: '家' }, { keyword: 'OP錢包', category: '家' }, { keyword: 'NET', category: '家' }, { keyword: '威秀影城', category: '家' }, { keyword: '中油', category: '家' }, { keyword: '高鐵智慧型手機', category: '家' }, { keyword: 'Ｍｉｓｔｅｒ　Ｄｏｎｕｔ', category: '家' }, { keyword: '墊腳石圖書', category: '家' }, { keyword: '燦坤３Ｃ', category: '家' }, { keyword: '屈臣氏', category: '家' }, { keyword: 'APPLE.COM/BILL', category: '家' }, { keyword: '一之軒', category: '家' }, { keyword: '城市車旅', category: '家' }, { keyword: '台灣小米', category: '家' }, { keyword: '麗冠有線電視', category: '固定' }, { keyword: '09202***01', category: '固定' }, { keyword: '國都汽車', category: '固定' }, { keyword: '台灣電力', category: '固定' }, { keyword: '台北市自來水費', category: '固定' }, { keyword: '汽車驗車', category: '固定' }, { keyword: '大台北瓦斯費', category: '固定' }, { keyword: '大安文山有線電視', category: '固定' }, { keyword: '橙印良品', category: '蘇' }, { keyword: 'PayEasy', category: '蘇' }, { keyword: '樂購蝦皮', category: '蘇' }, { keyword: '饗賓餐旅', category: '蘇' }, { keyword: 'TAOBAO.COM', category: '蘇' }, { keyword: '拓元票務', category: '蘇' }, { keyword: '三創數位', category: '蘇' }, { keyword: '金玉堂', category: '秀' }, { keyword: '寶雅', category: '秀' }, { keyword: '特力屋', category: '秀' }, { keyword: '悠遊付－臺北市立大學', category: '秀' }, { keyword: '嘟嘟房', category: '弟' }, { keyword: '台東桂田喜來登酒店', category: '玩' }, { keyword: '家樂福', category: '玩' }, { keyword: '台東原生應用植物園', category: '玩' }, { keyword: '格上租車', category: '玩' }, { keyword: '悠勢科技股份有限公司', category: '收入' }, { keyword: '行政院發', category: '收入' }, { keyword: 'linePay繳好市多', category: '家' }, { keyword: '國保保費', category: '固定' }, { keyword: '怡秀跆拳道', category: '華' }, { keyword: 'iPassMoney儲值', category: '方' }, { keyword: '逸安中醫', category: '蘇' }, { keyword: '連結帳戶交易', category: '家' }, { keyword: '花都管理費', category: '固定' }, { keyword: '9/11', category: '姊' }, { keyword: '6/18', category: '姊' },
 ];
 
 const DEFAULT_QUICK_FILTERS: QuickFilter[] = [
@@ -667,23 +667,45 @@ function ResultsDisplay({
     }, [creditData, depositData, cashData, searchQuery]);
 
     const summaryReportData = useMemo(() => {
-        const monthlyData: Record<string, Record<string, number>> = {}; const allCategoriesInReport = new Set<string>();
+        const monthlyData: Record<string, Record<string, number>> = {};
+        const allCategoriesInReport = new Set<string>();
         combinedData.forEach(transaction => {
             try {
-                if (summarySelectedCategories.length > 0 && !summarySelectedCategories.includes(transaction.category)) return;
-                allCategoriesInReport.add(transaction.category);
-                const monthKey = format(transaction.dateObj, 'yyyy年M月');
-                if (!monthlyData[monthKey]) monthlyData[monthKey] = {};
-                monthlyData[monthKey][transaction.category] = (monthlyData[monthKey][transaction.category] || 0) + transaction.amount;
-            } catch(e) {}
+                if (summarySelectedCategories.length > 0 && !summarySelectedCategories.includes(transaction.category)) {
+                    return;
+                }
+                // Only include positive amounts (expenses) in the summary report for aggregation.
+                if (transaction.amount > 0) {
+                    allCategoriesInReport.add(transaction.category);
+                    const monthKey = format(transaction.dateObj, 'yyyy年M月');
+                    if (!monthlyData[monthKey]) {
+                        monthlyData[monthKey] = {};
+                    }
+                    monthlyData[monthKey][transaction.category] = (monthlyData[monthKey][transaction.category] || 0) + transaction.amount;
+                }
+            } catch(e) {
+                // Ignore errors during processing a single transaction
+            }
         });
         const sortedCategories = Array.from(allCategoriesInReport).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
         const headers = ['日期（年月）', ...sortedCategories, '總計'];
         const rows = Object.entries(monthlyData).map(([month, categoryData]) => {
-          let total = 0; const row: Record<string, string | number> = { '日期（年月）': month };
-          sortedCategories.forEach(cat => { const value = categoryData[cat] || 0; row[cat] = value; total += value; });
-          row['總計'] = total; return row;
-        }).sort((a, b) => { try { return parse(a['日期（年月）'] as string, 'yyyy年M月', new Date()).getTime() - parse(b['日期（年月）'] as string, 'yyyy年M月', new Date()).getTime(); } catch { return (a['日期（年月）'] as string).localeCompare(b['日期（年月）'] as string); } });
+          let total = 0;
+          const row: Record<string, string | number> = { '日期（年月）': month };
+          sortedCategories.forEach(cat => {
+            const value = categoryData[cat] || 0;
+            row[cat] = value;
+            total += value;
+          });
+          row['總計'] = total;
+          return row;
+        }).sort((a, b) => {
+            try {
+                return parse(a['日期（年月）'] as string, 'yyyy年M月', new Date()).getTime() - parse(b['日期（年月）'] as string, 'yyyy年M月', new Date()).getTime();
+            } catch {
+                return (a['日期（年月）'] as string).localeCompare(b['日期（年月）'] as string);
+            }
+        });
         return { headers, rows };
     }, [combinedData, summarySelectedCategories]);
 
@@ -808,37 +830,26 @@ export function FinanceFlowClient() {
   useEffect(() => { if (savedCashTransactions) setCashData(savedCashTransactions); }, [savedCashTransactions]);
 
   useEffect(() => {
-    if (user && !isLoadingSettings) {
-        if (savedSettings) {
-            // Merge default settings with saved settings to ensure all keys are present
-            const mergedSettings = {
-                ...DEFAULT_SETTINGS,
-                ...savedSettings,
-                availableCategories: savedSettings.availableCategories && savedSettings.availableCategories.length > 0 ? savedSettings.availableCategories : DEFAULT_SETTINGS.availableCategories,
-                replacementRules: savedSettings.replacementRules && savedSettings.replacementRules.length > 0 ? savedSettings.replacementRules : DEFAULT_SETTINGS.replacementRules,
-                categoryRules: savedSettings.categoryRules && savedSettings.categoryRules.length > 0 ? savedSettings.categoryRules : DEFAULT_SETTINGS.categoryRules,
-                quickFilters: savedSettings.quickFilters && savedSettings.quickFilters.length > 0 ? savedSettings.quickFilters : DEFAULT_SETTINGS.quickFilters,
-            };
-            setSettings(mergedSettings);
-        } else {
-             // This block now only runs if savedSettings is definitively null after loading,
-             // which implies the document doesn't exist.
-            if (firestore && settingsDocRef) {
-                // Check one more time to prevent race conditions
-                getDoc(settingsDocRef).then(docSnap => {
-                    if (!docSnap.exists()) {
-                       // Only set default settings if the document truly does not exist.
-                       // Avoids overwriting existing settings during hot-reloads or temporary network issues.
-                       setDoc(settingsDocRef, DEFAULT_SETTINGS, { merge: true }).catch(console.error);
-                    }
-                });
-            }
-            setSettings(DEFAULT_SETTINGS);
+    if (user && !isLoadingSettings && savedSettings) {
+        // Merge default settings with saved settings to ensure all keys are present
+        const mergedSettings: AppSettings = {
+            availableCategories: savedSettings.availableCategories?.length ? savedSettings.availableCategories : DEFAULT_SETTINGS.availableCategories,
+            replacementRules: savedSettings.replacementRules?.length ? savedSettings.replacementRules : DEFAULT_SETTINGS.replacementRules,
+            categoryRules: savedSettings.categoryRules?.length ? savedSettings.categoryRules : DEFAULT_SETTINGS.categoryRules,
+            quickFilters: savedSettings.quickFilters?.length ? savedSettings.quickFilters : DEFAULT_SETTINGS.quickFilters,
+        };
+        setSettings(mergedSettings);
+    } else if (user && !isLoadingSettings && !savedSettings) {
+        // If the document doesn't exist after loading, set the default settings in Firestore.
+        // This should only happen once for a new user.
+        if (firestore && settingsDocRef) {
+            setDoc(settingsDocRef, DEFAULT_SETTINGS, { merge: true }).catch(console.error);
         }
+        setSettings(DEFAULT_SETTINGS);
     } else if (!user) {
         setSettings(DEFAULT_SETTINGS); // Reset to default if user logs out
     }
-}, [user, savedSettings, isLoadingSettings, firestore, settingsDocRef]);
+  }, [user, savedSettings, isLoadingSettings, firestore, settingsDocRef]);
 
 
   const handleSaveSettings = useCallback(async (newSettings: AppSettings) => {
