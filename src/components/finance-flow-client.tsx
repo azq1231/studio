@@ -668,29 +668,27 @@ function ResultsDisplay({
 
     const summaryReportData = useMemo(() => {
         const monthlyData: Record<string, Record<string, number>> = {};
-        const allCategoriesInReport = new Set<string>(summarySelectedCategories);
-        
+        const categoriesInReport = new Set(summarySelectedCategories);
+    
         combinedData.forEach(transaction => {
+            if (summarySelectedCategories.length > 0 && !summarySelectedCategories.includes(transaction.category)) {
+                return;
+            }
+            if (transaction.amount <= 0) {
+                return;
+            }
             try {
-                if (summarySelectedCategories.length > 0 && !summarySelectedCategories.includes(transaction.category)) {
-                    return;
-                }
-                if (transaction.amount <= 0) {
-                    return;
-                }
-                
                 const monthKey = format(transaction.dateObj, 'yyyy年M月');
                 if (!monthlyData[monthKey]) {
                     monthlyData[monthKey] = {};
                 }
                 monthlyData[monthKey][transaction.category] = (monthlyData[monthKey][transaction.category] || 0) + transaction.amount;
-                
             } catch(e) {
-                // Ignore errors during processing a single transaction
+                // Ignore date parsing errors for a single transaction
             }
         });
-
-        const sortedCategories = Array.from(allCategoriesInReport).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    
+        const sortedCategories = Array.from(categoriesInReport).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
         const headers = ['日期（年月）', ...sortedCategories, '總計'];
         const rows = Object.entries(monthlyData).map(([month, categoryData]) => {
           let total = 0;
@@ -787,7 +785,7 @@ function ResultsDisplay({
                     <div className="text-center py-10"><AlertCircle className="mx-auto h-12 w-12 text-muted-foreground" /><h3 className="mt-4 text-lg font-semibold">沒有找到資料</h3><p className="mt-2 text-sm text-muted-foreground">我們無法從您提供的內容中解析出任何報表資料。<br />請確認格式是否正確，或嘗試貼上其他內容。</p></div>
                 ))}
                 <Dialog open={isDetailViewOpen} onOpenChange={setIsDetailViewOpen}>
-                    <DialogContent className="max-w-4xl h-4/5 flex flex-col"><DialogHeader><DialogTitle>{detailViewTitle}</DialogTitle></DialogHeader><div className="flex-grow overflow-y-auto"><Table><TableHeader><TableRow><TableHead>日期</TableHead><TableHead>交易項目</TableHead><TableHead>來源</TableHead><TableHead className="text-right">金額</TableHead></TableRow></TableHeader><TableBody>{detailViewData.length > 0 ? ( detailViewData.map(item => (<TableRow key={item.id}><TableCell>{(item as any).date || getCreditDisplayDate((item as any).transactionDate)}</TableCell><TableCell>{item.description}</TableCell><TableCell>{(item as any).source || '信用卡'}</TableCell><TableCell className={`text-right ${item.amount < 0 ? 'text-green-600' : ''}`}>{item.amount.toLocaleString()}</TableCell></TableRow>))) : (<TableRow><TableCell colSpan={4} className="text-center">沒有找到相關交易紀錄。</TableCell></TableRow>)}</TableBody></Table></div></DialogContent>
+                    <DialogContent className="max-w-4xl h-4/5 flex flex-col"><DialogHeader><DialogTitle>{detailViewTitle}</DialogTitle></DialogHeader><div className="flex-grow overflow-y-auto"><Table><TableHeader><TableRow><TableHead>日期</TableHead><TableHead>類型</TableHead><TableHead>交易項目</TableHead><TableHead>備註</TableHead><TableHead>來源</TableHead><TableHead className="text-right">金額</TableHead></TableRow></TableHeader><TableBody>{detailViewData.length > 0 ? ( detailViewData.map(item => (<TableRow key={item.id}><TableCell>{(item as any).date || getCreditDisplayDate((item as any).transactionDate)}</TableCell><TableCell>{item.category}</TableCell><TableCell>{item.description}</TableCell><TableCell>{(item as any).bankCode || (item as any).notes || ''}</TableCell><TableCell>{(item as any).source || '信用卡'}</TableCell><TableCell className={`text-right ${item.amount < 0 ? 'text-green-600' : ''}`}>{item.amount.toLocaleString()}</TableCell></TableRow>))) : (<TableRow><TableCell colSpan={6} className="text-center">沒有找到相關交易紀錄。</TableCell></TableRow>)}</TableBody></Table></div></DialogContent>
                 </Dialog>
             </CardContent>
         </Card>
@@ -834,21 +832,18 @@ export function FinanceFlowClient() {
   useEffect(() => { if (savedCashTransactions) setCashData(savedCashTransactions); }, [savedCashTransactions]);
 
   useEffect(() => {
-    if (user && !isLoadingSettings) {
-        if (savedSettings) {
-            const mergedSettings: AppSettings = {
-                availableCategories: savedSettings.availableCategories?.length ? savedSettings.availableCategories : DEFAULT_SETTINGS.availableCategories,
-                replacementRules: savedSettings.replacementRules?.length ? savedSettings.replacementRules : DEFAULT_SETTINGS.replacementRules,
-                categoryRules: savedSettings.categoryRules?.length ? savedSettings.categoryRules : DEFAULT_SETTINGS.categoryRules,
-                quickFilters: savedSettings.quickFilters?.length ? savedSettings.quickFilters : DEFAULT_SETTINGS.quickFilters,
-            };
-            setSettings(mergedSettings);
-            setAvailableCategories(mergedSettings.availableCategories);
-        } else if (!savedSettings) {
-             // Only set default settings if the document explicitly does not exist.
-             // Avoids overwriting on initial load where `savedSettings` might be null temporarily.
-            handleSaveSettings(DEFAULT_SETTINGS);
-        }
+    if (user && savedSettings) {
+        const mergedSettings: AppSettings = {
+            availableCategories: savedSettings.availableCategories?.length ? savedSettings.availableCategories : DEFAULT_SETTINGS.availableCategories,
+            replacementRules: savedSettings.replacementRules?.length ? savedSettings.replacementRules : DEFAULT_SETTINGS.replacementRules,
+            categoryRules: savedSettings.categoryRules?.length ? savedSettings.categoryRules : DEFAULT_SETTINGS.categoryRules,
+            quickFilters: savedSettings.quickFilters?.length ? savedSettings.quickFilters : DEFAULT_SETTINGS.quickFilters,
+        };
+        setSettings(mergedSettings);
+        setAvailableCategories(mergedSettings.availableCategories);
+    } else if (user && !savedSettings && !isLoadingSettings) {
+        // Only create default settings if we've finished loading and confirmed the doc doesn't exist.
+        handleSaveSettings(DEFAULT_SETTINGS);
     } else if (!user) {
         setSettings(DEFAULT_SETTINGS);
         setAvailableCategories(DEFAULT_SETTINGS.availableCategories);
@@ -1071,4 +1066,5 @@ export function FinanceFlowClient() {
     </Tabs>
   );
 }
+
 
