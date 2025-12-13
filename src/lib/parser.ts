@@ -227,7 +227,8 @@ export async function parseCreditCard(text: string): Promise<ParsedCreditDataWit
 
 
     if (description) {
-      const idString = `${postingDate || transactionDate}-${description}-${amount}`;
+      // Ensure ID is unique by including both dates and a random component
+      const idString = `${transactionDate}-${postingDate}-${description}-${amount}-${Math.random()}`;
       const id = await sha1(idString);
 
       results.push({
