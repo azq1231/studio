@@ -345,7 +345,7 @@ export async function parseDepositAccount(text: string, replacementRules: Replac
       
       const category = applyCategoryRules(finalDescription, categoryRules);
       
-      const idString = `${currentDate}-${finalDescription}-${amount}`;
+      const idString = `${currentDate}-${finalDescription}-${amount}-${Math.random()}`;
       const id = await sha1(idString);
 
       let bankCode = '';
@@ -388,3 +388,4 @@ export async function parseDepositAccount(text: string, replacementRules: Replac
     bankCode: r[5] as string,
   }));
 }
+

@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -667,25 +668,28 @@ function ResultsDisplay({
 
     const summaryReportData = useMemo(() => {
         const monthlyData: Record<string, Record<string, number>> = {};
-        const allCategoriesInReport = new Set<string>();
+        const allCategoriesInReport = new Set<string>(summarySelectedCategories);
+        
         combinedData.forEach(transaction => {
             try {
                 if (summarySelectedCategories.length > 0 && !summarySelectedCategories.includes(transaction.category)) {
                     return;
                 }
-                // Only include positive amounts (expenses) in the summary report for aggregation.
-                if (transaction.amount > 0) {
-                    allCategoriesInReport.add(transaction.category);
-                    const monthKey = format(transaction.dateObj, 'yyyy年M月');
-                    if (!monthlyData[monthKey]) {
-                        monthlyData[monthKey] = {};
-                    }
-                    monthlyData[monthKey][transaction.category] = (monthlyData[monthKey][transaction.category] || 0) + transaction.amount;
+                if (transaction.amount <= 0) {
+                    return;
                 }
+                
+                const monthKey = format(transaction.dateObj, 'yyyy年M月');
+                if (!monthlyData[monthKey]) {
+                    monthlyData[monthKey] = {};
+                }
+                monthlyData[monthKey][transaction.category] = (monthlyData[monthKey][transaction.category] || 0) + transaction.amount;
+                
             } catch(e) {
                 // Ignore errors during processing a single transaction
             }
         });
+
         const sortedCategories = Array.from(allCategoriesInReport).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
         const headers = ['日期（年月）', ...sortedCategories, '總計'];
         const rows = Object.entries(monthlyData).map(([month, categoryData]) => {
@@ -830,26 +834,25 @@ export function FinanceFlowClient() {
   useEffect(() => { if (savedCashTransactions) setCashData(savedCashTransactions); }, [savedCashTransactions]);
 
   useEffect(() => {
-      if (user && !isLoadingSettings) {
-          if (savedSettings) {
-              const mergedSettings: AppSettings = {
-                  availableCategories: savedSettings.availableCategories?.length ? savedSettings.availableCategories : DEFAULT_SETTINGS.availableCategories,
-                  replacementRules: savedSettings.replacementRules?.length ? savedSettings.replacementRules : DEFAULT_SETTINGS.replacementRules,
-                  categoryRules: savedSettings.categoryRules?.length ? savedSettings.categoryRules : DEFAULT_SETTINGS.categoryRules,
-                  quickFilters: savedSettings.quickFilters?.length ? savedSettings.quickFilters : DEFAULT_SETTINGS.quickFilters,
-              };
-              setSettings(mergedSettings);
-              setAvailableCategories(mergedSettings.availableCategories);
-          } else {
-              // If the settings doc doesn't exist, we can assume it's a new user or first time.
-              // We'll use the default settings and save them on the next settings-save operation.
-              setSettings(DEFAULT_SETTINGS);
-              setAvailableCategories(DEFAULT_SETTINGS.availableCategories);
-          }
-      } else if (!user) {
-          setSettings(DEFAULT_SETTINGS);
-          setAvailableCategories(DEFAULT_SETTINGS.availableCategories);
-      }
+    if (user && !isLoadingSettings) {
+        if (savedSettings) {
+            const mergedSettings: AppSettings = {
+                availableCategories: savedSettings.availableCategories?.length ? savedSettings.availableCategories : DEFAULT_SETTINGS.availableCategories,
+                replacementRules: savedSettings.replacementRules?.length ? savedSettings.replacementRules : DEFAULT_SETTINGS.replacementRules,
+                categoryRules: savedSettings.categoryRules?.length ? savedSettings.categoryRules : DEFAULT_SETTINGS.categoryRules,
+                quickFilters: savedSettings.quickFilters?.length ? savedSettings.quickFilters : DEFAULT_SETTINGS.quickFilters,
+            };
+            setSettings(mergedSettings);
+            setAvailableCategories(mergedSettings.availableCategories);
+        } else if (!savedSettings) {
+             // Only set default settings if the document explicitly does not exist.
+             // Avoids overwriting on initial load where `savedSettings` might be null temporarily.
+            handleSaveSettings(DEFAULT_SETTINGS);
+        }
+    } else if (!user) {
+        setSettings(DEFAULT_SETTINGS);
+        setAvailableCategories(DEFAULT_SETTINGS.availableCategories);
+    }
   }, [user, savedSettings, isLoadingSettings]);
 
 
@@ -1068,3 +1071,4 @@ export function FinanceFlowClient() {
     </Tabs>
   );
 }
+
