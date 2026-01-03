@@ -157,13 +157,13 @@ function SettingsManager({
         });
     }, [settings, settingsForm]);
 
-    const { fields: replacementFields, append: appendReplacement, remove: removeReplacement, replace: replaceReplacementRules } = useFieldArray({ control: settingsForm.control, name: 'replacementRules' });
-    const { fields: categoryFields, append: appendCategory, remove: removeCategory, replace: replaceCategoryRules } = useFieldArray({ control: settingsForm.control, name: 'categoryRules' });
-    const { fields: quickFilterFields, append: appendQuickFilter, remove: removeQuickFilter, replace: replaceQuickFilters } = useFieldArray({ control: settingsForm.control, name: "quickFilters" });
+    const { fields: replacementFields, append: appendReplacement, remove: removeReplacement } = useFieldArray({ control: settingsForm.control, name: 'replacementRules' });
+    const { fields: categoryFields, append: appendCategory, remove: removeCategory } = useFieldArray({ control: settingsForm.control, name: 'categoryRules' });
+    const { fields: quickFilterFields, append: appendQuickFilter, remove: removeQuickFilter } = useFieldArray({ control: settingsForm.control, name: "quickFilters" });
 
     const handleSaveSettings = async (data: SettingsFormData) => {
         const newSettings: AppSettings = {
-            ...settings, // important to keep cashTransactionDescriptions and availableCategories
+            ...settings,
             ...data,
         };
         await onSaveSettings(newSettings);
@@ -172,8 +172,7 @@ function SettingsManager({
     
     const handleAddCategory = () => {
         if (newCategory && !settings.availableCategories.includes(newCategory)) {
-            const updatedCategories = [...settings.availableCategories, newCategory];
-            setSettings(prev => ({ ...prev, availableCategories: updatedCategories }));
+            setSettings(prev => ({ ...prev, availableCategories: [...prev.availableCategories, newCategory] }));
             setNewCategory('');
             toast({ title: '類型已新增', description: `「${newCategory}」已成功新增。` });
         } else if (settings.availableCategories.includes(newCategory)) {
@@ -182,16 +181,14 @@ function SettingsManager({
     };
 
     const handleRemoveCategory = (categoryToRemove: string) => {
-        const updatedCategories = settings.availableCategories.filter(c => c !== categoryToRemove);
-        setSettings(prev => ({...prev, availableCategories: updatedCategories}));
+        setSettings(prev => ({...prev, availableCategories: prev.availableCategories.filter(c => c !== categoryToRemove)}));
         settingsForm.setValue('categoryRules', settingsForm.getValues('categoryRules').filter(rule => rule.category !== categoryToRemove));
         toast({ title: '類型已刪除', description: `「${categoryToRemove}」已被移除。` });
     };
 
     const handleAddCashDescription = () => {
         if (newCashDescription && !settings.cashTransactionDescriptions.includes(newCashDescription)) {
-            const updatedDescriptions = [...settings.cashTransactionDescriptions, newCashDescription];
-            setSettings(prev => ({ ...prev, cashTransactionDescriptions: updatedDescriptions }));
+            setSettings(prev => ({ ...prev, cashTransactionDescriptions: [...prev.cashTransactionDescriptions, newCashDescription] }));
             setNewCashDescription('');
             toast({ title: '現金項目已新增', description: `「${newCashDescription}」已成功新增。` });
         } else if (settings.cashTransactionDescriptions.includes(newCashDescription)) {
@@ -200,8 +197,7 @@ function SettingsManager({
     };
 
     const handleRemoveCashDescription = (descriptionToRemove: string) => {
-        const updatedDescriptions = settings.cashTransactionDescriptions.filter(d => d !== descriptionToRemove);
-        setSettings(prev => ({...prev, cashTransactionDescriptions: updatedDescriptions}));
+        setSettings(prev => ({...prev, cashTransactionDescriptions: prev.cashTransactionDescriptions.filter(d => d !== descriptionToRemove)}));
         toast({ title: '現金項目已刪除', description: `「${descriptionToRemove}」已被移除。` });
     };
 
@@ -713,42 +709,41 @@ function ResultsDisplay({
 
     const summaryReportData = useMemo(() => {
         const monthlyData: Record<string, Record<string, number>> = {};
-        const categoriesToDisplay = summarySelectedCategories;
-    
+        const allCategoriesInReport = new Set<string>();
+
         combinedData.forEach(transaction => {
+            if (!summarySelectedCategories.includes(transaction.category)) {
+                return; 
+            }
             try {
                 const monthKey = format(transaction.dateObj, 'yyyy年M月');
                 if (!monthlyData[monthKey]) {
                     monthlyData[monthKey] = {};
                 }
-                // Always add to the category, even if it's not in the currently displayed set
+                
                 monthlyData[monthKey][transaction.category] = (monthlyData[monthKey][transaction.category] || 0) + transaction.amount;
+                allCategoriesInReport.add(transaction.category);
+
             } catch(e) {
                 // Ignore date parsing errors for a single transaction
             }
         });
     
-        const sortedCategories = Array.from(new Set([...settings.availableCategories])).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+        const sortedCategories = Array.from(allCategoriesInReport).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
         const headers = ['日期（年月）', ...sortedCategories, '總計'];
         const rows = Object.entries(monthlyData).map(([month, categoryData]) => {
           let total = 0;
           const row: Record<string, string | number> = { '日期（年月）': month };
           
-          let hasVisibleData = false;
           sortedCategories.forEach(cat => {
             const value = categoryData[cat] || 0;
             row[cat] = value;
-            if (categoriesToDisplay.includes(cat)) {
-                total += value;
-                if (value !== 0) {
-                    hasVisibleData = true;
-                }
-            }
+            total += value;
           });
           row['總計'] = total;
 
-          return hasVisibleData ? row : null;
-        }).filter((row): row is Record<string, string | number> => row !== null)
+          return row;
+        })
         .sort((a, b) => {
             try {
                 return parse(a['日期（年月）'] as string, 'yyyy年M月', new Date()).getTime() - parse(b['日期（年月）'] as string, 'yyyy年M月', new Date()).getTime();
@@ -756,7 +751,8 @@ function ResultsDisplay({
                 return (a['日期（年月）'] as string).localeCompare(b['日期（年月）'] as string);
             }
         });
-        return { headers: ['日期（年月）', ...categoriesToDisplay.sort((a,b) => a.localeCompare(b, 'zh-Hant')), '總計'], rows };
+        
+        return { headers, rows };
     }, [combinedData, summarySelectedCategories, settings.availableCategories]);
 
     const categoryChartData = useMemo(() => {
@@ -811,7 +807,7 @@ function ResultsDisplay({
                       <TabsContent value="credit"><Table><TableHeader><TableRow><SortableHeader sortKey="transactionDate" currentSortKey={creditSortKey} sortDirection={creditSortDirection} onSort={handleCreditSort} style={{ width: '110px' }}>日期</SortableHeader><TableHead style={{ width: '110px' }}>類型</TableHead><TableHead>交易項目</TableHead><SortableHeader sortKey="amount" currentSortKey={creditSortKey} sortDirection={creditSortDirection} onSort={handleCreditSort} style={{ width: '100px' }}>金額</SortableHeader><TableHead>銀行代碼/備註</TableHead><TableHead className="w-[80px] text-center">操作</TableHead></TableRow></TableHeader><TableBody>{sortedCreditData.data.map((row) => (<TableRow key={row.id}><TableCell style={{ width: '110px' }}><div className="font-mono">{getCreditDisplayDate(row.transactionDate)}</div></TableCell><TableCell style={{ width: '110px' }}><Select value={row.category} onValueChange={(v) => onUpdateTransaction(row.id, 'category', v, 'credit')} disabled={!user}><SelectTrigger className="h-8 w-full"><SelectValue placeholder="選擇類型" /></SelectTrigger><SelectContent>{settings.availableCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select></TableCell><TableCell><EditableCell value={row.description} onUpdate={v => onUpdateTransaction(row.id, 'description', v, 'credit')} disabled={!user} /></TableCell><TableCell style={{ width: '100px' }} className={`text-right font-mono ${row.amount < 0 ? 'text-green-600' : ''}`}>{row.amount.toLocaleString()}</TableCell><TableCell><EditableCell value={row.bankCode || ''} onUpdate={v => onUpdateTransaction(row.id, 'bankCode', v, 'credit')} disabled={!user} /></TableCell><TableCell className="text-center"><Button variant="ghost" size="icon" onClick={() => onDeleteTransaction(row.id, 'credit')} disabled={!user} className="h-8 w-8"><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell></TableRow>))}</TableBody></Table><PaginationControls currentPage={creditPage} totalPages={sortedCreditData.totalPages} onPageChange={setCreditPage} /></TabsContent>
                       <TabsContent value="deposit"><Table><TableCaption>金額：支出為正，存入為負</TableCaption><TableHeader><TableRow><SortableHeader sortKey="date" currentSortKey={depositSortKey} sortDirection={depositSortDirection} onSort={handleDepositSort} style={{ width: '110px' }}>日期</SortableHeader><SortableHeader sortKey="category" currentSortKey={depositSortKey} sortDirection={depositSortDirection} onSort={handleDepositSort} style={{ width: '110px' }}>類型</SortableHeader><SortableHeader sortKey="description" currentSortKey={depositSortKey} sortDirection={depositSortDirection} onSort={handleDepositSort}>交易項目</SortableHeader><SortableHeader sortKey="amount" currentSortKey={depositSortKey} sortDirection={depositSortDirection} onSort={handleDepositSort} style={{ width: '100px' }}>金額</SortableHeader><TableHead>銀行代碼/備註</TableHead><TableHead className="w-[80px] text-center">操作</TableHead></TableRow></TableHeader><TableBody>{sortedDepositData.data.map((row) => (<TableRow key={row.id}><TableCell style={{ width: '110px' }}><div className="font-mono">{row.date}</div></TableCell><TableCell style={{ width: '110px' }}><Select value={row.category} onValueChange={(v) => onUpdateTransaction(row.id, 'category', v, 'deposit')} disabled={!user}><SelectTrigger className="h-8 w-full"><SelectValue placeholder="選擇類型" /></SelectTrigger><SelectContent>{settings.availableCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select></TableCell><TableCell><EditableCell value={row.description} onUpdate={v => onUpdateTransaction(row.id, 'description', v, 'deposit')} disabled={!user} /></TableCell><TableCell style={{ width: '100px' }} className={`text-right font-mono ${row.amount < 0 ? 'text-green-600' : 'text-destructive'}`}>{row.amount.toLocaleString()}</TableCell><TableCell><EditableCell value={row.bankCode || ''} onUpdate={v => onUpdateTransaction(row.id, 'bankCode', v, 'deposit')} disabled={!user} /></TableCell><TableCell className="text-center"><Button variant="ghost" size="icon" onClick={() => onDeleteTransaction(row.id, 'deposit')} disabled={!user} className="h-8 w-8"><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell></TableRow>))}</TableBody></Table><PaginationControls currentPage={depositPage} totalPages={sortedDepositData.totalPages} onPageChange={setDepositPage} /></TabsContent>
                       <TabsContent value="cash">
-                        <Accordion type="single" collapsible className="w-full mb-4">
+                        <Accordion type="single" collapsible defaultValue="add-cash" className="w-full mb-4">
                             <AccordionItem value="add-cash">
                                 <AccordionTrigger>新增現金交易</AccordionTrigger>
                                 <AccordionContent>
@@ -928,13 +924,41 @@ export function FinanceFlowClient() {
     const result = await processBankStatement(text || '', settings.replacementRules, settings.categoryRules, !!excelData, excelData);
     
     if (result.success) {
+      // Calculate totals for the toast message
+      const creditTotal = result.creditData.reduce((sum, item) => sum + item.amount, 0);
+      const depositTotal = result.depositData.reduce((sum, item) => sum + item.amount, 0);
+      const cashTotal = result.cashData.reduce((sum, item) => sum + item.amount, 0);
+      const summaryLines: string[] = [];
+      if (result.creditData.length > 0) {
+          summaryLines.push(`信用卡 ${result.creditData.length} 筆，總金額 ${creditTotal.toLocaleString()}`);
+      }
+      if (result.depositData.length > 0) {
+          summaryLines.push(`活存帳戶 ${result.depositData.length} 筆，總金額 ${depositTotal.toLocaleString()}`);
+      }
+      if (result.cashData.length > 0) {
+          summaryLines.push(`Excel 現金 ${result.cashData.length} 筆，總金額 ${cashTotal.toLocaleString()}`);
+      }
+
+      if (summaryLines.length > 0) {
+          toast({
+              title: "報表解析摘要",
+              description: (
+                  <ul className="list-disc pl-5">
+                      {summaryLines.map((line, index) => <li key={index}>{line}</li>)}
+                  </ul>
+              ),
+              duration: 10000, // Show for 10 seconds
+          });
+      }
+
+
       if (result.detectedCategories.length > 0) {
         const currentCats = settings.availableCategories;
         const newCats = result.detectedCategories.filter(c => !currentCats.includes(c));
         if (newCats.length > 0) {
-            const updatedCategories = [...currentCats, ...newCats];
-            const newSettings = {...settings, availableCategories: updatedCategories};
-            await handleSaveSettings(newSettings);
+            const updatedSettings = {...settings, availableCategories: [...currentCats, ...newCats]};
+            setSettings(updatedSettings); // Update local state immediately
+            await handleSaveSettings(updatedSettings);
             toast({ title: '自動新增類型', description: `已新增：${newCats.join(', ')}`});
         }
       }
@@ -1116,3 +1140,5 @@ export function FinanceFlowClient() {
     </Tabs>
   );
 }
+
+    
