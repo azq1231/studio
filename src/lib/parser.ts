@@ -154,7 +154,6 @@ export async function parseCreditCard(text: string): Promise<RawCreditData[]> {
 
   for (const line of lines) {
     const currentLine = line.replace(/\u3000/g, ' ').trim();
-    // Allow YYYY/MM/DD or MM/DD format
     if (!/^(?:\d{4}\/)?\d{1,2}\/\d{1,2}/.test(currentLine)) {
       continue;
     }
@@ -167,7 +166,6 @@ export async function parseCreditCard(text: string): Promise<RawCreditData[]> {
     let initialCategory = '';
     let descriptionStartIndex = 1;
 
-    // Handle YYYY/MM/DD format
     if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(transactionDate)) {
         postingDate = transactionDate;
     }
@@ -214,19 +212,9 @@ export async function parseCreditCard(text: string): Promise<RawCreditData[]> {
         const amountEndIndex = remainingLine.lastIndexOf(amountMatch[0]);
         rawDescription = remainingLine.substring(0, amountEndIndex).trim();
 
-        const bankCodeMatch = rawDescription.match(/\s(\w+)$/);
-        if (bankCodeMatch) {
-            bankCode = bankCodeMatch[1];
-            rawDescription = rawDescription.substring(0, rawDescription.lastIndexOf(bankCode)).trim();
-        }
-
-    } else {
-        const lastPart = parts[parts.length - 1];
-        const parsedAmount = parseFloat(lastPart.replace(/,/g, ''));
-        if (!isNaN(parsedAmount)) {
-            amount = parsedAmount;
-            rawDescription = parts.slice(descriptionStartIndex, -1).join(' ');
-        }
+        // This logic was flawed. A simple bank code is not always the last word.
+        // It's better to treat the whole remaining part as description and let rules handle it.
+        // The logic of separating bank code is removed to make description more stable.
     }
 
     if (!rawDescription && parts.length > descriptionStartIndex) {
@@ -235,8 +223,6 @@ export async function parseCreditCard(text: string): Promise<RawCreditData[]> {
 
 
     if (rawDescription) {
-      // Create a deterministic ID based on the most stable raw transaction content
-      // CRITICAL: The ID must NOT include any category.
       const idString = `${transactionDate}-${postingDate}-${rawDescription}-${amount}`;
       const id = await sha1(idString);
 
@@ -274,52 +260,82 @@ export type CashData = {
 };
 
 export async function parseDepositAccount(text: string): Promise<DepositData[]> {
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
-  const results: DepositData[] = [];
-  let currentDate = '';
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+    const results: DepositData[] = [];
+    let currentDate = '';
 
-  for (const line of lines) {
-    if (/^\d{4}\/\d{2}\/\d{2}/.test(line)) {
-      currentDate = line;
-      continue;
+    for (const line of lines) {
+        // Handle lines that are just the date
+        if (/^\d{4}\/\d{2}\/\d{2}$/.test(line.trim())) {
+            currentDate = line.trim();
+            continue;
+        }
+
+        // Handle transaction lines, which may or may not start with a date
+        const fullLine = /^\d{4}\/\d{2}\/\d{2}/.test(line) ? line : `${currentDate} ${line}`.trim();
+        
+        const parts = fullLine.split(/\s+/);
+        if (parts.length < 3) continue;
+
+        const datePart = parts[0];
+        const timePart = parts[1];
+
+        if (!/^\d{4}\/\d{2}\/\d{2}$/.test(datePart) || !/^\d{2}:\d{2}:\d{2}$/.test(timePart)) {
+            continue;
+        }
+
+        const date = datePart;
+        const time = timePart;
+        
+        // Everything after date and time is potentially description, amounts, or remark
+        const restOfLine = parts.slice(2).join(' ');
+        
+        // This regex is complex. It looks for numbers (with commas) at the end of the string.
+        // It tries to find up to 4 such numbers (withdraw, deposit, balance, remark).
+        const match = restOfLine.match(/^(.*?)\s+([\d,]+)\s+([\d,]*)\s+([\d,]+)\s+([\d,]*\S*)$/);
+        
+        let description = '';
+        let withdraw = '';
+        let deposit = '';
+        let remark = '';
+
+        if (match) {
+            description = match[1].trim();
+            withdraw = match[2].replace(/,/g, '');
+            // We don't need deposit, balance for this logic
+            remark = match[5].trim();
+        } else {
+             // Fallback for simpler formats like "description amount"
+             const simplerMatch = restOfLine.match(/^(.*?)\s+([\d,]+)$/);
+             if (simplerMatch) {
+                description = simplerMatch[1].trim();
+                withdraw = simplerMatch[2].replace(/,/g, '');
+             } else {
+                 // If no numbers are found, treat the whole thing as description, amount as 0.
+                 description = restOfLine;
+                 withdraw = '0';
+             }
+        }
+        
+        const amount = withdraw ? parseFloat(withdraw) : 0;
+
+        if (!description && !amount) continue;
+
+        // CRITICAL: ID is based on core, stable fields. Remark is NOT included.
+        const idString = `${date}-${time}-${description}-${amount}`;
+        const id = await sha1(idString);
+
+        results.push({
+            id,
+            date: date,
+            category: '', // Category will be applied later by the action
+            description,
+            amount,
+            bankCode: remark
+        });
     }
 
-    if (/^\d{2}:\d{2}:\d{2}/.test(line)) {
-      if (!currentDate) {
-        try {
-            currentDate = format(new Date(), 'yyyy/MM/dd');
-        } catch {}
-      }
-
-      const parts = line.split(/\s+/); // Split by whitespace instead of tab
-      if (parts.length < 2) continue;
-
-      const time = parts[0];
-      const description = parts[1];
-      const withdraw = parts[2]?.replace(/,/g, '') || '';
-      const deposit = parts[3]?.replace(/,/g, '') || '';
-      const balance = parts[4]?.replace(/,/g, '') || '';
-      const remark = parts.slice(5).join(' '); // Join the rest as remark
-      
-      const amount = withdraw ? parseFloat(withdraw) : (deposit ? -parseFloat(deposit) : 0);
-      
-      if (!description && !amount) continue;
-
-      const idString = `${currentDate}-${time}-${description}-${amount}-${remark}`;
-      const id = await sha1(idString);
-
-      results.push({
-        id,
-        date: currentDate,
-        category: '', // Category will be applied later
-        description,
-        amount,
-        bankCode: remark
-      });
-    }
-  }
-
-  return results;
+    return results;
 }
 
 
@@ -353,4 +369,3 @@ export const getCreditDisplayDate = (dateString: string) => {
         return dateString;
     }
 };
-
