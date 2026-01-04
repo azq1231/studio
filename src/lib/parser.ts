@@ -202,7 +202,7 @@ export async function parseCreditCard(text: string): Promise<RawCreditData[]> {
         if (!description || !amount) continue;
 
         // Use only the most stable fields for ID generation
-        const idString = `${transactionDate}-${postingDate}-${description}-${amount}`;
+        const idString = `${transactionDate}-${postingDate}-${description}-${amount}-${bankCode}`;
         const id = await sha1(idString);
 
         results.push({
@@ -238,58 +238,71 @@ export type CashData = {
 };
 
 export async function parseDepositAccount(text: string): Promise<DepositData[]> {
-    const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+    const rawLines = text.split('\n').map(l => l.trim()).filter(l => l);
     const results: DepositData[] = [];
     let currentDate = '';
 
-    for (const line of lines) {
-        // Handle lines that are just the date
+    // Step 1: Merge multi-line entries into single logical entries
+    const mergedEntries: { date: string, content: string }[] = [];
+    const transactionLineRegex = /^\d{2}:\d{2}:\d{2}\s+/;
+
+    for (const line of rawLines) {
         const dateMatch = line.match(/^(\d{4}\/\d{2}\/\d{2})$/);
         if (dateMatch) {
             currentDate = dateMatch[1];
             continue;
         }
 
-        let datePart = currentDate;
-        let lineContent = line;
-
-        // Check if the line itself starts with a date, overriding the current sticky date
-        const lineDateMatch = line.match(/^(\d{4}\/\d{2}\/\d{2})\s+(.*)$/);
-        if (lineDateMatch) {
-            datePart = lineDateMatch[1];
-            lineContent = lineDateMatch[2];
+        if (transactionLineRegex.test(line)) {
+            // This is a main transaction line
+            mergedEntries.push({ date: currentDate, content: line });
+        } else if (mergedEntries.length > 0) {
+            // This is a continuation line, append it to the last entry's content
+            const lastEntry = mergedEntries[mergedEntries.length - 1];
+            lastEntry.content += ` ${line}`;
         }
-        
-        if (!datePart) continue; // Skip if no date is established
+    }
 
-        const timeMatch = lineContent.match(/^(\d{2}:\d{2}:\d{2})\s+(.*)$/);
+    // Step 2: Process each merged entry
+    for (const entry of mergedEntries) {
+        const { date: datePart, content } = entry;
+        if (!datePart) continue;
+
+        const timeMatch = content.match(/^(\d{2}:\d{2}:\d{2})\s+(.*)$/);
         const time = timeMatch ? timeMatch[1] : '00:00:00';
-        const restOfLine = timeMatch ? timeMatch[2] : lineContent;
+        const restOfLine = (timeMatch ? timeMatch[2] : content).trim();
 
         const parts = restOfLine.split(/\s+/).filter(Boolean);
         if (parts.length < 2) continue;
-        
-        // Reverse parsing from the end of the line
+
+        // --- Reverse Parsing from the end of the line ---
         let remark = '';
         let balance = 0;
         let deposit = 0;
         let withdraw = 0;
         
-        const lastPart = parts[parts.length - 1].replace(/,/g, '');
+        let tempParts = [...parts];
+
+        // 1. Extract remark (if the last part is not a number)
+        const lastPart = tempParts[tempParts.length - 1].replace(/,/g, '');
         if (isNaN(parseFloat(lastPart))) {
-            remark = parts.pop() || '';
+            remark = tempParts.pop() || '';
         }
 
-        const balancePart = parts.pop()?.replace(/,/g, '');
+        // 2. Extract balance
+        const balancePart = tempParts.pop()?.replace(/,/g, '');
         if (balancePart) balance = parseFloat(balancePart) || 0;
         
-        const depositPart = parts.pop()?.replace(/,/g, '');
+        // 3. Extract deposit
+        const depositPart = tempParts.pop()?.replace(/,/g, '');
         if (depositPart) deposit = parseFloat(depositPart) || 0;
 
-        const withdrawPart = parts.pop()?.replace(/,/g, '');
+        // 4. Extract withdrawal
+        const withdrawPart = tempParts.pop()?.replace(/,/g, '');
         if (withdrawPart) withdraw = parseFloat(withdrawPart) || 0;
         
-        const description = parts.join(' ');
+        // 5. The rest is the description
+        const description = tempParts.join(' ');
         const amount = withdraw || (deposit > 0 ? -deposit : 0);
 
         if (!description || amount === 0) continue;
