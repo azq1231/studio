@@ -245,18 +245,18 @@ export async function parseDepositAccount(text: string): Promise<DepositData[]> 
     // Step 1: Merge multi-line entries into single logical entries
     const mergedEntries: { date: string, content: string }[] = [];
     const transactionLineRegex = /^\d{2}:\d{2}:\d{2}\s+/;
+    const dateLineRegex = /^(\d{4}\/\d{2}\/\d{2})$/;
 
     for (const line of rawLines) {
-        const dateMatch = line.match(/^(\d{4}\/\d{2}\/\d{2})$/);
-        if (dateMatch) {
-            currentDate = dateMatch[1];
+        if (dateLineRegex.test(line)) {
+            currentDate = line;
             continue;
         }
 
         if (transactionLineRegex.test(line)) {
-            // This is a main transaction line
+            // This is a main transaction line, push a new entry
             mergedEntries.push({ date: currentDate, content: line });
-        } else if (mergedEntries.length > 0) {
+        } else if (mergedEntries.length > 0 && line) {
             // This is a continuation line, append it to the last entry's content
             const lastEntry = mergedEntries[mergedEntries.length - 1];
             lastEntry.content += ` ${line}`;
@@ -272,42 +272,53 @@ export async function parseDepositAccount(text: string): Promise<DepositData[]> 
         const time = timeMatch ? timeMatch[1] : '00:00:00';
         const restOfLine = (timeMatch ? timeMatch[2] : content).trim();
 
+        // Use a more robust split to handle multiple spaces
         const parts = restOfLine.split(/\s+/).filter(Boolean);
         if (parts.length < 2) continue;
-
-        // --- Reverse Parsing from the end of the line ---
-        let remark = '';
-        let balance = 0;
-        let deposit = 0;
-        let withdraw = 0;
         
         let tempParts = [...parts];
+        
+        // --- Reverse Parsing from the end of the line ---
+        let remark = '';
+        let balanceStr = '';
+        let depositStr = '';
+        let withdrawStr = '';
 
-        // 1. Extract remark (if the last part is not a number)
-        const lastPart = tempParts[tempParts.length - 1].replace(/,/g, '');
-        if (isNaN(parseFloat(lastPart))) {
+        // 1. Extract Remark (if it exists and is not a number)
+        const lastPart = tempParts[tempParts.length - 1];
+        if (lastPart && isNaN(parseFloat(lastPart.replace(/,/g, '')))) {
             remark = tempParts.pop() || '';
         }
 
-        // 2. Extract balance
-        const balancePart = tempParts.pop()?.replace(/,/g, '');
-        if (balancePart) balance = parseFloat(balancePart) || 0;
-        
-        // 3. Extract deposit
-        const depositPart = tempParts.pop()?.replace(/,/g, '');
-        if (depositPart) deposit = parseFloat(depositPart) || 0;
+        // 2. Extract Balance
+        if (tempParts.length > 0) {
+            balanceStr = tempParts.pop() || '';
+        }
 
-        // 4. Extract withdrawal
-        const withdrawPart = tempParts.pop()?.replace(/,/g, '');
-        if (withdrawPart) withdraw = parseFloat(withdrawPart) || 0;
+        // 3. Extract Deposit
+        if (tempParts.length > 0) {
+            depositStr = tempParts.pop() || '';
+        }
         
-        // 5. The rest is the description
+        // 4. Extract Withdrawal
+        if (tempParts.length > 0) {
+             // If deposit is empty, the current part could be withdrawal
+             if (depositStr.trim() === '') {
+                withdrawStr = balanceStr; // The one we thought was balance is withdrawal
+                balanceStr = tempParts.pop() || ''; // The one before is balance
+             } else {
+                withdrawStr = tempParts.pop() || '';
+             }
+        }
+
         const description = tempParts.join(' ');
-        const amount = withdraw || (deposit > 0 ? -deposit : 0);
+        
+        const withdrawAmount = parseFloat(withdrawStr.replace(/,/g, '')) || 0;
+        const depositAmount = parseFloat(depositStr.replace(/,/g, '')) || 0;
+        const amount = withdrawAmount > 0 ? withdrawAmount : (depositAmount > 0 ? -depositAmount : 0);
 
         if (!description || amount === 0) continue;
 
-        // CRITICAL: ID is based on core, stable fields. Remark is NOT included.
         const idString = `${datePart}-${time}-${description}-${amount}`;
         const id = await sha1(idString);
 
@@ -357,3 +368,4 @@ export const getCreditDisplayDate = (dateString: string) => {
 };
 
     
+
