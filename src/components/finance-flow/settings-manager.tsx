@@ -131,10 +131,10 @@ export function SettingsManager({
         }
     });
 
-    const watchedValues = settingsForm.watch();
+    const handleSaveSettings = useCallback(async () => {
+        setIsSaving(true);
+        const data = settingsForm.getValues();
 
-    const handleSaveSettings = useCallback(
-      (data: SettingsFormData) => {
         const keywords = new Set<string>();
         for (const rule of data.categoryRules) {
             if (keywords.has(rule.keyword)) {
@@ -154,33 +154,15 @@ export function SettingsManager({
             ...data,
         };
 
-        setIsSaving(true);
-        onSaveSettings(newSettings).then(() => {
-            setIsSaving(false);
+        try {
+            await onSaveSettings(newSettings);
             setIsDirty(false);
-        });
-    }, [settings, onSaveSettings, toast]);
-
-    useEffect(() => {
-        const subscription = settingsForm.watch((value, { name, type }) => {
-            if (type === 'change') {
-                setIsDirty(true);
-            }
-        });
-        return () => subscription.unsubscribe();
-    }, [settingsForm.watch]);
-
-    useEffect(() => {
-        if (!isDirty) return;
-
-        setIsSaving(true);
-        const debounceTimer = setTimeout(() => {
-            handleSaveSettings(settingsForm.getValues());
-        }, 1500); // 1.5 second debounce
-
-        return () => clearTimeout(debounceTimer);
-    }, [isDirty, settingsForm, handleSaveSettings]);
-
+        } catch (error) {
+            // Error toast is handled in the parent component
+        } finally {
+            setIsSaving(false);
+        }
+    }, [settings, onSaveSettings, toast, settingsForm]);
 
     useEffect(() => {
         settingsForm.reset({
@@ -360,10 +342,18 @@ export function SettingsManager({
                               <TableBody>
                                 {replacementFields.map((field, index) => (
                                   <TableRow key={field.id}>
-                                    <TableCell className="p-1"><FormField control={settingsForm.control} name={`replacementRules.${index}.find`} render={({ field }) => <FormItem><FormControl><Input placeholder="要被取代的文字" {...field} className="h-9"/></FormControl><FormMessage className="text-xs px-2"/></FormItem>}/></TableCell>
-                                    <TableCell className="p-1"><FormField control={settingsForm.control} name={`replacementRules.${index}.replace`} render={({ field }) => <FormItem><FormControl><Input placeholder="新的文字 (留空為刪除)" {...field} className="h-9"/></FormControl><FormMessage className="text-xs px-2"/></FormItem>}/></TableCell>
-                                    <TableCell className="p-1"><FormField control={settingsForm.control} name={`replacementRules.${index}.notes`} render={({ field }) => <FormItem><FormControl><Input placeholder="新增備註說明" {...field} className="h-9"/></FormControl><FormMessage className="text-xs px-2"/></FormItem>}/></TableCell>
-                                    <TableCell className="p-1 text-center"><FormField control={settingsForm.control} name={`replacementRules.${index}.deleteRow`} render={({ field }) => <FormItem className="flex justify-center items-center h-full"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange}/></FormControl></FormItem>}/></TableCell>
+                                    <TableCell className="p-1">
+                                       <FormField control={settingsForm.control} name={`replacementRules.${index}.find`} render={({ field }) => <FormItem><FormControl><Input placeholder="要被取代的文字" {...field} className="h-9" onChange={(e) => {field.onChange(e); setIsDirty(true);}} onBlur={handleSaveSettings} /></FormControl><FormMessage className="text-xs px-2"/></FormItem>}/>
+                                    </TableCell>
+                                    <TableCell className="p-1">
+                                       <FormField control={settingsForm.control} name={`replacementRules.${index}.replace`} render={({ field }) => <FormItem><FormControl><Input placeholder="新的文字 (留空為刪除)" {...field} className="h-9" onChange={(e) => {field.onChange(e); setIsDirty(true);}} onBlur={handleSaveSettings} /></FormControl><FormMessage className="text-xs px-2"/></FormItem>}/>
+                                    </TableCell>
+                                    <TableCell className="p-1">
+                                       <FormField control={settingsForm.control} name={`replacementRules.${index}.notes`} render={({ field }) => <FormItem><FormControl><Input placeholder="新增備註說明" {...field} className="h-9" onChange={(e) => {field.onChange(e); setIsDirty(true);}} onBlur={handleSaveSettings} /></FormControl><FormMessage className="text-xs px-2"/></FormItem>}/>
+                                    </TableCell>
+                                    <TableCell className="p-1 text-center">
+                                       <FormField control={settingsForm.control} name={`replacementRules.${index}.deleteRow`} render={({ field }) => <FormItem className="flex justify-center items-center h-full"><FormControl><Checkbox checked={field.value} onCheckedChange={(value) => { field.onChange(value); handleSaveSettings(); }}/></FormControl></FormItem>}/>
+                                    </TableCell>
                                     <TableCell className="p-1"><Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeReplacement(index)}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>
                                   </TableRow>
                                 ))}
