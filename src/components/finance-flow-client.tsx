@@ -764,6 +764,7 @@ function ResultsDisplay({
         const monthlyData: Record<string, Record<string, number>> = {};
         
         combinedData.forEach(transaction => {
+            // Only consider transactions that belong to the selected categories
             if (!summarySelectedCategories.includes(transaction.category)) {
                 return;
             }
@@ -773,6 +774,7 @@ function ResultsDisplay({
                     monthlyData[monthKey] = {};
                 }
                 
+                // Sum up the amounts for the category
                 monthlyData[monthKey][transaction.category] = (monthlyData[monthKey][transaction.category] || 0) + transaction.amount;
     
             } catch(e) {
@@ -780,7 +782,8 @@ function ResultsDisplay({
             }
         });
     
-        const categoriesToDisplay = settings.availableCategories.sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+        // The columns should only be the categories that the user has selected in the filter.
+        const categoriesToDisplay = [...summarySelectedCategories].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
         const headers = ['日期（年月）', ...categoriesToDisplay, '總計'];
         
         const rows = Object.entries(monthlyData).map(([month, categoryData]) => {
@@ -805,7 +808,7 @@ function ResultsDisplay({
         });
         
         return { headers, rows };
-    }, [combinedData, summarySelectedCategories, settings.availableCategories]);
+    }, [combinedData, summarySelectedCategories]);
 
     const categoryChartData = useMemo(() => {
         if (!creditData || creditData.length === 0) return [];
