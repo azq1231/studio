@@ -173,17 +173,16 @@ export async function parseCreditCard(text: string): Promise<RawCreditData[]> {
             const lastPart = parts[parts.length - 1].replace(/,/g, '');
             const secondLastPart = parts[parts.length - 2].replace(/,/g, '');
 
-            if (!isNaN(parseFloat(lastPart)) && !isNaN(parseFloat(secondLastPart))) {
+            if (!isNaN(parseFloat(lastPart)) && isNaN(parseFloat(secondLastPart))) {
+                 amount = parseFloat(lastPart);
+                 initialCategory = parts[2];
+                 description = parts.slice(3, -1).join(' ');
+            } else if (!isNaN(parseFloat(lastPart)) && !isNaN(parseFloat(secondLastPart))) {
                 // Format: ... DESC AMOUNT BANK_CODE
                 amount = parseFloat(secondLastPart);
                 bankCode = lastPart;
                 initialCategory = parts[2];
                 description = parts.slice(3, -2).join(' ');
-            } else if (!isNaN(parseFloat(lastPart))) {
-                // Format: ... DESC AMOUNT
-                amount = parseFloat(lastPart);
-                initialCategory = parts[2];
-                description = parts.slice(3, -1).join(' ');
             }
         }
         // Case 2: 交易日 描述 金額
@@ -240,12 +239,12 @@ export type CashData = {
 export async function parseDepositAccount(text: string): Promise<DepositData[]> {
     const rawLines = text.split('\n').map(l => l.trim()).filter(l => l);
     const results: DepositData[] = [];
-    let currentDate = '';
-
-    // Step 1: Merge multi-line entries into single logical entries
+    
+    // Step 1: Merge multi-line entries
     const mergedEntries: { date: string, content: string }[] = [];
-    const transactionLineRegex = /^\d{2}:\d{2}:\d{2}\s+/;
+    let currentDate = '';
     const dateLineRegex = /^(\d{4}\/\d{2}\/\d{2})$/;
+    const transactionLineRegex = /^\d{2}:\d{2}:\d{2}\s+/;
 
     for (const line of rawLines) {
         if (dateLineRegex.test(line)) {
@@ -254,55 +253,53 @@ export async function parseDepositAccount(text: string): Promise<DepositData[]> 
         }
 
         if (transactionLineRegex.test(line)) {
-            // This is a main transaction line, push a new entry
             mergedEntries.push({ date: currentDate, content: line });
         } else if (mergedEntries.length > 0 && line) {
-            // This is a continuation line, append it to the last entry's content
             const lastEntry = mergedEntries[mergedEntries.length - 1];
             lastEntry.content += ` ${line}`;
         }
     }
 
-    // Step 2: Process each merged entry using a robust regex
-    const entryRegex = /^(\d{2}:\d{2}:\d{2})\s+(.*?)\s+([\d,.-]+)\s+([\d,.-]*)\s+([\d,.-]+)\s*(.*)$/;
-
+    // Step 2: Process each merged entry using the reverse-peel strategy
     for (const entry of mergedEntries) {
-        const { date: datePart, content } = entry;
-        if (!datePart) continue;
+        if (!entry.date) continue;
+        
+        let parts = entry.content.split(/\s+/).filter(Boolean);
+        if (parts.length < 5) continue; // Basic validation
 
-        const match = content.match(entryRegex);
-        if (!match) continue;
+        // 1. Peel off remark from the end
+        const remark = parts.pop() || '';
         
-        const [
-            , // full match
-            time,
-            description,
-            withdrawStr,
-            depositStr,
-            balanceStr,
-            remark
-        ] = match;
-        
-        const withdrawAmount = parseFloat(withdrawStr.replace(/,/g, '')) || 0;
+        // 2. Peel off balance
+        parts.pop(); // Balance is not used, so just discard it
+
+        // 3. Peel off deposit and withdrawal, then determine the amount
+        const depositStr = parts.pop() || '';
+        const withdrawalStr = parts.pop() || '';
+        const withdrawalAmount = parseFloat(withdrawalStr.replace(/,/g, '')) || 0;
         const depositAmount = parseFloat(depositStr.replace(/,/g, '')) || 0;
-        
-        // Determine the single transaction amount. Withdrawals are positive, deposits are negative.
-        const amount = withdrawAmount > 0 ? withdrawAmount : (depositAmount > 0 ? -depositAmount : 0);
+        const amount = withdrawalAmount > 0 ? withdrawalAmount : (depositAmount > 0 ? -depositAmount : 0);
 
-        // Skip if there's no valid amount or description
-        if (amount === 0 || !description.trim()) continue;
+        if (amount === 0) continue;
+
+        // 4. Peel off time
+        const time = parts.shift() || '';
+
+        // 5. The rest is the description
+        const description = parts.join(' ');
         
-        // Generate a stable ID based on the core, non-mutable parts of the transaction
-        const idString = `${datePart}-${time}-${description.trim()}-${amount}`;
+        if (!description) continue;
+
+        const idString = `${entry.date}-${time}-${description}-${amount}`;
         const id = await sha1(idString);
 
         results.push({
             id,
-            date: datePart,
-            category: '', // Category will be applied later by the action
-            description: description.trim(),
+            date: entry.date,
+            category: '', 
+            description,
             amount,
-            bankCode: remark.trim()
+            bankCode: remark
         });
     }
 
@@ -342,5 +339,6 @@ export const getCreditDisplayDate = (dateString: string) => {
 };
 
     
+
 
 
