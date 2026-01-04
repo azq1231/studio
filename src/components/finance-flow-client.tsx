@@ -684,6 +684,113 @@ function CashTransactionForm({
     );
 }
 
+type CombinedData = { id: string; date: string; dateObj: Date; category: string; description: string; amount: number; source: '信用卡' | '活存帳戶' | '現金'; notes?: string; bankCode?: string; };
+
+function FixedItemsSummary({ combinedData }: { combinedData: CombinedData[] }) {
+    const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
+
+    const fixedItemsData = useMemo(() => {
+        const years = new Set<string>();
+        const filteredByYear = combinedData.filter(transaction => {
+            if (transaction.category === '固定') {
+                const year = getYear(transaction.dateObj);
+                years.add(String(year));
+                return String(year) === selectedYear;
+            }
+            return false;
+        });
+
+        const itemsByDescription: Record<string, { monthly: Record<number, number>, total: number }> = {};
+        
+        filteredByYear.forEach(transaction => {
+            const desc = transaction.description;
+            if (!itemsByDescription[desc]) {
+                itemsByDescription[desc] = { monthly: {}, total: 0 };
+            }
+            const month = getMonth(transaction.dateObj); // 0-11
+            itemsByDescription[desc].monthly[month] = (itemsByDescription[desc].monthly[month] || 0) + transaction.amount;
+            itemsByDescription[desc].total += transaction.amount;
+        });
+        
+        const tableData = Object.entries(itemsByDescription).map(([description, data]) => ({
+            description,
+            ...data.monthly,
+            total: data.total
+        })).sort((a,b) => a.description.localeCompare(b.description, 'zh-Hant'));
+
+        return {
+            years: Array.from(years).sort((a, b) => parseInt(b) - parseInt(a)),
+            tableData,
+            monthlyTotals: Array.from({ length: 12 }, (_, i) => 
+                tableData.reduce((sum, row) => sum + (row[i as keyof typeof row] as number || 0), 0)
+            ),
+            grandTotal: tableData.reduce((sum, row) => sum + row.total, 0)
+        };
+    }, [combinedData, selectedYear]);
+
+    if (fixedItemsData.years.length === 0) {
+        return null; // Or some placeholder if you prefer
+    }
+
+    const months = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
+    
+    return (
+        <Card className="mt-6">
+            <CardHeader>
+                <div className="flex justify-between items-center">
+                    <CardTitle>固定項目詳細分析</CardTitle>
+                    <Select value={selectedYear} onValueChange={setSelectedYear}>
+                        <SelectTrigger className="w-[120px]">
+                            <SelectValue placeholder="選擇年份" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {fixedItemsData.years.map(year => (
+                                <SelectItem key={year} value={year}>{year} 年</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <CardDescription>查看「固定」分類下各項目在各月份的支出明細。</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="rounded-md border">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="sticky left-0 bg-background/95 backdrop-blur-sm z-10">項目</TableHead>
+                                {months.map(m => <TableHead key={m} className="text-right">{m}</TableHead>)}
+                                <TableHead className="text-right sticky right-0 bg-background/95 backdrop-blur-sm z-10">年度總計</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {fixedItemsData.tableData.map(row => (
+                                <TableRow key={row.description}>
+                                    <TableCell className="font-medium sticky left-0 bg-background/95 backdrop-blur-sm z-10">{row.description}</TableCell>
+                                    {Array.from({ length: 12 }).map((_, i) => (
+                                        <TableCell key={i} className="text-right font-mono">
+                                            {(row[i as keyof typeof row] as number || 0) !== 0 ? (row[i as keyof typeof row] as number).toLocaleString() : '-'}
+                                        </TableCell>
+                                    ))}
+                                    <TableCell className="text-right font-mono font-bold sticky right-0 bg-background/95 backdrop-blur-sm z-10">{row.total.toLocaleString()}</TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                        <TableBody>
+                           <TableRow className="bg-muted hover:bg-muted font-bold">
+                               <TableCell className="sticky left-0 bg-muted/95 backdrop-blur-sm z-10">每月總計</TableCell>
+                               {fixedItemsData.monthlyTotals.map((total, i) => (
+                                   <TableCell key={i} className="text-right font-mono">{total.toLocaleString()}</TableCell>
+                               ))}
+                               <TableCell className="text-right font-mono sticky right-0 bg-muted/95 backdrop-blur-sm z-10">{fixedItemsData.grandTotal.toLocaleString()}</TableCell>
+                           </TableRow>
+                        </TableBody>
+                    </Table>
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
+
 function ResultsDisplay({
     creditData, depositData, cashData, settings, onAddCashTransaction, onUpdateTransaction, onDeleteTransaction, hasProcessed, user
 }: {
@@ -745,7 +852,7 @@ function ResultsDisplay({
     const sortedDepositData = useMemo(() => sortAndPaginate(depositData, depositSortKey, depositSortDirection, depositPage, (item, q) => item.description.toLowerCase().includes(q) || (item.bankCode || '').toLowerCase().includes(q), 'date', d => d), [depositData, depositSortKey, depositSortDirection, depositPage, searchQuery]);
     const sortedCashData = useMemo(() => sortAndPaginate(cashData, cashSortKey, cashSortDirection, cashPage, (item, q) => item.description.toLowerCase().includes(q) || (item.notes || '').toLowerCase().includes(q), 'date', d => d), [cashData, cashSortKey, cashSortDirection, cashPage, searchQuery]);
     
-    type CombinedData = { id: string; date: string; dateObj: Date; category: string; description: string; amount: number; source: '信用卡' | '活存帳戶' | '現金'; notes?: string; bankCode?: string; };
+    
     const combinedData = useMemo<CombinedData[]>(() => {
         const combined: CombinedData[] = [];
         const filterAndMap = (data: any[], source: CombinedData['source'], dateKey: string) => {
@@ -803,30 +910,6 @@ function ResultsDisplay({
         
         return { headers, rows };
     }, [combinedData, summarySelectedCategories]);
-
-    const fixedItemsSummary = useMemo(() => {
-        const yearlyTotals: Record<string, number> = {};
-        const monthlyTotals: Record<string, number> = {};
-
-        combinedData.forEach(transaction => {
-            if (transaction.category === '固定') {
-                try {
-                    const year = getYear(transaction.dateObj);
-                    const monthKey = format(transaction.dateObj, 'yyyy-MM');
-
-                    yearlyTotals[year] = (yearlyTotals[year] || 0) + transaction.amount;
-                    monthlyTotals[monthKey] = (monthlyTotals[monthKey] || 0) + transaction.amount;
-                } catch (e) { /* Ignore date parsing errors */ }
-            }
-        });
-        
-        const years = Object.keys(yearlyTotals).sort((a, b) => parseInt(b) - parseInt(a));
-        const totalAmount = Object.values(monthlyTotals).reduce((sum, amount) => sum + amount, 0);
-        const numberOfMonths = Object.keys(monthlyTotals).length;
-        const monthlyAverage = numberOfMonths > 0 ? totalAmount / numberOfMonths : 0;
-        
-        return { yearlyTotals, years, monthlyAverage };
-    }, [combinedData]);
 
     const categoryChartData = useMemo(() => {
         if (!creditData || creditData.length === 0) return [];
@@ -901,7 +984,7 @@ function ResultsDisplay({
                                 <PopoverTrigger asChild><Button variant="outline">篩選類型 ({summarySelectedCategories.length}/{settings.availableCategories.length})<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button></PopoverTrigger>
                                 <PopoverContent className="w-[250px] p-0">
                                     <div className="p-2 space-y-1"><Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => setSummarySelectedCategories(settings.availableCategories)}>全選</Button><Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => setSummarySelectedCategories([])}>全部取消</Button></div>
-                                    <div className="border-t max-h-60 overflow-y-auto p-2">{settings.availableCategories.sort((a,b)=> a.localeCompare(b, 'zh-Hant')).map(category => (<div key={category} className="flex items-center space-x-2 p-1"><Checkbox id={`cat-${category}`} checked={summarySelectedCategories.includes(category)} onCheckedChange={(c) => c ? setSummarySelectedCategories([...summarySelectedCategories, category]) : setSummarySelectedCategories(summarySelectedCategories.filter(i => i !== category))} /><label htmlFor={`cat-${category}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">{category}</label></div>))}</div>
+                                    <div className="border-t max-h-60 overflow-y-auto p-2">{[...settings.availableCategories].sort((a,b)=> a.localeCompare(b, 'zh-Hant')).map(category => (<div key={category} className="flex items-center space-x-2 p-1"><Checkbox id={`cat-${category}`} checked={summarySelectedCategories.includes(category)} onCheckedChange={(c) => c ? setSummarySelectedCategories([...summarySelectedCategories, category]) : setSummarySelectedCategories(summarySelectedCategories.filter(i => i !== category))} /><label htmlFor={`cat-${category}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">{category}</label></div>))}</div>
                                 </PopoverContent>
                             </Popover>
                             {settings.quickFilters.map((filter, index) => <Button key={index} variant="outline" size="sm" onClick={() => setSummarySelectedCategories(filter.categories)}>{filter.name}</Button>)}
@@ -910,31 +993,7 @@ function ResultsDisplay({
                         <div className="rounded-md border">
                             <Table><TableHeader><TableRow>{summaryReportData.headers.map(h => <TableHead key={h} className={h !== '日期（年月）' ? 'text-right' : ''}>{h}</TableHead>)}</TableRow></TableHeader><TableBody>{summaryReportData.rows.map((row, i) => (<TableRow key={i}>{summaryReportData.headers.map(header => { const value = row[header]; const isClickable = header !== '日期（年月）' && header !== '總計' && typeof value === 'number' && value !== 0; let textColor = ''; if (typeof value === 'number') { if (value < 0) textColor = 'text-green-600'; } return (<TableCell key={header} className={`font-mono ${header !== '日期（年月）' ? 'text-right' : ''} ${textColor}`}>{isClickable ? <button onClick={() => handleSummaryCellClick(row['日期（年月）'] as string, header)} className="hover:underline hover:text-blue-500">{value.toLocaleString()}</button> : (typeof value === 'number' ? value.toLocaleString() : value)}</TableCell>);})}</TableRow>))}</TableBody></Table>
                         </div>
-                         {fixedItemsSummary.years.length > 0 && (
-                            <Card className="mt-6">
-                                <CardHeader><CardTitle>固定項目彙總</CardTitle></CardHeader>
-                                <CardContent className="space-y-4">
-                                    <div>
-                                        <h4 className="text-lg font-semibold mb-2">年度總覽</h4>
-                                        <Table>
-                                            <TableHeader><TableRow><TableHead>年度</TableHead><TableHead className="text-right">總支出</TableHead></TableRow></TableHeader>
-                                            <TableBody>
-                                                {fixedItemsSummary.years.map(year => (
-                                                    <TableRow key={year}>
-                                                        <TableCell>{year} 年</TableCell>
-                                                        <TableCell className="text-right font-mono">{fixedItemsSummary.yearlyTotals[year].toLocaleString()}</TableCell>
-                                                    </TableRow>
-                                                ))}
-                                            </TableBody>
-                                        </Table>
-                                    </div>
-                                    <div>
-                                        <h4 className="text-lg font-semibold">每月平均</h4>
-                                        <p className="text-2xl font-bold font-mono">{fixedItemsSummary.monthlyAverage.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        )}
+                        <FixedItemsSummary combinedData={combinedData} />
                       </TabsContent>
                       <TabsContent value="chart"><Card><CardHeader><CardTitle>信用卡消費分類統計</CardTitle><CardDescription>此圖表顯示信用卡的各類別總支出。 (僅計算正數金額)</CardDescription></CardHeader><CardContent><div style={{ width: '100%', height: 400 }}><ResponsiveContainer><BarChart layout="vertical" data={categoryChartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" /><XAxis type="number" /><YAxis dataKey="name" type="category" width={80} /><Tooltip formatter={(v: number) => v.toLocaleString()} /><Legend /><Bar dataKey="total" fill="hsl(var(--chart-1))" name="總支出" /></BarChart></ResponsiveContainer></div></CardContent></Card></TabsContent>
                     </Tabs>
@@ -1252,11 +1311,3 @@ export function FinanceFlowClient() {
     </Tabs>
   );
 }
-
-    
-
-    
-
-    
-
-    
