@@ -149,95 +149,73 @@ export async function parseExcelData(data: any[][]): Promise<ParsedExcelData> {
 // This parser now only extracts raw data with a stable ID.
 // Categorization and rule application will be handled by the server action.
 export async function parseCreditCard(text: string): Promise<RawCreditData[]> {
-  const lines = text.split('\n');
-  const results: RawCreditData[] = [];
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    const results: RawCreditData[] = [];
 
-  for (const line of lines) {
-    const currentLine = line.replace(/\u3000/g, ' ').trim();
-    if (!/^(?:\d{4}\/)?\d{1,2}\/\d{1,2}/.test(currentLine)) {
-      continue;
-    }
+    for (const line of lines) {
+        const parts = line.split(/\s+/);
+        if (parts.length < 3) continue;
 
-    const parts = currentLine.split(/\s+/);
-    if (parts.length < 2) continue;
-    
-    let transactionDate = parts[0];
-    let postingDate = '';
-    let initialCategory = '';
-    let descriptionStartIndex = 1;
+        let transactionDate = '';
+        let postingDate = '';
+        let description = '';
+        let amount = 0;
+        let bankCode = '';
+        let initialCategory = '';
 
-    if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(transactionDate)) {
-        postingDate = transactionDate;
-    }
+        // Case 1: 交易日 入帳日 類別 描述 金額 備註
+        // 11/14 11/15 吃 摩斯漢堡 150 12345
+        const dateRegex = /^\d{1,2}\/\d{1,2}$/;
+        if (dateRegex.test(parts[0]) && dateRegex.test(parts[1])) {
+            transactionDate = parts[0];
+            postingDate = parts[1];
+            
+            const lastPart = parts[parts.length - 1].replace(/,/g, '');
+            const secondLastPart = parts[parts.length - 2].replace(/,/g, '');
 
-    if (/^\d{1,2}\/\d{1,2}$/.test(parts[1])) {
-        postingDate = parts[1];
-        descriptionStartIndex = 2;
-    } else {
-        const lastPart = parts[parts.length - 1].replace(/,/g, '');
-        if (parts.length >=3 && !isNaN(parseFloat(lastPart))) {
-            initialCategory = parts[1];
-            descriptionStartIndex = 2;
-        } else {
-             descriptionStartIndex = 1;
-        }
-    }
-
-    if (transactionDate.length > 5 && !transactionDate.includes('/') && /^\d+$/.test(transactionDate)) {
-        const mid = Math.floor(transactionDate.length / 2);
-        const p1 = transactionDate.substring(0, mid);
-        const p2 = transactionDate.substring(mid);
-        if (p1.length >= 2 && p2.length >= 2) {
-            const d1 = `${p1.slice(0, -2)}/${p1.slice(-2)}`;
-            const d2 = `${p2.slice(0, -2)}/${p2.slice(-2)}`;
-            if (/^\d{1,2}\/\d{1,2}$/.test(d1) && /^\d{1,2}\/\d{1,2}$/.test(d2)) {
-                transactionDate = d1;
-                postingDate = d2;
+            if (!isNaN(parseFloat(lastPart)) && !isNaN(parseFloat(secondLastPart))) {
+                // Format: ... DESC AMOUNT BANK_CODE
+                amount = parseFloat(secondLastPart);
+                bankCode = lastPart;
+                initialCategory = parts[2];
+                description = parts.slice(3, -2).join(' ');
+            } else if (!isNaN(parseFloat(lastPart))) {
+                // Format: ... DESC AMOUNT
+                amount = parseFloat(lastPart);
+                initialCategory = parts[2];
+                description = parts.slice(3, -1).join(' ');
             }
         }
-    } else if (transactionDate.length > 5 && transactionDate.match(/^\d{2}\/\d{2}\d{2}\/\d{2}$/)) {
-        postingDate = transactionDate.slice(5);
-        transactionDate = transactionDate.slice(0, 5);
+        // Case 2: 交易日 描述 金額
+        // 11/14 摩斯漢堡 150
+        else if (dateRegex.test(parts[0])) {
+            transactionDate = parts[0];
+            postingDate = transactionDate; // Assume posting date is the same
+
+            const lastPart = parts[parts.length - 1].replace(/,/g, '');
+            if (!isNaN(parseFloat(lastPart))) {
+                amount = parseFloat(lastPart);
+                description = parts.slice(1, -1).join(' ');
+            }
+        }
+        
+        if (!description || !amount) continue;
+
+        // Use only the most stable fields for ID generation
+        const idString = `${transactionDate}-${postingDate}-${description}-${amount}`;
+        const id = await sha1(idString);
+
+        results.push({
+            id,
+            transactionDate,
+            postingDate,
+            description,
+            amount,
+            bankCode,
+            initialCategory,
+        });
     }
-    
-    const remainingLine = parts.slice(descriptionStartIndex).join(' ');
-    
-    const amountMatch = remainingLine.match(/(-?[\d,]+(\.\d+)?)$/);
-    let amount = 0;
-    let rawDescription = remainingLine;
-    let bankCode = '';
-
-    if (amountMatch) {
-        amount = parseFloat(amountMatch[0].replace(/,/g, ''));
-        const amountEndIndex = remainingLine.lastIndexOf(amountMatch[0]);
-        rawDescription = remainingLine.substring(0, amountEndIndex).trim();
-
-        // This logic was flawed. A simple bank code is not always the last word.
-        // It's better to treat the whole remaining part as description and let rules handle it.
-        // The logic of separating bank code is removed to make description more stable.
-    }
-
-    if (!rawDescription && parts.length > descriptionStartIndex) {
-        rawDescription = parts.slice(descriptionStartIndex).join(' ');
-    }
-
-
-    if (rawDescription) {
-      const idString = `${transactionDate}-${postingDate}-${rawDescription}-${amount}`;
-      const id = await sha1(idString);
-
-      results.push({
-        id,
-        transactionDate,
-        postingDate,
-        description: rawDescription,
-        amount,
-        initialCategory: initialCategory,
-        bankCode,
-      });
-    }
-  }
-  return results;
+    return results;
 }
 
 
@@ -266,68 +244,63 @@ export async function parseDepositAccount(text: string): Promise<DepositData[]> 
 
     for (const line of lines) {
         // Handle lines that are just the date
-        if (/^\d{4}\/\d{2}\/\d{2}$/.test(line.trim())) {
-            currentDate = line.trim();
+        const dateMatch = line.match(/^(\d{4}\/\d{2}\/\d{2})$/);
+        if (dateMatch) {
+            currentDate = dateMatch[1];
             continue;
         }
 
-        // Handle transaction lines, which may or may not start with a date
-        const fullLine = /^\d{4}\/\d{2}\/\d{2}/.test(line) ? line : `${currentDate} ${line}`.trim();
-        
-        const parts = fullLine.split(/\s+/);
-        if (parts.length < 3) continue;
+        let datePart = currentDate;
+        let lineContent = line;
 
-        const datePart = parts[0];
-        const timePart = parts[1];
-
-        if (!/^\d{4}\/\d{2}\/\d{2}$/.test(datePart) || !/^\d{2}:\d{2}:\d{2}$/.test(timePart)) {
-            continue;
+        // Check if the line itself starts with a date, overriding the current sticky date
+        const lineDateMatch = line.match(/^(\d{4}\/\d{2}\/\d{2})\s+(.*)$/);
+        if (lineDateMatch) {
+            datePart = lineDateMatch[1];
+            lineContent = lineDateMatch[2];
         }
+        
+        if (!datePart) continue; // Skip if no date is established
 
-        const date = datePart;
-        const time = timePart;
+        const timeMatch = lineContent.match(/^(\d{2}:\d{2}:\d{2})\s+(.*)$/);
+        const time = timeMatch ? timeMatch[1] : '00:00:00';
+        const restOfLine = timeMatch ? timeMatch[2] : lineContent;
+
+        const parts = restOfLine.split(/\s+/).filter(Boolean);
+        if (parts.length < 2) continue;
         
-        // Everything after date and time is potentially description, amounts, or remark
-        const restOfLine = parts.slice(2).join(' ');
-        
-        // This regex is complex. It looks for numbers (with commas) at the end of the string.
-        // It tries to find up to 4 such numbers (withdraw, deposit, balance, remark).
-        const match = restOfLine.match(/^(.*?)\s+([\d,]+)\s+([\d,]*)\s+([\d,]+)\s+([\d,]*\S*)$/);
-        
-        let description = '';
-        let withdraw = '';
-        let deposit = '';
+        // Reverse parsing from the end of the line
         let remark = '';
-
-        if (match) {
-            description = match[1].trim();
-            withdraw = match[2].replace(/,/g, '');
-            // We don't need deposit, balance for this logic
-            remark = match[5].trim();
-        } else {
-             // Fallback for simpler formats like "description amount"
-             const simplerMatch = restOfLine.match(/^(.*?)\s+([\d,]+)$/);
-             if (simplerMatch) {
-                description = simplerMatch[1].trim();
-                withdraw = simplerMatch[2].replace(/,/g, '');
-             } else {
-                 // If no numbers are found, treat the whole thing as description, amount as 0.
-                 description = restOfLine;
-                 withdraw = '0';
-             }
-        }
+        let balance = 0;
+        let deposit = 0;
+        let withdraw = 0;
         
-        const amount = withdraw ? parseFloat(withdraw) : 0;
+        const lastPart = parts[parts.length - 1].replace(/,/g, '');
+        if (isNaN(parseFloat(lastPart))) {
+            remark = parts.pop() || '';
+        }
 
-        if (!description && !amount) continue;
+        const balancePart = parts.pop()?.replace(/,/g, '');
+        if (balancePart) balance = parseFloat(balancePart) || 0;
+        
+        const depositPart = parts.pop()?.replace(/,/g, '');
+        if (depositPart) deposit = parseFloat(depositPart) || 0;
+
+        const withdrawPart = parts.pop()?.replace(/,/g, '');
+        if (withdrawPart) withdraw = parseFloat(withdrawPart) || 0;
+        
+        const description = parts.join(' ');
+        const amount = withdraw || (deposit > 0 ? -deposit : 0);
+
+        if (!description || amount === 0) continue;
 
         // CRITICAL: ID is based on core, stable fields. Remark is NOT included.
-        const idString = `${date}-${time}-${description}-${amount}`;
+        const idString = `${datePart}-${time}-${description}-${amount}`;
         const id = await sha1(idString);
 
         results.push({
             id,
-            date: date,
+            date: datePart,
             category: '', // Category will be applied later by the action
             description,
             amount,
@@ -369,3 +342,5 @@ export const getCreditDisplayDate = (dateString: string) => {
         return dateString;
     }
 };
+
+    
