@@ -1,13 +1,17 @@
-import type { ReplacementRule, CategoryRule } from '@/app/actions';
-import { format, parse } from 'date-fns';
 import { createHash } from 'crypto';
+import { format, parse } from 'date-fns';
 
 // Helper function to create a SHA-1 hash for generating consistent IDs
 async function sha1(str: string): Promise<string> {
-    // This function is designed for server-side (Node.js) hashing.
-    // A browser-compatible version would be needed for client-side execution.
-    // Node.js implementation:
-    return createHash('sha1').update(str).digest('hex');
+    if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle) {
+        // Browser environment
+        const buffer = new TextEncoder().encode(str);
+        const hash = await window.crypto.subtle.digest('SHA-1', buffer);
+        return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+    } else {
+        // Node.js environment
+        return createHash('sha1').update(str).digest('hex');
+    }
 }
 
 
@@ -137,7 +141,7 @@ export async function parseExcelData(data: any[][]): Promise<ParsedExcelData> {
 }
 
 
-// This parser now only extracts raw data. 
+// This parser now only extracts raw data with a stable ID.
 // Categorization and rule application will be handled by the server action.
 export async function parseCreditCard(text: string): Promise<ParsedCreditDataWithCategory[]> {
   const lines = text.split('\n');
@@ -161,15 +165,12 @@ export async function parseCreditCard(text: string): Promise<ParsedCreditDataWit
     // Handle YYYY/MM/DD format
     if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(transactionDate)) {
         postingDate = transactionDate;
-        // Do not convert to MM/dd anymore, keep the full date
     }
 
-    // Check if the second part is a posting date (MM/DD format) or a category
     if (/^\d{1,2}\/\d{1,2}$/.test(parts[1])) {
         postingDate = parts[1];
         descriptionStartIndex = 2;
-    } else { // It's not a date, so it could be a category or part of the description
-        // If there are at least 3 parts and the last one is a number, the second one is likely a category
+    } else {
         const lastPart = parts[parts.length - 1].replace(/,/g, '');
         if (parts.length >=3 && !isNaN(parseFloat(lastPart))) {
             category = parts[1];
@@ -179,7 +180,6 @@ export async function parseCreditCard(text: string): Promise<ParsedCreditDataWit
         }
     }
 
-    // Sometimes transaction date and posting date are merged, e.g., 11/0211/02
     if (transactionDate.length > 5 && !transactionDate.includes('/') && /^\d+$/.test(transactionDate)) {
         const mid = Math.floor(transactionDate.length / 2);
         const p1 = transactionDate.substring(0, mid);
@@ -201,18 +201,18 @@ export async function parseCreditCard(text: string): Promise<ParsedCreditDataWit
     
     const amountMatch = remainingLine.match(/(-?[\d,]+(\.\d+)?)$/);
     let amount = 0;
-    let description = remainingLine;
+    let rawDescription = remainingLine;
     let bankCode = '';
 
     if (amountMatch) {
         amount = parseFloat(amountMatch[0].replace(/,/g, ''));
         const amountEndIndex = remainingLine.lastIndexOf(amountMatch[0]);
-        description = remainingLine.substring(0, amountEndIndex).trim();
+        rawDescription = remainingLine.substring(0, amountEndIndex).trim();
 
-        const bankCodeMatch = description.match(/\s(\w+)$/);
+        const bankCodeMatch = rawDescription.match(/\s(\w+)$/);
         if (bankCodeMatch) {
             bankCode = bankCodeMatch[1];
-            description = description.substring(0, description.lastIndexOf(bankCode)).trim();
+            rawDescription = rawDescription.substring(0, rawDescription.lastIndexOf(bankCode)).trim();
         }
 
     } else {
@@ -220,27 +220,28 @@ export async function parseCreditCard(text: string): Promise<ParsedCreditDataWit
         const parsedAmount = parseFloat(lastPart.replace(/,/g, ''));
         if (!isNaN(parsedAmount)) {
             amount = parsedAmount;
-            description = parts.slice(descriptionStartIndex, -1).join(' ');
+            rawDescription = parts.slice(descriptionStartIndex, -1).join(' ');
         }
     }
 
-    if (!description && parts.length > descriptionStartIndex) {
-        description = parts.slice(descriptionStartIndex).join(' ');
+    if (!rawDescription && parts.length > descriptionStartIndex) {
+        rawDescription = parts.slice(descriptionStartIndex).join(' ');
     }
 
 
-    if (description) {
-      // Create a deterministic ID based on transaction content
-      const idString = `${transactionDate}-${postingDate}-${description}-${amount}`;
+    if (rawDescription) {
+      // Create a deterministic ID based on the most stable raw transaction content
+      const idString = `${transactionDate}-${postingDate}-${rawDescription}-${amount}`;
       const id = await sha1(idString);
 
       results.push({
         id,
         transactionDate,
         postingDate,
-        description,
+        description: rawDescription,
         amount,
-        category,
+        category, // This might be an initially parsed category, or empty
+        bankCode,
       });
     }
   }
@@ -266,34 +267,10 @@ export type CashData = {
   notes?: string;
 };
 
-function applyCategoryRules(description: string, rules: CategoryRule[]): string {
-    for (const rule of rules) {
-        if (rule.keyword && description.includes(rule.keyword)) {
-            return rule.category;
-        }
-    }
-    return '未分類';
-}
-
-export async function parseDepositAccount(text: string, replacementRules: ReplacementRule[], categoryRules: CategoryRule[]): Promise<DepositData[]> {
+export async function parseDepositAccount(text: string): Promise<DepositData[]> {
   const lines = text.split('\n').map(l => l.trim()).filter(l => l);
   const results: DepositData[] = [];
   let currentDate = '';
-  
-  const applyRules = (text: string) => {
-    let processedText = text;
-    let shouldDelete = false;
-    for (const rule of replacementRules) {
-        if(rule.find && processedText.includes(rule.find)) {
-            if(rule.deleteRow) {
-                shouldDelete = true;
-                break;
-            }
-            processedText = processedText.replace(new RegExp(rule.find, 'g'), rule.replace);
-        }
-    }
-    return { processedText, shouldDelete };
-  }
 
   for (const line of lines) {
     if (/^\d{4}\/\d{2}\/\d{2}/.test(line)) {
@@ -311,31 +288,23 @@ export async function parseDepositAccount(text: string, replacementRules: Replac
       const parts = line.split('\t');
       if (parts.length < 2) continue;
 
-      let description = parts[1]?.trim() ?? '';
+      const rawDescription = parts[1]?.trim() ?? '';
       const withdraw = parts[2]?.replace(/,/g, '').trim() ?? '';
       const deposit = parts[3]?.replace(/,/g, '').trim() ?? '';
       const amount = withdraw ? parseFloat(withdraw) : (deposit ? -parseFloat(deposit) : 0);
-      
-      // The remark is everything from column 6 onwards
       const remark = parts.length > 5 ? (parts.slice(5).join(' ').trim() ?? '') : '';
 
-      const { processedText, shouldDelete } = applyRules(description);
-      if(shouldDelete) {
-        continue;
-      }
-      description = processedText;
-      
-      const category = applyCategoryRules(description, categoryRules);
-      
-      // Combine all parts for a unique ID
-      const idString = `${currentDate}-${description}-${amount}-${remark}`;
+      if (!rawDescription && !amount) continue;
+
+      // Combine all parts for a unique ID from raw data
+      const idString = `${currentDate}-${rawDescription}-${amount}-${remark}`;
       const id = await sha1(idString);
 
       results.push({
         id,
         date: currentDate,
-        category,
-        description,
+        category: '', // Category will be applied later
+        description: rawDescription,
         amount,
         bankCode: remark
       });
