@@ -1,5 +1,6 @@
 import { createHash } from 'crypto';
-import { format, parse } from 'date-fns';
+import { format } from 'date-fns';
+export { parse } from 'date-fns';
 
 // Helper function to create a SHA-1 hash for generating consistent IDs
 async function sha1(str: string): Promise<string> {
@@ -319,3 +320,20 @@ export async function parseDepositAccount(text: string): Promise<DepositData[]> 
 
   return results;
 }
+
+
+export const getCreditDisplayDate = (dateString: string) => {
+    try {
+        if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(dateString)) return dateString;
+        if (!/^\d{1,2}\/\d{1,2}$/.test(dateString)) return dateString;
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth();
+        const parsedDate = parse(dateString, 'MM/dd', new Date());
+        const transactionMonth = parsedDate.getMonth();
+        const dateObj = new Date(new Date(parsedDate).setFullYear(transactionMonth > currentMonth ? currentYear - 1 : currentYear));
+        return format(dateObj, 'yyyy/MM/dd');
+    } catch {
+        return dateString;
+    }
+};

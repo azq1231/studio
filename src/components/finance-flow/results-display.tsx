@@ -4,10 +4,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useUser } from '@/firebase';
 import { useToast } from "@/hooks/use-toast"
 import type { CreditData, DepositData, CashData } from '@/lib/parser';
-import { format, parse, getYear, getMonth } from 'date-fns';
+import { format, getYear, getMonth } from 'date-fns';
 import type { User } from 'firebase/auth';
 import * as XLSX from 'xlsx';
-
+import { getCreditDisplayDate, parse } from '@/lib/parser';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -22,22 +22,8 @@ import { cn } from '@/lib/utils';
 import { Download, AlertCircle, Trash2, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2, FileText, Combine, Search, ChevronsLeft, ChevronsRight, ArrowRight } from 'lucide-react';
 import { AppSettings } from './settings-manager';
 import { CashTransactionForm } from './cash-transaction-form';
+import type { CombinedData } from '../finance-flow-client';
 
-const getCreditDisplayDate = (dateString: string) => {
-    try {
-        if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(dateString)) return dateString;
-        if (!/^\d{1,2}\/\d{1,2}$/.test(dateString)) return dateString;
-        const now = new Date();
-        const currentYear = getYear(now);
-        const currentMonth = getMonth(now);
-        const parsedDate = parse(dateString, 'MM/dd', new Date());
-        const transactionMonth = getMonth(parsedDate);
-        const dateObj = new Date(new Date(parsedDate).setFullYear(transactionMonth > currentMonth ? currentYear - 1 : currentYear));
-        return format(dateObj, 'yyyy/MM/dd');
-    } catch {
-        return dateString;
-    }
-};
 
 const EditableCell = ({ value, onUpdate, disabled }: { value: string; onUpdate: (value: string) => void; disabled?: boolean; }) => {
     const [currentValue, setCurrentValue] = useState(value);
@@ -87,8 +73,6 @@ const SortableHeader = <T extends string>({ sortKey, currentSortKey, sortDirecti
     );
 };
 
-
-export type CombinedData = { id: string; date: string; dateObj: Date; category: string; description: string; amount: number; source: '信用卡' | '活存帳戶' | '現金'; notes?: string; bankCode?: string; };
 
 export function ResultsDisplay({
     creditData, depositData, cashData, settings, onAddCashTransaction, onUpdateTransaction, onDeleteTransaction, hasProcessed, user
@@ -157,7 +141,6 @@ export function ResultsDisplay({
     
     
     const combinedData = useMemo<CombinedData[]>(() => {
-        const combined: CombinedData[] = [];
         const parseDateSafe = (dateString: string, formatString: string): Date => {
             try {
                 return parse(dateString, formatString, new Date());
@@ -166,6 +149,8 @@ export function ResultsDisplay({
             }
         };
 
+        const combined: CombinedData[] = [];
+        
         const filterAndMap = (data: any[], source: CombinedData['source'], dateKey: string) => {
             const q = searchQuery.toLowerCase();
             (searchQuery ? data.filter(d => (d.description && d.description.toLowerCase().includes(q)) || (d.bankCode && d.bankCode.toLowerCase().includes(q)) || (d.notes && d.notes.toLowerCase().includes(q))) : data).forEach(d => {

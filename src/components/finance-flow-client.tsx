@@ -8,14 +8,27 @@ import { processBankStatement } from '@/app/actions';
 import type { CreditData, DepositData, CashData } from '@/lib/parser';
 import { StatementImporter } from '@/components/statement-importer';
 import { SettingsManager, DEFAULT_SETTINGS, type AppSettings } from '@/components/finance-flow/settings-manager';
-import { ResultsDisplay, CombinedData } from '@/components/finance-flow/results-display';
+import { ResultsDisplay } from '@/components/finance-flow/results-display';
 import { FixedItemsSummary } from '@/components/finance-flow/fixed-items-summary';
-
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text, Settings, ClipboardCopy, FileText, BarChart2 } from 'lucide-react';
+import { parse, getCreditDisplayDate } from '@/lib/parser';
+
+// CombinedData is used by both ResultsDisplay and FixedItemsSummary
+export type CombinedData = {
+  id: string;
+  date: string;
+  dateObj: Date; // Crucial for date-based calculations
+  category: string;
+  description: string;
+  amount: number;
+  source: '信用卡' | '活存帳戶' | '現金';
+  notes?: string;
+  bankCode?: string;
+};
 
 // =======================================================================
 // HELPER: sha1 (UNIVERSAL)
@@ -267,10 +280,31 @@ export function FinanceFlowClient() {
   const isLoadingData = isLoadingCredit || isLoadingDeposit || isLoadingCash || (user && isLoadingSettings);
   
   const combinedData: CombinedData[] = useMemo(() => {
+    const parseDateSafe = (dateString: string, formatString: string): Date => {
+        try {
+            return parse(dateString, formatString, new Date());
+        } catch {
+            return new Date(0); // Invalid date
+        }
+    };
+    
     const combined: CombinedData[] = [];
-    combined.push(...creditData.map(d => ({ ...d, source: '信用卡' as const })));
-    combined.push(...depositData.map(d => ({ ...d, source: '活存帳戶' as const })));
-    combined.push(...cashData.map(d => ({ ...d, source: '現金' as const })));
+    
+    const mapData = (data: any[], source: CombinedData['source'], dateKey: string) => {
+        data.forEach(d => {
+            const displayDate = dateKey === 'transactionDate' ? getCreditDisplayDate(d[dateKey]) : d[dateKey];
+            let dateObj = parseDateSafe(displayDate, 'yyyy/MM/dd');
+            if (dateObj.getTime() === new Date(0).getTime()) {
+               dateObj = parseDateSafe(displayDate, 'MM/dd', new Date());
+            }
+            combined.push({ ...d, date: displayDate, dateObj, source });
+        });
+    };
+
+    mapData(creditData, '信用卡', 'transactionDate');
+    mapData(depositData, '活存帳戶', 'date');
+    mapData(cashData, '現金', 'date');
+
     return combined;
   }, [creditData, depositData, cashData]);
 
