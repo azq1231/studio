@@ -113,5 +113,3 @@ export function StatementImporter({ isProcessing, onProcess, user }: StatementIm
         </Card>
     );
 }
-
-    
