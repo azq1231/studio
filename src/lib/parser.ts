@@ -263,72 +263,46 @@ export async function parseDepositAccount(text: string): Promise<DepositData[]> 
         }
     }
 
-    // Step 2: Process each merged entry
+    // Step 2: Process each merged entry using a robust regex
+    const entryRegex = /^(\d{2}:\d{2}:\d{2})\s+(.*?)\s+([\d,.-]+)\s+([\d,.-]*)\s+([\d,.-]+)\s*(.*)$/;
+
     for (const entry of mergedEntries) {
         const { date: datePart, content } = entry;
         if (!datePart) continue;
 
-        const timeMatch = content.match(/^(\d{2}:\d{2}:\d{2})\s+(.*)$/);
-        const time = timeMatch ? timeMatch[1] : '00:00:00';
-        const restOfLine = (timeMatch ? timeMatch[2] : content).trim();
-
-        // Use a more robust split to handle multiple spaces
-        const parts = restOfLine.split(/\s+/).filter(Boolean);
-        if (parts.length < 2) continue;
+        const match = content.match(entryRegex);
+        if (!match) continue;
         
-        let tempParts = [...parts];
-        
-        // --- Reverse Parsing from the end of the line ---
-        let remark = '';
-        let balanceStr = '';
-        let depositStr = '';
-        let withdrawStr = '';
-
-        // 1. Extract Remark (if it exists and is not a number)
-        const lastPart = tempParts[tempParts.length - 1];
-        if (lastPart && isNaN(parseFloat(lastPart.replace(/,/g, '')))) {
-            remark = tempParts.pop() || '';
-        }
-
-        // 2. Extract Balance
-        if (tempParts.length > 0) {
-            balanceStr = tempParts.pop() || '';
-        }
-
-        // 3. Extract Deposit
-        if (tempParts.length > 0) {
-            depositStr = tempParts.pop() || '';
-        }
-        
-        // 4. Extract Withdrawal
-        if (tempParts.length > 0) {
-             // If deposit is empty, the current part could be withdrawal
-             if (depositStr.trim() === '') {
-                withdrawStr = balanceStr; // The one we thought was balance is withdrawal
-                balanceStr = tempParts.pop() || ''; // The one before is balance
-             } else {
-                withdrawStr = tempParts.pop() || '';
-             }
-        }
-
-        const description = tempParts.join(' ');
+        const [
+            , // full match
+            time,
+            description,
+            withdrawStr,
+            depositStr,
+            balanceStr,
+            remark
+        ] = match;
         
         const withdrawAmount = parseFloat(withdrawStr.replace(/,/g, '')) || 0;
         const depositAmount = parseFloat(depositStr.replace(/,/g, '')) || 0;
+        
+        // Determine the single transaction amount. Withdrawals are positive, deposits are negative.
         const amount = withdrawAmount > 0 ? withdrawAmount : (depositAmount > 0 ? -depositAmount : 0);
 
-        if (!description || amount === 0) continue;
-
-        const idString = `${datePart}-${time}-${description}-${amount}`;
+        // Skip if there's no valid amount or description
+        if (amount === 0 || !description.trim()) continue;
+        
+        // Generate a stable ID based on the core, non-mutable parts of the transaction
+        const idString = `${datePart}-${time}-${description.trim()}-${amount}`;
         const id = await sha1(idString);
 
         results.push({
             id,
             date: datePart,
             category: '', // Category will be applied later by the action
-            description,
+            description: description.trim(),
             amount,
-            bankCode: remark
+            bankCode: remark.trim()
         });
     }
 
@@ -368,4 +342,5 @@ export const getCreditDisplayDate = (dateString: string) => {
 };
 
     
+
 
