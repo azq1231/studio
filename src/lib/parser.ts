@@ -258,70 +258,42 @@ export async function parseDepositAccount(text: string): Promise<DepositData[]> 
         }
     }
     
-    // Step 2: Process each merged entry using the reverse-peel strategy
+    // Step 2: Process each merged entry using regex
+    const entryRegex = /^(?<time>\d{2}:\d{2}:\d{2})\s+(?<desc>.*?)\s+(?<withdrawal>[\d,.-]+)\s+(?<deposit>[\d,.-]*)\s+(?<balance>[\d,.-]+)\s+(?<remark>.*)$/;
+
     for (const entry of mergedEntries) {
         if (!entry.date) continue;
         
-        let parts = entry.content.split(/\s+/).filter(Boolean);
-        if (parts.length < 4) continue; // Basic validation for time, desc, amount, balance
+        const match = entry.content.match(entryRegex);
+        if (!match || !match.groups) continue;
 
-        // 1. Peel off remark from the end (if it exists)
-        const lastPart = parts[parts.length - 1];
-        let remark = '';
-        // A remark can be purely numeric (like '11409') or text.
-        // The balance before it is always numeric with commas.
-        // So, we find the last part that is a valid number with/without comma, that's the balance. The part after it is remark.
-        let balanceIndex = -1;
-        for (let i = parts.length - 1; i >= 0; i--) {
-            if (!isNaN(parseFloat(parts[i].replace(/,/g, '')))) {
-                balanceIndex = i;
-                break;
-            }
-        }
-        
-        if (balanceIndex !== -1 && balanceIndex < parts.length - 1) {
-            remark = parts.slice(balanceIndex + 1).join(' ');
-            parts = parts.slice(0, balanceIndex + 1);
-        }
+        const { time, desc, withdrawal, deposit, balance, remark } = match.groups;
 
-
-        // 2. Peel off balance
-        if (parts.length > 0) parts.pop(); // Balance is not used, so just discard it
-
-        // 3. Peel off deposit and withdrawal, then determine the amount
-        const depositStr = parts.length > 0 ? parts.pop()?.replace(/,/g, '') || '' : '';
-        const withdrawalStr = parts.length > 0 ? parts.pop()?.replace(/,/g, '') || '' : '';
-        const withdrawalAmount = parseFloat(withdrawalStr) || 0;
-        const depositAmount = parseFloat(depositStr) || 0;
+        const withdrawalAmount = parseFloat(withdrawal.replace(/,/g, '')) || 0;
+        const depositAmount = parseFloat(deposit.replace(/,/g, '')) || 0;
         const amount = withdrawalAmount > 0 ? withdrawalAmount : (depositAmount > 0 ? -depositAmount : 0);
 
         if (amount === 0) continue;
 
-        // 4. Peel off time
-        const time = parts.shift() || '';
+        let finalDescription = desc;
+        let finalBankCode = remark;
 
-        // 5. The rest is the description
-        let description = parts.join(' ');
-        
-        if (!description) continue;
-
-        // SPECIAL LOGIC for '行銀非約跨優'
-        if (description.includes('行銀非約跨優') && remark) {
-            const originalDescription = description;
-            description = remark; // Use the remark as the main description
-            remark = originalDescription; // The original description becomes the remark/bankCode
+        // Special logic for '行銀非約跨優'
+        if (desc.includes('行銀非約跨優')) {
+            finalDescription = remark; // The remark becomes the description
+            finalBankCode = desc;     // The original description becomes the bank code/note
         }
-
-        const idString = `${entry.date}-${time}-${description}-${amount}`;
+        
+        const idString = `${entry.date}-${time}-${finalDescription}-${amount}`;
         const id = await sha1(idString);
 
         results.push({
             id,
             date: entry.date,
             category: '', 
-            description,
+            description: finalDescription,
             amount,
-            bankCode: remark
+            bankCode: finalBankCode
         });
     }
 
@@ -361,6 +333,7 @@ export const getCreditDisplayDate = (dateString: string) => {
 };
 
     
+
 
 
 
