@@ -27,11 +27,15 @@ export type CreditData = {
 
 // This is the initial raw parsed data before categorization
 export type RawCreditData = {
-  transactionDate: string;
+  id: string;
+  transactionDate: string; // MM/DD format
   postingDate: string;
   description: string;
   amount: number;
+  bankCode?: string;
+  initialCategory: string; // The category found on the raw statement text, if any
 };
+
 
 export type ParsedCreditDataWithCategory = CreditData & {
     postingDate: string;
@@ -143,9 +147,9 @@ export async function parseExcelData(data: any[][]): Promise<ParsedExcelData> {
 
 // This parser now only extracts raw data with a stable ID.
 // Categorization and rule application will be handled by the server action.
-export async function parseCreditCard(text: string): Promise<ParsedCreditDataWithCategory[]> {
+export async function parseCreditCard(text: string): Promise<RawCreditData[]> {
   const lines = text.split('\n');
-  const results: ParsedCreditDataWithCategory[] = [];
+  const results: RawCreditData[] = [];
 
   for (const line of lines) {
     const currentLine = line.replace(/\u3000/g, ' ').trim();
@@ -159,7 +163,7 @@ export async function parseCreditCard(text: string): Promise<ParsedCreditDataWit
     
     let transactionDate = parts[0];
     let postingDate = '';
-    let category = '';
+    let initialCategory = '';
     let descriptionStartIndex = 1;
 
     // Handle YYYY/MM/DD format
@@ -173,7 +177,7 @@ export async function parseCreditCard(text: string): Promise<ParsedCreditDataWit
     } else {
         const lastPart = parts[parts.length - 1].replace(/,/g, '');
         if (parts.length >=3 && !isNaN(parseFloat(lastPart))) {
-            category = parts[1];
+            initialCategory = parts[1];
             descriptionStartIndex = 2;
         } else {
              descriptionStartIndex = 1;
@@ -231,7 +235,7 @@ export async function parseCreditCard(text: string): Promise<ParsedCreditDataWit
 
     if (rawDescription) {
       // Create a deterministic ID based on the most stable raw transaction content
-      // CRITICAL: The ID must NOT include the category, as the category can be changed by the user.
+      // CRITICAL: The ID must NOT include any category.
       const idString = `${transactionDate}-${postingDate}-${rawDescription}-${amount}`;
       const id = await sha1(idString);
 
@@ -241,7 +245,7 @@ export async function parseCreditCard(text: string): Promise<ParsedCreditDataWit
         postingDate,
         description: rawDescription,
         amount,
-        category: category, // This might be an initially parsed category, or empty
+        initialCategory: initialCategory,
         bankCode,
       });
     }
@@ -294,18 +298,19 @@ export async function parseDepositAccount(text: string): Promise<DepositData[]> 
       const deposit = parts[3]?.replace(/,/g, '').trim() ?? '';
       const amount = withdraw ? parseFloat(withdraw) : (deposit ? -parseFloat(deposit) : 0);
       const remark = parts.length > 5 ? (parts[5]?.trim() ?? '') : '';
+      
+      const description = rawDescription;
+      
+      if (!description && !amount) continue;
 
-      if (!rawDescription && !amount) continue;
-
-      // Combine all parts for a unique ID from raw data
-      const idString = `${currentDate}-${rawDescription}-${amount}-${remark}`;
+      const idString = `${currentDate}-${description}-${amount}-${remark}`;
       const id = await sha1(idString);
 
       results.push({
         id,
         date: currentDate,
         category: '', // Category will be applied later
-        description: rawDescription,
+        description,
         amount,
         bankCode: remark
       });

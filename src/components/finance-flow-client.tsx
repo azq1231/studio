@@ -9,6 +9,7 @@ import type { CreditData, DepositData, CashData } from '@/lib/parser';
 import { StatementImporter } from '@/components/statement-importer';
 import { SettingsManager, DEFAULT_SETTINGS, type AppSettings } from '@/components/finance-flow/settings-manager';
 import { ResultsDisplay } from '@/components/finance-flow/results-display';
+import { FixedItemsSummary } from '@/components/finance-flow/fixed-items-summary';
 
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -107,13 +108,7 @@ export function FinanceFlowClient() {
     }
 
     // Sanitize data before saving to prevent Firestore errors with `undefined`.
-    const sanitizedSettings = { ...newSettings };
-    if (sanitizedSettings.replacementRules) {
-        sanitizedSettings.replacementRules = sanitizedSettings.replacementRules.map(rule => ({
-            ...rule,
-            notes: rule.notes ?? '', // Ensure notes is never undefined
-        }));
-    }
+    const sanitizedSettings = JSON.parse(JSON.stringify(newSettings));
 
 
     try {
@@ -133,7 +128,7 @@ export function FinanceFlowClient() {
     setIsLoading(true);
     setHasProcessed(false);
     
-    const result = await processBankStatement(text || '', settings.replacementRules, settings.categoryRules, !!excelData, excelData);
+    const result = await processBankStatement(text || '', settings.replacementRules, settings.categoryRules, creditData, !!excelData, excelData);
     
     if (result.success) {
       const creditTotal = result.creditData.reduce((sum, item) => sum + item.amount, 0);
@@ -210,7 +205,7 @@ export function FinanceFlowClient() {
     setIsLoading(false);
     setHasProcessed(true);
     setActiveTab("results");
-  }, [user, firestore, toast, settings, handleSaveSettings]);
+  }, [user, firestore, toast, settings, creditData, handleSaveSettings]);
 
   const handleAddCashTransaction = useCallback(async (newTransactionData: Omit<CashData, 'id'>) => {
     if (!user || !firestore) { toast({ variant: 'destructive', title: '錯誤', description: '請先登入' }); return; }
@@ -271,16 +266,22 @@ export function FinanceFlowClient() {
     }, [user, firestore, toast]);
 
   const isLoadingData = isLoadingCredit || isLoadingDeposit || isLoadingCash || (user && isLoadingSettings);
-  const hasData = creditData.length > 0 || depositData.length > 0 || cashData.length > 0;
-  const showResults = (hasProcessed && hasData) || (!isUserLoading && !hasProcessed && hasData && !isLoadingData);
-
-  const hasFixedItems = useMemo(() => {
-    return (creditData.some(d => d.category === '固定') || depositData.some(d => d.category === '固定') || cashData.some(d => d.category === '固定'));
+  
+  const combinedData = useMemo(() => {
+    const combined = [];
+    combined.push(...creditData.map(d => ({ ...d, source: '信用卡' })));
+    combined.push(...depositData.map(d => ({ ...d, source: '活存帳戶' })));
+    combined.push(...cashData.map(d => ({ ...d, source: '現金' })));
+    return combined;
   }, [creditData, depositData, cashData]);
+
+  const hasData = combinedData.length > 0;
+  const hasFixedItems = useMemo(() => combinedData.some(d => d.category === '固定'), [combinedData]);
+  const showResults = hasProcessed || (!isUserLoading && hasData && !isLoadingData);
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-      <TabsList className="grid w-full grid-cols-3">
+      <TabsList className="grid w-full grid-cols-4">
         <TabsTrigger value="importer">
             <ClipboardCopy className="mr-2" />
             貼上報表
@@ -292,6 +293,10 @@ export function FinanceFlowClient() {
         <TabsTrigger value="results">
             <FileText className="mr-2" />
             處理結果
+        </TabsTrigger>
+         <TabsTrigger value="analysis" disabled={!hasFixedItems}>
+            <BarChart2 className="mr-2" />
+            詳細分析
         </TabsTrigger>
       </TabsList>
       <TabsContent value="importer" className="mt-4">
@@ -315,7 +320,7 @@ export function FinanceFlowClient() {
         )}
       </TabsContent>
       <TabsContent value="results" className="mt-4">
-        {(isLoading || (showResults && !isLoadingData)) ? (
+        {(isLoading || showResults) ? (
             <ResultsDisplay
                 creditData={creditData}
                 depositData={depositData}
@@ -326,8 +331,6 @@ export function FinanceFlowClient() {
                 onDeleteTransaction={handleDeleteTransaction}
                 hasProcessed={hasProcessed}
                 user={user}
-                hasFixedItems={hasFixedItems}
-                onSwitchToAnalysisTab={() => setActiveTab('analysis')}
             />
         ) : (isLoadingData && !hasData) ? (
             <div className="space-y-4 pt-4">
@@ -348,6 +351,21 @@ export function FinanceFlowClient() {
                         <Text className="mx-auto h-12 w-12 text-muted-foreground" />
                         <h3 className="mt-4 text-lg font-semibold">沒有可顯示的資料</h3>
                         <p className="mt-2 text-sm text-muted-foreground">請先到「貼上報表」分頁處理您的銀行資料。</p>
+                    </div>
+                </CardContent>
+            </Card>
+        )}
+      </TabsContent>
+       <TabsContent value="analysis" className="mt-4">
+        {showResults ? (
+            <FixedItemsSummary combinedData={combinedData} settings={settings} />
+        ) : (
+            <Card>
+                <CardContent className="pt-6">
+                    <div className="text-center py-10">
+                        <Text className="mx-auto h-12 w-12 text-muted-foreground" />
+                        <h3 className="mt-4 text-lg font-semibold">沒有可顯示的資料</h3>
+                        <p className="mt-2 text-sm text-muted-foreground">請先處理您的銀行資料，並確保有「固定」分類的項目。</p>
                     </div>
                 </CardContent>
             </Card>

@@ -22,7 +22,6 @@ import { cn } from '@/lib/utils';
 import { Download, AlertCircle, Trash2, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2, FileText, Combine, Search, ChevronsLeft, ChevronsRight, ArrowRight } from 'lucide-react';
 import { AppSettings } from './settings-manager';
 import { CashTransactionForm } from './cash-transaction-form';
-import { FixedItemsSummary } from './fixed-items-summary';
 
 const getCreditDisplayDate = (dateString: string) => {
     try {
@@ -155,15 +154,31 @@ export function ResultsDisplay({
     
     const combinedData = useMemo<CombinedData[]>(() => {
         const combined: CombinedData[] = [];
+        const parseDateSafe = (dateString: string, formatString: string): Date => {
+            try {
+                return parse(dateString, formatString, new Date());
+            } catch {
+                return new Date(0); // Invalid date
+            }
+        };
+
         const filterAndMap = (data: any[], source: CombinedData['source'], dateKey: string) => {
             const q = searchQuery.toLowerCase();
             (searchQuery ? data.filter(d => (d.description && d.description.toLowerCase().includes(q)) || (d.bankCode && d.bankCode.toLowerCase().includes(q)) || (d.notes && d.notes.toLowerCase().includes(q))) : data).forEach(d => {
                 const displayDate = dateKey === 'transactionDate' ? getCreditDisplayDate(d[dateKey]) : d[dateKey];
-                let dateObj; try { dateObj = parse(displayDate, 'yyyy/MM/dd', new Date()); } catch { dateObj = new Date(0); }
+                let dateObj = parseDateSafe(displayDate, 'yyyy/MM/dd');
+                if (dateObj.getTime() === new Date(0).getTime()) {
+                   // Handle cases where date might be MM/DD
+                   dateObj = parseDateSafe(displayDate, 'MM/dd', new Date());
+                }
                 combined.push({ ...d, date: displayDate, dateObj, source });
             });
         };
-        filterAndMap(creditData, '信用卡', 'transactionDate'); filterAndMap(depositData, '活存帳戶', 'date'); filterAndMap(cashData, '現金', 'date');
+
+        filterAndMap(creditData, '信用卡', 'transactionDate'); 
+        filterAndMap(depositData, '活存帳戶', 'date'); 
+        filterAndMap(cashData, '現金', 'date');
+
         return combined.sort((a, b) => b.dateObj.getTime() - a.dateObj.getTime());
     }, [creditData, depositData, cashData, searchQuery]);
 
@@ -207,11 +222,23 @@ export function ResultsDisplay({
                 return (b['日期（年月）'] as string).localeCompare(a['日期（年月）'] as string);
             }
         });
-        
-        return { headers, rows };
-    }, [combinedData, summarySelectedCategories]);
 
-    const hasFixedItems = useMemo(() => combinedData.some(d => d.category === '固定'), [combinedData]);
+        const fixedItemsData = combinedData.filter(t => t.category === '固定');
+        const fixedItemsByYear: Record<string, number> = {};
+        const fixedMonths = new Set<string>();
+        fixedItemsData.forEach(item => {
+            try {
+                const year = getYear(item.dateObj);
+                const monthKey = format(item.dateObj, 'yyyy-MM');
+                fixedItemsByYear[year] = (fixedItemsByYear[year] || 0) + item.amount;
+                fixedMonths.add(monthKey);
+            } catch(e) {}
+        });
+        const fixedItemsYearly = Object.entries(fixedItemsByYear).sort(([yearA], [yearB]) => parseInt(yearB) - parseInt(yearA));
+        const fixedAverageMonthly = fixedMonths.size > 0 ? Object.values(fixedItemsByYear).reduce((a,b) => a + b, 0) / fixedMonths.size : 0;
+        
+        return { headers, rows, fixedItemsYearly, fixedAverageMonthly };
+    }, [combinedData, summarySelectedCategories]);
 
     const handleSummaryCellClick = (monthKey: string, category: string) => {
         const [year, month] = monthKey.replace('年', '-').replace('月', '').split('-').map(Number);
@@ -252,7 +279,6 @@ export function ResultsDisplay({
                         {depositData.length > 0 && <TabsTrigger value="deposit">活存帳戶 ({depositData.length})</TabsTrigger>}
                         <TabsTrigger value="cash">現金 ({cashData.length})</TabsTrigger>
                         {hasData && <TabsTrigger value="summary"><FileText className="w-4 h-4 mr-2"/>彙總報表</TabsTrigger>}
-                        {hasFixedItems && <TabsTrigger value="analysis"><BarChart2 className="w-4 h-4 mr-2"/>詳細分析</TabsTrigger>}
                       </TabsList>
                       
                       <TabsContent value="combined"><Table><TableHeader><TableRow><TableHead>日期</TableHead><TableHead className="w-[120px]">類型</TableHead><TableHead>交易項目</TableHead><TableHead className="w-[100px]">來源</TableHead><TableHead className="text-right">金額</TableHead></TableRow></TableHeader><TableBody>{combinedData.map((row) => (<TableRow key={row.id}><TableCell className="font-mono">{row.date}</TableCell><TableCell>{row.category}</TableCell><TableCell>{row.description}</TableCell><TableCell>{row.source}</TableCell><TableCell className={`text-right font-mono ${row.amount < 0 ? 'text-green-600' : ''}`}>{row.amount.toLocaleString()}</TableCell></TableRow>))}</TableBody></Table></TabsContent>
@@ -289,9 +315,33 @@ export function ResultsDisplay({
                         <div className="rounded-md border">
                             <Table><TableHeader><TableRow>{summaryReportData.headers.map(h => <TableHead key={h} className={h !== '日期（年月）' ? 'text-right' : ''}>{h}</TableHead>)}</TableRow></TableHeader><TableBody>{summaryReportData.rows.map((row, i) => (<TableRow key={i}>{summaryReportData.headers.map(header => { const value = row[header]; const isClickable = header !== '日期（年月）' && header !== '總計' && typeof value === 'number' && value !== 0; let textColor = ''; if (typeof value === 'number') { if (value < 0) textColor = 'text-green-600'; } return (<TableCell key={header} className={`font-mono ${header !== '日期（年月）' ? 'text-right' : ''} ${textColor}`}>{isClickable ? <button onClick={() => handleSummaryCellClick(row['日期（年月）'] as string, header)} className="hover:underline hover:text-blue-500">{value.toLocaleString()}</button> : (typeof value === 'number' ? value.toLocaleString() : value)}</TableCell>);})}</TableRow>))}</TableBody></Table>
                         </div>
-                      </TabsContent>
-                      <TabsContent value="analysis">
-                        <FixedItemsSummary combinedData={combinedData} settings={settings} />
+                        {summaryReportData.fixedItemsYearly.length > 0 && (
+                            <Card className="mt-6">
+                                <CardHeader>
+                                    <CardTitle>固定項目彙總</CardTitle>
+                                    <CardDescription>此處僅加總「固定」分類的項目。</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <h4 className="font-semibold mb-2">年度總計</h4>
+                                            <Table>
+                                                <TableHeader><TableRow><TableHead>年份</TableHead><TableHead className="text-right">總金額</TableHead></TableRow></TableHeader>
+                                                <TableBody>
+                                                    {summaryReportData.fixedItemsYearly.map(([year, total]) => (
+                                                        <TableRow key={year}><TableCell>{year}</TableCell><TableCell className="text-right font-mono">{total.toLocaleString()}</TableCell></TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                        <div>
+                                            <h4 className="font-semibold mb-2">每月平均</h4>
+                                            <p className="text-2xl font-bold">{summaryReportData.fixedAverageMonthly.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        )}
                       </TabsContent>
                     </Tabs>
                   </>
