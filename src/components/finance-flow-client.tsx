@@ -843,7 +843,17 @@ function FixedItemsSummary({ combinedData, settings }: { combinedData: CombinedD
     }, [combinedData, selectedYear, settings.descriptionGroupingRules]);
     
     if (fixedItemsData.years.length === 0 && fixedItemsData.tableData.length === 0) {
-        return null;
+        return (
+            <Card className="mt-6">
+                 <CardContent className="pt-6">
+                    <div className="text-center py-10">
+                        <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground" />
+                        <h3 className="mt-4 text-lg font-semibold">沒有固定項目資料</h3>
+                        <p className="mt-2 text-sm text-muted-foreground">找不到任何類別為「固定」的交易紀錄可供分析。</p>
+                    </div>
+                </CardContent>
+            </Card>
+        )
     }
 
     const toggleGroup = (groupName: string) => {
@@ -1054,11 +1064,7 @@ function ResultsDisplay({
         return { headers, rows };
     }, [combinedData, summarySelectedCategories]);
 
-    const categoryChartData = useMemo(() => {
-        if (!creditData || creditData.length === 0) return [];
-        const categoryTotals = creditData.reduce((acc, t) => { if (t.amount > 0) { const c = t.category || '未分類'; acc[c] = (acc[c] || 0) + t.amount; } return acc; }, {} as Record<string, number>);
-        return Object.entries(categoryTotals).map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total);
-    }, [creditData]);
+    const hasFixedItems = useMemo(() => combinedData.some(d => d.category === '固定'), [combinedData]);
 
     const handleSummaryCellClick = (monthKey: string, category: string) => {
         const [year, month] = monthKey.replace('年', '-').replace('月', '').split('-').map(Number);
@@ -1099,7 +1105,7 @@ function ResultsDisplay({
                         {depositData.length > 0 && <TabsTrigger value="deposit">活存帳戶 ({depositData.length})</TabsTrigger>}
                         <TabsTrigger value="cash">現金 ({cashData.length})</TabsTrigger>
                         {hasData && <TabsTrigger value="summary"><FileText className="w-4 h-4 mr-2"/>彙總報表</TabsTrigger>}
-                        {creditData.length > 0 && <TabsTrigger value="chart"><BarChart2 className="w-4 h-4 mr-2"/>統計圖表</TabsTrigger>}
+                        {hasFixedItems && <TabsTrigger value="analysis"><BarChart2 className="w-4 h-4 mr-2"/>詳細分析</TabsTrigger>}
                       </TabsList>
                       
                       <TabsContent value="combined"><Table><TableHeader><TableRow><TableHead>日期</TableHead><TableHead className="w-[120px]">類型</TableHead><TableHead>交易項目</TableHead><TableHead className="w-[100px]">來源</TableHead><TableHead className="text-right">金額</TableHead></TableRow></TableHeader><TableBody>{combinedData.map((row) => (<TableRow key={row.id}><TableCell className="font-mono">{row.date}</TableCell><TableCell>{row.category}</TableCell><TableCell>{row.description}</TableCell><TableCell>{row.source}</TableCell><TableCell className={`text-right font-mono ${row.amount < 0 ? 'text-green-600' : ''}`}>{row.amount.toLocaleString()}</TableCell></TableRow>))}</TableBody></Table></TabsContent>
@@ -1136,9 +1142,10 @@ function ResultsDisplay({
                         <div className="rounded-md border">
                             <Table><TableHeader><TableRow>{summaryReportData.headers.map(h => <TableHead key={h} className={h !== '日期（年月）' ? 'text-right' : ''}>{h}</TableHead>)}</TableRow></TableHeader><TableBody>{summaryReportData.rows.map((row, i) => (<TableRow key={i}>{summaryReportData.headers.map(header => { const value = row[header]; const isClickable = header !== '日期（年月）' && header !== '總計' && typeof value === 'number' && value !== 0; let textColor = ''; if (typeof value === 'number') { if (value < 0) textColor = 'text-green-600'; } return (<TableCell key={header} className={`font-mono ${header !== '日期（年月）' ? 'text-right' : ''} ${textColor}`}>{isClickable ? <button onClick={() => handleSummaryCellClick(row['日期（年月）'] as string, header)} className="hover:underline hover:text-blue-500">{value.toLocaleString()}</button> : (typeof value === 'number' ? value.toLocaleString() : value)}</TableCell>);})}</TableRow>))}</TableBody></Table>
                         </div>
+                      </TabsContent>
+                      <TabsContent value="analysis">
                         <FixedItemsSummary combinedData={combinedData} settings={settings} />
                       </TabsContent>
-                      <TabsContent value="chart"><Card><CardHeader><CardTitle>信用卡消費分類統計</CardTitle><CardDescription>此圖表顯示信用卡的各類別總支出。 (僅計算正數金額)</CardDescription></CardHeader><CardContent><div style={{ width: '100%', height: 400 }}><ResponsiveContainer><BarChart layout="vertical" data={categoryChartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" /><XAxis type="number" /><YAxis dataKey="name" type="category" width={80} /><Tooltip formatter={(v: number) => v.toLocaleString()} /><Legend /><Bar dataKey="total" fill="hsl(var(--chart-1))" name="總支出" /></BarChart></ResponsiveContainer></div></CardContent></Card></TabsContent>
                     </Tabs>
                   </>
                 ) : (noDataFound && (
