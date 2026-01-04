@@ -709,11 +709,11 @@ function ResultsDisplay({
 
     const summaryReportData = useMemo(() => {
         const monthlyData: Record<string, Record<string, number>> = {};
-        const allCategoriesInReport = new Set<string>();
-
+        const categoriesInReport = new Set(summarySelectedCategories);
+    
         combinedData.forEach(transaction => {
-            if (!summarySelectedCategories.includes(transaction.category)) {
-                return; 
+            if (!categoriesInReport.has(transaction.category)) {
+                return;
             }
             try {
                 const monthKey = format(transaction.dateObj, 'yyyy年M月');
@@ -721,15 +721,15 @@ function ResultsDisplay({
                     monthlyData[monthKey] = {};
                 }
                 
+                // This will sum both positive (expenses) and negative (income/credits) amounts
                 monthlyData[monthKey][transaction.category] = (monthlyData[monthKey][transaction.category] || 0) + transaction.amount;
-                allCategoriesInReport.add(transaction.category);
-
+    
             } catch(e) {
                 // Ignore date parsing errors for a single transaction
             }
         });
     
-        const sortedCategories = Array.from(allCategoriesInReport).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+        const sortedCategories = Array.from(categoriesInReport).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
         const headers = ['日期（年月）', ...sortedCategories, '總計'];
         const rows = Object.entries(monthlyData).map(([month, categoryData]) => {
           let total = 0;
@@ -753,7 +753,7 @@ function ResultsDisplay({
         });
         
         return { headers, rows };
-    }, [combinedData, summarySelectedCategories, settings.availableCategories]);
+    }, [combinedData, summarySelectedCategories]);
 
     const categoryChartData = useMemo(() => {
         if (!creditData || creditData.length === 0) return [];
@@ -822,7 +822,7 @@ function ResultsDisplay({
                         </Table>
                         <PaginationControls currentPage={cashPage} totalPages={sortedCashData.totalPages} onPageChange={setCashPage} />
                       </TabsContent>
-                      <TabsContent value="summary"><div className="flex flex-wrap items-center gap-2 my-4"><Popover open={isSummaryFilterOpen} onOpenChange={setIsSummaryFilterOpen}><PopoverTrigger asChild><Button variant="outline">篩選類型 ({summarySelectedCategories.length}/{settings.availableCategories.length})<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button></PopoverTrigger><PopoverContent className="w-[250px] p-0"><div className="p-2 space-y-1"><Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => setSummarySelectedCategories(settings.availableCategories)}>全選</Button><Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => setSummarySelectedCategories([])}>全部取消</Button></div><div className="border-t max-h-60 overflow-y-auto p-2">{settings.availableCategories.sort((a,b)=> a.localeCompare(b, 'zh-Hant')).map(category => (<div key={category} className="flex items-center space-x-2 p-1"><Checkbox id={`cat-${category}`} checked={summarySelectedCategories.includes(category)} onCheckedChange={(c) => c ? setSummarySelectedCategories([...summarySelectedCategories, category]) : setSummarySelectedCategories(summarySelectedCategories.filter(i => i !== category))} /><label htmlFor={`cat-${category}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">{category}</label></div>))}</div></PopoverContent></Popover>{settings.quickFilters.map((filter, index) => <Button key={index} variant="outline" size="sm" onClick={() => setSummarySelectedCategories(filter.categories)}>{filter.name}</Button>)}<p className="text-sm text-muted-foreground hidden md:block ml-auto">點擊表格中的數字可查看該月份的交易明細。</p></div><div className="rounded-md border"><Table><TableHeader><TableRow>{summaryReportData.headers.map(h => <TableHead key={h} className={h !== '日期（年月）' ? 'text-right' : ''}>{h}</TableHead>)}</TableRow></TableHeader><TableBody>{summaryReportData.rows.map((row, i) => (<TableRow key={i}>{summaryReportData.headers.map(header => { const value = row[header]; const isClickable = header !== '日期（年月）' && header !== '總計' && typeof value === 'number' && value !== 0; let textColor = ''; if (typeof value === 'number') { if (value < 0) textColor = 'text-green-600'; else if (value > 0) textColor = 'text-destructive'; } return (<TableCell key={header} className={`font-mono ${header !== '日期（年月）' ? 'text-right' : ''} ${textColor}`}>{isClickable ? <button onClick={() => handleSummaryCellClick(row['日期（年月）'] as string, header)} className="hover:underline hover:text-blue-500">{value.toLocaleString()}</button> : (typeof value === 'number' ? value.toLocaleString() : value)}</TableCell>);})}</TableRow>))}</TableBody></Table></div></TabsContent>
+                      <TabsContent value="summary"><div className="flex flex-wrap items-center gap-2 my-4"><Popover open={isSummaryFilterOpen} onOpenChange={setIsSummaryFilterOpen}><PopoverTrigger asChild><Button variant="outline">篩選類型 ({summarySelectedCategories.length}/{settings.availableCategories.length})<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button></PopoverTrigger><PopoverContent className="w-[250px] p-0"><div className="p-2 space-y-1"><Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => setSummarySelectedCategories(settings.availableCategories)}>全選</Button><Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => setSummarySelectedCategories([])}>全部取消</Button></div><div className="border-t max-h-60 overflow-y-auto p-2">{settings.availableCategories.sort((a,b)=> a.localeCompare(b, 'zh-Hant')).map(category => (<div key={category} className="flex items-center space-x-2 p-1"><Checkbox id={`cat-${category}`} checked={summarySelectedCategories.includes(category)} onCheckedChange={(c) => c ? setSummarySelectedCategories([...summarySelectedCategories, category]) : setSummarySelectedCategories(summarySelectedCategories.filter(i => i !== category))} /><label htmlFor={`cat-${category}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">{category}</label></div>))}</div></PopoverContent></Popover>{settings.quickFilters.map((filter, index) => <Button key={index} variant="outline" size="sm" onClick={() => setSummarySelectedCategories(filter.categories)}>{filter.name}</Button>)}<p className="text-sm text-muted-foreground hidden md:block ml-auto">點擊表格中的數字可查看該月份的交易明細。</p></div><div className="rounded-md border"><Table><TableHeader><TableRow>{summaryReportData.headers.map(h => <TableHead key={h} className={h !== '日期（年月）' ? 'text-right' : ''}>{h}</TableHead>)}</TableRow></TableHeader><TableBody>{summaryReportData.rows.map((row, i) => (<TableRow key={i}>{summaryReportData.headers.map(header => { const value = row[header]; const isClickable = header !== '日期（年月）' && header !== '總計' && typeof value === 'number' && value !== 0; let textColor = ''; if (typeof value === 'number') { if (value < 0) textColor = 'text-green-600'; } return (<TableCell key={header} className={`font-mono ${header !== '日期（年月）' ? 'text-right' : ''} ${textColor}`}>{isClickable ? <button onClick={() => handleSummaryCellClick(row['日期（年月）'] as string, header)} className="hover:underline hover:text-blue-500">{value.toLocaleString()}</button> : (typeof value === 'number' ? value.toLocaleString() : value)}</TableCell>);})}</TableRow>))}</TableBody></Table></div></TabsContent>
                       <TabsContent value="chart"><Card><CardHeader><CardTitle>信用卡消費分類統計</CardTitle><CardDescription>此圖表顯示信用卡的各類別總支出。 (僅計算正數金額)</CardDescription></CardHeader><CardContent><div style={{ width: '100%', height: 400 }}><ResponsiveContainer><BarChart layout="vertical" data={categoryChartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" /><XAxis type="number" /><YAxis dataKey="name" type="category" width={80} /><Tooltip formatter={(v: number) => v.toLocaleString()} /><Legend /><Bar dataKey="total" fill="hsl(var(--chart-1))" name="總支出" /></BarChart></ResponsiveContainer></div></CardContent></Card></TabsContent>
                     </Tabs>
                   </>

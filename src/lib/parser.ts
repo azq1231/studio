@@ -4,6 +4,9 @@ import { createHash } from 'crypto';
 
 // Helper function to create a SHA-1 hash for generating consistent IDs
 async function sha1(str: string): Promise<string> {
+    // This function is designed for server-side (Node.js) hashing.
+    // A browser-compatible version would be needed for client-side execution.
+    // Node.js implementation:
     return createHash('sha1').update(str).digest('hex');
 }
 
@@ -86,7 +89,7 @@ export async function parseExcelData(data: any[][]): Promise<ParsedExcelData> {
         detectedCategories.add(category);
         
         // Use row index in ID to guarantee uniqueness even if content is identical
-        const idString = `${dateStr}-${description}-${amount}-${type}-${index}`;
+        const idString = `${dateStr}-${description}-${amount}-${type}-${notes}`;
         const id = await sha1(idString);
 
         switch (type) {
@@ -227,8 +230,8 @@ export async function parseCreditCard(text: string): Promise<ParsedCreditDataWit
 
 
     if (description) {
-      // Ensure ID is unique by including both dates and a random component
-      const idString = `${transactionDate}-${postingDate}-${description}-${amount}-${Math.random()}`;
+      // Create a deterministic ID based on transaction content
+      const idString = `${transactionDate}-${postingDate}-${description}-${amount}`;
       const id = await sha1(idString);
 
       results.push({
@@ -345,7 +348,7 @@ export async function parseDepositAccount(text: string, replacementRules: Replac
       
       const category = applyCategoryRules(finalDescription, categoryRules);
       
-      const idString = `${currentDate}-${finalDescription}-${amount}-${Math.random()}`;
+      const idString = `${currentDate}-${finalDescription}-${amount}`;
       const id = await sha1(idString);
 
       let bankCode = '';
@@ -388,4 +391,3 @@ export async function parseDepositAccount(text: string, replacementRules: Replac
     bankCode: r[5] as string,
   }));
 }
-
