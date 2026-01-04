@@ -311,21 +311,13 @@ export function FinanceFlowClient() {
   const hasData = useMemo(() => combinedData.length > 0, [combinedData]);
   const hasFixedItems = useMemo(() => combinedData.some(d => d.category === '固定'), [combinedData]);
   
-  // Logic to determine the default tab after data loading, used in useEffect
-  const defaultTab = useMemo(() => {
-    if (!hasData) return "importer";
-    if (creditData.length > 0) return "results";
-    if (depositData.length > 0) return "results";
-    if (cashData.length > 0) return "results";
-    return "importer";
-  }, [hasData, creditData.length, depositData.length, cashData.length]);
-
-  // Effect to switch tab only after initial data load
   useEffect(() => {
-    if (!isLoadingData && hasData && activeTab === "importer") {
-      setActiveTab(defaultTab);
+    if (!isLoadingData && hasData) {
+      setActiveTab((currentTab) =>
+        currentTab === "importer" ? "results" : currentTab
+      );
     }
-  }, [isLoadingData, hasData, activeTab, defaultTab]);
+  }, [isLoadingData, hasData]);
 
 
   const showResults = hasProcessed || (!isUserLoading && hasData && !isLoadingData);
