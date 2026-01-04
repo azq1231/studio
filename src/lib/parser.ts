@@ -266,21 +266,33 @@ export async function parseDepositAccount(text: string): Promise<DepositData[]> 
         if (parts.length < 4) continue; // Basic validation for time, desc, amount, balance
 
         // 1. Peel off remark from the end (if it exists)
-        // A remark is typically non-numeric, whereas balance is numeric.
         const lastPart = parts[parts.length - 1];
         let remark = '';
-        if (isNaN(parseFloat(lastPart.replace(/,/g, '')))) {
-            remark = parts.pop() || '';
+        // A remark can be purely numeric (like '11409') or text.
+        // The balance before it is always numeric with commas.
+        // So, we find the last part that is a valid number with/without comma, that's the balance. The part after it is remark.
+        let balanceIndex = -1;
+        for (let i = parts.length - 1; i >= 0; i--) {
+            if (!isNaN(parseFloat(parts[i].replace(/,/g, '')))) {
+                balanceIndex = i;
+                break;
+            }
         }
+        
+        if (balanceIndex !== -1 && balanceIndex < parts.length - 1) {
+            remark = parts.slice(balanceIndex + 1).join(' ');
+            parts = parts.slice(0, balanceIndex + 1);
+        }
+
 
         // 2. Peel off balance
         if (parts.length > 0) parts.pop(); // Balance is not used, so just discard it
 
         // 3. Peel off deposit and withdrawal, then determine the amount
-        const depositStr = parts.length > 0 ? parts.pop() || '' : '';
-        const withdrawalStr = parts.length > 0 ? parts.pop() || '' : '';
-        const withdrawalAmount = parseFloat(withdrawalStr.replace(/,/g, '')) || 0;
-        const depositAmount = parseFloat(depositStr.replace(/,/g, '')) || 0;
+        const depositStr = parts.length > 0 ? parts.pop()?.replace(/,/g, '') || '' : '';
+        const withdrawalStr = parts.length > 0 ? parts.pop()?.replace(/,/g, '') || '' : '';
+        const withdrawalAmount = parseFloat(withdrawalStr) || 0;
+        const depositAmount = parseFloat(depositStr) || 0;
         const amount = withdrawalAmount > 0 ? withdrawalAmount : (depositAmount > 0 ? -depositAmount : 0);
 
         if (amount === 0) continue;
@@ -296,7 +308,7 @@ export async function parseDepositAccount(text: string): Promise<DepositData[]> 
         // SPECIAL LOGIC for '行銀非約跨優'
         if (description.includes('行銀非約跨優') && remark) {
             const originalDescription = description;
-            description = remark; // Swap: Use the remark as the main description
+            description = remark; // Use the remark as the main description
             remark = originalDescription; // The original description becomes the remark/bankCode
         }
 
@@ -349,6 +361,7 @@ export const getCreditDisplayDate = (dateString: string) => {
 };
 
     
+
 
 
 
