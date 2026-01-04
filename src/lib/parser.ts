@@ -266,16 +266,6 @@ export type CashData = {
   notes?: string;
 };
 
-
-type SpecialRule = {
-  merge_remark: boolean;
-  remark_col: number | null;
-}
-
-const special_rules: Record<string, SpecialRule> = {
-  "國保保費": { merge_remark: true, remark_col: null },
-};
-
 function applyCategoryRules(description: string, rules: CategoryRule[]): string {
     for (const rule of rules) {
         if (rule.keyword && description.includes(rule.keyword)) {
@@ -287,10 +277,9 @@ function applyCategoryRules(description: string, rules: CategoryRule[]): string 
 
 export async function parseDepositAccount(text: string, replacementRules: ReplacementRule[], categoryRules: CategoryRule[]): Promise<DepositData[]> {
   const lines = text.split('\n').map(l => l.trim()).filter(l => l);
-  const results: (string|number)[][] = [];
+  const results: DepositData[] = [];
   let currentDate = '';
-  let temp: (string|number)[] | null = null;
-
+  
   const applyRules = (text: string) => {
     let processedText = text;
     let shouldDelete = false;
@@ -313,10 +302,6 @@ export async function parseDepositAccount(text: string, replacementRules: Replac
     }
 
     if (/^\d{2}:\d{2}:\d{2}/.test(line)) {
-      if (temp) {
-        results.push(temp);
-      }
-
       if (!currentDate) {
         try {
             currentDate = format(new Date(), 'yyyy/MM/dd');
@@ -324,70 +309,38 @@ export async function parseDepositAccount(text: string, replacementRules: Replac
       }
 
       const parts = line.split('\t');
-      let desc = parts[1]?.trim() ?? '';
+      if (parts.length < 2) continue;
+
+      let description = parts[1]?.trim() ?? '';
       const withdraw = parts[2]?.replace(/,/g, '').trim() ?? '';
       const deposit = parts[3]?.replace(/,/g, '').trim() ?? '';
-      let remark = parts.length > 5 ? (parts.slice(5).join(' ').trim() ?? '') : '';
       const amount = withdraw ? parseFloat(withdraw) : (deposit ? -parseFloat(deposit) : 0);
       
-      const rule = special_rules[desc] || { merge_remark: true, remark_col: null };
-      
-      let finalDescription = '';
-      if (rule.merge_remark) {
-        finalDescription = `${desc} ${remark}`.trim();
-      } else {
-        finalDescription = desc;
-      }
+      // The remark is everything from column 6 onwards
+      const remark = parts.length > 5 ? (parts.slice(5).join(' ').trim() ?? '') : '';
 
-      const { processedText, shouldDelete } = applyRules(finalDescription);
+      const { processedText, shouldDelete } = applyRules(description);
       if(shouldDelete) {
-        temp = null;
         continue;
       }
-      finalDescription = processedText;
+      description = processedText;
       
-      const category = applyCategoryRules(finalDescription, categoryRules);
+      const category = applyCategoryRules(description, categoryRules);
       
-      const idString = `${currentDate}-${finalDescription}-${amount}`;
+      // Combine all parts for a unique ID
+      const idString = `${currentDate}-${description}-${amount}-${remark}`;
       const id = await sha1(idString);
 
-      let bankCode = '';
-      const remarkMatch = finalDescription.match(/(\[[^\]]+\])/);
-      if (remarkMatch) {
-        bankCode = remarkMatch[1];
-        finalDescription = finalDescription.replace(remarkMatch[1], '').trim();
-      }
-
-      temp = [id, currentDate, category, finalDescription, amount, bankCode];
-      
-      if (!rule.merge_remark && rule.remark_col !== null && temp.length > rule.remark_col) {
-        temp[rule.remark_col] = remark;
-      }
-
-      continue;
-    }
-
-    if (temp && line) {
-      const match = line.match(/^([\d/]+)/);
-      if (match) {
-        const remarkMatch = line.match(/(\[[^\]]+\])/);
-        if (remarkMatch) {
-            if(temp.length > 5) temp[5] = remarkMatch[1];
-        }
-      }
+      results.push({
+        id,
+        date: currentDate,
+        category,
+        description,
+        amount,
+        bankCode: remark
+      });
     }
   }
 
-  if (temp) {
-    results.push(temp);
-  }
-
-  return results.map(r => ({
-    id: r[0] as string,
-    date: r[1] as string,
-    category: r[2] as string,
-    description: r[3] as string,
-    amount: r[4] as number,
-    bankCode: r[5] as string,
-  }));
+  return results;
 }
