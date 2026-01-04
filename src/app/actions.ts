@@ -14,12 +14,16 @@ export type CategoryRule = {
     category: string;
 };
 
-function applyReplacementRules(description: string, rules: ReplacementRule[]): { processedText: string, shouldDelete: boolean } {
-    let processedText = description;
+function applyReplacementRules(text: string | undefined, rules: ReplacementRule[]): { processedText: string, shouldDelete: boolean } {
+    if (text === undefined) {
+        return { processedText: '', shouldDelete: false };
+    }
+
+    let processedText = text;
     let shouldDelete = false;
 
     for (const rule of rules) {
-        if (rule.find && description.includes(rule.find)) {
+        if (rule.find && processedText.includes(rule.find)) {
             if (rule.deleteRow) {
                 shouldDelete = true;
                 break;
@@ -27,7 +31,7 @@ function applyReplacementRules(description: string, rules: ReplacementRule[]): {
             processedText = processedText.replace(new RegExp(rule.find, 'g'), rule.replace);
         }
     }
-    return { processedText, shouldDelete };
+    return { processedText: processedText.trim(), shouldDelete };
 }
 
 
@@ -124,15 +128,19 @@ export async function processBankStatement(
 
             // 3. Process deposit account entries by applying rules
             const processedDepositPromises = rawDepositParsed.map(async (entry) => {
-                const { processedText, shouldDelete } = applyReplacementRules(entry.description, replacementRules);
+                // Apply rules to both description and bankCode
+                const { processedText: processedDescription, shouldDelete } = applyReplacementRules(entry.description, replacementRules);
                 if (shouldDelete) return null;
 
-                const category = applyCategoryRules(processedText, categoryRules);
+                const { processedText: processedBankCode } = applyReplacementRules(entry.bankCode, replacementRules);
+
+                const category = applyCategoryRules(processedDescription, categoryRules);
                 detectedCategories.add(category);
                 
                 return {
                     ...entry,
-                    description: processedText,
+                    description: processedDescription,
+                    bankCode: processedBankCode,
                     category: category
                 };
             });

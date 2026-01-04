@@ -175,18 +175,9 @@ export async function parseCreditCard(text: string): Promise<RawCreditData[]> {
                 amount = potentialAmount;
                 const descStartIndex = dateRegex.test(parts[1]) ? 2 : 1;
                 let descEndIndex = parts.length - 1;
-
-                // Check if the word before the amount is a category or part of the description
-                if (descEndIndex > descStartIndex) {
-                     const potentialCategory = parts[descStartIndex];
-                     // Simple check if it's a short word, likely a category. This can be improved.
-                     if (potentialCategory.length <= 5) {
-                         initialCategory = potentialCategory;
-                         description = parts.slice(descStartIndex + 1, descEndIndex).join(' ');
-                     } else {
-                         description = parts.slice(descStartIndex, descEndIndex).join(' ');
-                     }
-                }
+                
+                // The text between the date(s) and the amount is the description
+                description = parts.slice(descStartIndex, descEndIndex).join(' ');
 
             } else {
                 continue; // Cannot determine amount
@@ -258,7 +249,6 @@ export async function parseDepositAccount(text: string): Promise<DepositData[]> 
         }
     }
     
-    // Step 2: Process each merged entry using regex
     const entryRegex = /^(?<time>\d{2}:\d{2}:\d{2})\s+(?<desc>.*?)\s+(?<withdrawal>[\d,.-]+)\s+(?<deposit>[\d,.-]*)\s+(?<balance>[\d,.-]+)\s+(?<remark>.*)$/;
 
     for (const entry of mergedEntries) {
@@ -267,33 +257,32 @@ export async function parseDepositAccount(text: string): Promise<DepositData[]> 
         const match = entry.content.match(entryRegex);
         if (!match || !match.groups) continue;
 
-        const { time, desc, withdrawal, deposit, balance, remark } = match.groups;
-
+        let { time, desc, withdrawal, deposit, balance, remark } = match.groups;
+        
         const withdrawalAmount = parseFloat(withdrawal.replace(/,/g, '')) || 0;
         const depositAmount = parseFloat(deposit.replace(/,/g, '')) || 0;
         const amount = withdrawalAmount > 0 ? withdrawalAmount : (depositAmount > 0 ? -depositAmount : 0);
 
         if (amount === 0) continue;
 
-        let finalDescription = desc;
-        let finalBankCode = remark;
-
-        // Special logic for '行銀非約跨優'
+        // SPECIAL HANDLING for "行銀非約跨優"
         if (desc.includes('行銀非約跨優')) {
-            finalDescription = remark; // The remark becomes the description
-            finalBankCode = desc;     // The original description becomes the bank code/note
+            const originalDesc = desc;
+            desc = remark; // The remark becomes the description
+            remark = originalDesc; // The original description becomes the remark/bankCode
         }
-        
-        const idString = `${entry.date}-${time}-${finalDescription}-${amount}`;
+
+        // The ID should be based on the final, intended data, but before replacement rules
+        const idString = `${entry.date}-${time}-${desc}-${amount}`;
         const id = await sha1(idString);
 
         results.push({
             id,
             date: entry.date,
             category: '', 
-            description: finalDescription,
+            description: desc,
             amount,
-            bankCode: finalBankCode
+            bankCode: remark
         });
     }
 
@@ -333,6 +322,7 @@ export const getCreditDisplayDate = (dateString: string) => {
 };
 
     
+
 
 
 
