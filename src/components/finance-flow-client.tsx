@@ -32,7 +32,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Calendar } from "@/components/ui/calendar";
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
-import { Download, AlertCircle, Trash2, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2, FileText, Combine, Search, ChevronsLeft, ChevronsRight, ArrowRight, Loader2, Calendar as CalendarIcon, Settings, PlusCircle, RotateCcw, DatabaseZap, Text, ClipboardCopy, Upload, Download as DownloadIcon, FileUp } from 'lucide-react';
+import { Download, AlertCircle, Trash2, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2, FileText, Combine, Search, ChevronsLeft, ChevronsRight, ArrowRight, Loader2, Calendar as CalendarIcon, Settings, PlusCircle, RotateCcw, DatabaseZap, Text, ClipboardCopy, Upload, Download as DownloadIcon, FileUp, ChevronDown, ChevronRight } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 
 // =======================================================================
@@ -75,11 +75,22 @@ const quickFilterSchema = z.object({
   categories: z.array(z.string()),
 });
 
+const descriptionGroupingRuleSchema = z.object({
+  groupName: z.string().min(1, { message: '請輸入群組名稱' }),
+  keywords: z.string().min(1, { message: '請輸入至少一個關鍵字' }),
+});
+
 const settingsFormSchema = z.object({
   replacementRules: z.array(replacementRuleSchema),
   categoryRules: z.array(categoryRuleSchema),
   quickFilters: z.array(quickFilterSchema),
+  descriptionGroupingRules: z.array(descriptionGroupingRuleSchema),
 });
+
+export type DescriptionGroupingRule = {
+    groupName: string;
+    keywords: string;
+};
 
 export type AppSettings = {
     availableCategories: string[];
@@ -87,6 +98,7 @@ export type AppSettings = {
     categoryRules: CategoryRule[];
     quickFilters: QuickFilter[];
     cashTransactionDescriptions: string[];
+    descriptionGroupingRules: DescriptionGroupingRule[];
 };
 type SettingsFormData = z.infer<typeof settingsFormSchema>;
 type SortKey = 'keyword' | 'category';
@@ -99,12 +111,16 @@ const DEFAULT_REPLACEMENT_RULES: ReplacementRule[] = [
 ];
 
 const DEFAULT_CATEGORY_RULES: CategoryRule[] = [
-    { keyword: 'VULTR', category: '方' }, { keyword: '國外交易服務費', category: '方' }, { keyword: 'GOOGLE*CLOUD', category: '方' }, { keyword: '悠遊卡自動加值', category: '方' }, { keyword: 'REPLIT, INC.', category: '方' }, { keyword: '伯朗咖啡', category: '方' }, { keyword: '柒號洋樓', category: '方' }, { keyword: 'ＰＣＨＯＭＥ', category: '方' }, { keyword: 'OPENAI', category: '方' }, { keyword: '新東陽', category: '吃' }, { keyword: '全家', category: '吃' }, { keyword: '元心燃麻辣堂', category: '吃' }, { keyword: '統一超商', category: '吃' }, { keyword: '玉喜飯店', category: '吃' }, { keyword: '爭鮮', category: '吃' }, { keyword: '八方雲集', category: '吃' }, { keyword: '樂活養生健康鍋', category: '吃' }, { keyword: '順成西點麵包', category: '吃' }, { keyword: '誠品生活', category: '吃' }, { keyword: '星巴克－自動加值', category: '吃' }, { keyword: 'COMFORT BURGER', category: '吃' }, { keyword: '雙月食品社', category: '吃' }, { keyword: '秀泰全球影城', category: '吃' }, { keyword: '台灣麥當勞', category: '吃' }, { keyword: '筷子餐廳', category: '吃' }, { keyword: '怡客咖啡', category: '吃' }, { keyword: '起家雞', category: '吃' }, { keyword: '彼得好咖啡', category: '吃' }, { keyword: '御書園', category: '吃' }, { keyword: '五花馬水餃館', category: '吃' }, { keyword: '客美多咖啡', category: '吃' }, { keyword: '明曜百貨', category: '吃' }, { keyword: 'ＫＦＣ', category: '吃' }, { keyword: '鬥牛士經典牛排', category: '吃' }, { keyword: '街口電支', category: '吃' }, { keyword: '必勝客', category: '吃' }, { keyword: '丰禾', category: '吃' }, { keyword: '春水堂', category: '吃' }, { keyword: '上島珈琲店', category: '吃' }, { keyword: '加油站', category: '家' }, { keyword: '全聯', category: '家' }, { keyword: '55688', category: '家' }, { keyword: 'IKEA', category: '家' }, { keyword: '優步', category: '家' }, { keyword: 'OP錢包', category: '家' }, { keyword: 'NET', category: '家' }, { keyword: '威秀影城', category: '家' }, { keyword: '中油', category: '家' }, { keyword: '高鐵智慧型手機', category: '家' }, { keyword: 'Ｍｉｓｔｅｒ　Ｄｏｎｕｔ', category: '家' }, { keyword: '墊腳石圖書', category: '家' }, { keyword: '燦坤３Ｃ', category: '家' }, { keyword: '屈臣氏', category: '家' }, { keyword: 'APPLE.COM/BILL', category: '家' }, { keyword: '一之軒', category: '家' }, { keyword: '城市車旅', category: '家' }, { keyword: '台灣小米', category: '家' }, { keyword: '麗冠有線電視', category: '固定' }, { keyword: '09202***01', category: '固定' }, { keyword: '國都汽車', category: '固定' }, { keyword: '台灣電力', category: '固定' }, { keyword: '台北市自來水費', category: '固定' }, { keyword: '汽車驗車', category: '固定' }, { keyword: '大台北瓦斯費', category: '固定' }, { keyword: '大安文山有線電視', category: '固定' }, { keyword: '橙印良品', category: '蘇' }, { keyword: 'PayEasy', category: '蘇' }, { keyword: '樂購蝦皮', category: '蘇' }, { keyword: '饗賓餐旅', category: '蘇' }, { keyword: 'TAOBAO.COM', category: '蘇' }, { keyword: '拓元票務', category: '蘇' }, { keyword: '三創數位', category: '蘇' }, { keyword: '金玉堂', category: '秀' }, { keyword: '寶雅', category: '秀' }, { keyword: '特力屋', category: '秀' }, { keyword: '悠遊付－臺北市立大學', category: '秀' }, { keyword: '嘟嘟房', category: '弟' }, { keyword: '台東桂田喜來登酒店', category: '玩' }, { keyword: '家樂福', category: '玩' }, { keyword: '台東原生應用植物園', category: '玩' }, { keyword: '格上租車', category: '玩' }, { keyword: '悠勢科技股份有限公司', category: '收入' }, { keyword: '行政院發', category: '收入' }, { keyword: 'linePay繳好市多', category: '家' }, { keyword: '國保保費', category: '固定' }, { keyword: '怡秀跆拳道', category: '華' }, { keyword: 'iPassMoney儲值', category: '方' }, { keyword: '逸安中醫', category: '蘇' }, { keyword: '連結帳戶交易', category: '家' }, { keyword: '花都管理費', category: '固定' }, { keyword: '9/11', category: '姊' }, { keyword: '6/18', category: '姊' },
+    { keyword: 'VULTR', category: '方' }, { keyword: '國外交易服務費', category: '方' }, { keyword: 'GOOGLE*CLOUD', category: '方' }, { keyword: '悠遊卡自動加值', category: '方' }, { keyword: 'REPLIT, INC.', category: '方' }, { keyword: '伯朗咖啡', category: '方' }, { keyword: '柒號洋樓', category: '方' }, { keyword: 'ＰＣＨＯＭＥ', category: '方' }, { keyword: 'OPENAI', category: '方' }, { keyword: '新東陽', category: '吃' }, { keyword: '全家', category: '吃' }, { keyword: '元心燃麻辣堂', category: '吃' }, { keyword: '統一超商', category: '吃' }, { keyword: '玉喜飯店', category: '吃' }, { keyword: '爭鮮', category: '吃' }, { keyword: '八方雲集', category: '吃' }, { keyword: '樂活養生健康鍋', category: '吃' }, { keyword: '順成西點麵包', category: '吃' }, { keyword: '誠品生活', category: '吃' }, { keyword: '星巴克－自動加值', category: '吃' }, { keyword: 'COMFORT BURGER', category: '吃' }, { keyword: '雙月食品社', category: '吃' }, { keyword: '秀泰全球影城', category: '吃' }, { keyword: '台灣麥當勞', category: '吃' }, { keyword: '筷子餐廳', category: '吃' }, { keyword: '怡客咖啡', category: '吃' }, { keyword: '起家雞', category: '吃' }, { keyword: '彼得好咖啡', category: '吃' }, { keyword: '御書園', category: '吃' }, { keyword: '五花馬水餃館', category: '吃' }, { keyword: '客美多咖啡', category: '吃' }, { keyword: '明曜百貨', category: '吃' }, { keyword: 'ＫＦＣ', category: '吃' }, { keyword: '鬥牛士經典牛排', category: '吃' }, { keyword: '街口電支', category: '吃' }, { keyword: '必勝客', category: '吃' }, { keyword: '丰禾', category: '吃' }, { keyword: '春水堂', category: '吃' }, { keyword: '上島珈琲店', category: '吃' }, { keyword: '加油站', category: '家' }, { keyword: '全聯', category: '家' }, { keyword: '55688', category: '家' }, { keyword: 'IKEA', category: '家' }, { keyword: '優步', category: '家' }, { keyword: 'OP錢包', category: '家' }, { keyword: 'NET', category: '家' }, { keyword: '威秀影城', category: '家' }, { keyword: '中油', category: '家' }, { keyword_uncategorized: '高鐵智慧型手機', category: '家' }, { keyword: 'Ｍｉｓｔｅｒ　Ｄｏｎｕｔ', category: '家' }, { keyword: '墊腳石圖書', category: '家' }, { keyword: '燦坤３Ｃ', category: '家' }, { keyword: '屈臣氏', category: '家' }, { keyword: 'APPLE.COM/BILL', category: '家' }, { keyword: '一之軒', category: '家' }, { keyword: '城市車旅', category: '家' }, { keyword: '台灣小米', category: '家' }, { keyword: '麗冠有線電視', category: '固定' }, { keyword: '09202***01', category: '固定' }, { keyword: '國都汽車', category: '固定' }, { keyword: '台灣電力', category: '固定' }, { keyword: '台北市自來水費', category: '固定' }, { keyword: '汽車驗車', category: '固定' }, { keyword: '大台北瓦斯費', category: '固定' }, { keyword: '大安文山有線電視', category: '固定' }, { keyword: '橙印良品', category: '蘇' }, { keyword: 'PayEasy', category: '蘇' }, { keyword: '樂購蝦皮', category: '蘇' }, { keyword: '饗賓餐旅', category: '蘇' }, { keyword: 'TAOBAO.COM', category: '蘇' }, { keyword: '拓元票務', category: '蘇' }, { keyword: '三創數位', category: '蘇' }, { keyword: '金玉堂', category: '秀' }, { keyword: '寶雅', category: '秀' }, { keyword: '特力屋', category: '秀' }, { keyword: '悠遊付－臺北市立大學', category: '秀' }, { keyword: '嘟嘟房', category: '弟' }, { keyword: '台東桂田喜來登酒店', category: '玩' }, { keyword: '家樂福', category: '玩' }, { keyword: '台東原生應用植物園', category: '玩' }, { keyword: '格上租車', category: '玩' }, { keyword: '悠勢科技股份有限公司', category: '收入' }, { keyword: '行政院發', category: '收入' }, { keyword: 'linePay繳好市多', category: '家' }, { keyword: '國保保費', category: '固定' }, { keyword: '怡秀跆拳道', category: '華' }, { keyword: 'iPassMoney儲值', category: '方' }, { keyword: '逸安中醫', category: '蘇' }, { keyword: '連結帳戶交易', category: '家' }, { keyword: '花都管理費', category: '固定' }, { keyword: '9/11', category: '姊' }, { keyword: '6/18', category: '姊' },
 ];
 
 const DEFAULT_QUICK_FILTERS: QuickFilter[] = [
   { name: '篩選一', categories: ['吃', '家', '固定', '秀', '弟', '玩', '姊', '華'] },
   { name: '篩選二', categories: ['方', '蘇'] },
+];
+
+const DEFAULT_DESCRIPTION_GROUPING_RULES: DescriptionGroupingRule[] = [
+    { groupName: '汽車', keywords: '汽車,中油,加油站,城市車旅' },
 ];
 
 const DEFAULT_CATEGORIES = ['方', '吃', '家', '固定', '蘇', '秀', '弟', '玩', '姊', '收入', '華', '投資'];
@@ -116,6 +132,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     categoryRules: DEFAULT_CATEGORY_RULES,
     quickFilters: DEFAULT_QUICK_FILTERS,
     cashTransactionDescriptions: DEFAULT_CASH_DESCRIPTIONS,
+    descriptionGroupingRules: DEFAULT_DESCRIPTION_GROUPING_RULES,
 };
 
 function SettingsManager({ 
@@ -148,6 +165,7 @@ function SettingsManager({
             replacementRules: settings.replacementRules,
             categoryRules: settings.categoryRules,
             quickFilters: settings.quickFilters,
+            descriptionGroupingRules: settings.descriptionGroupingRules,
         }
     });
 
@@ -179,12 +197,15 @@ function SettingsManager({
             replacementRules: settings.replacementRules,
             categoryRules: settings.categoryRules,
             quickFilters: settings.quickFilters,
+            descriptionGroupingRules: settings.descriptionGroupingRules,
         });
     }, [settings, settingsForm]);
 
     const { fields: replacementFields, append: appendReplacement, remove: removeReplacement } = useFieldArray({ control: settingsForm.control, name: 'replacementRules' });
     const { fields: categoryFields, append: appendCategory, remove: removeCategory } = useFieldArray({ control: settingsForm.control, name: 'categoryRules' });
     const { fields: quickFilterFields, append: appendQuickFilter, remove: removeQuickFilter } = useFieldArray({ control: settingsForm.control, name: "quickFilters" });
+    const { fields: groupingRuleFields, append: appendGroupingRule, remove: removeGroupingRule } = useFieldArray({ control: settingsForm.control, name: "descriptionGroupingRules" });
+
 
     const handleSaveSettings = async (data: SettingsFormData) => {
         const keywords = new Set<string>();
@@ -412,6 +433,39 @@ function SettingsManager({
                           </div>
                        </AccordionContent>
                     </AccordionItem>
+                     <AccordionItem value="item-grouping">
+                        <AccordionTrigger>項目群組規則</AccordionTrigger>
+                        <AccordionContent>
+                            <CardDescription className="mb-4">為「固定項目分析」建立可收合的群組。例如：群組名稱「汽車」，關鍵字「汽車,中油,加油站」。</CardDescription>
+                            <div className="rounded-md border">
+                                <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead className="w-1/3">群組名稱</TableHead>
+                                        <TableHead className="w-2/3">關鍵字 (用逗號 , 分隔)</TableHead>
+                                        <TableHead className="w-[50px]">操作</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {groupingRuleFields.map((field, index) => (
+                                    <TableRow key={field.id}>
+                                        <TableCell className="p-1">
+                                            <FormField control={settingsForm.control} name={`descriptionGroupingRules.${index}.groupName`} render={({ field }) => <FormItem><FormControl><Input placeholder="例如：汽車" {...field} className="h-9" /></FormControl><FormMessage className="text-xs px-2" /></FormItem>} />
+                                        </TableCell>
+                                        <TableCell className="p-1">
+                                            <FormField control={settingsForm.control} name={`descriptionGroupingRules.${index}.keywords`} render={({ field }) => <FormItem><FormControl><Input placeholder="例如：汽車,中油,加油站" {...field} className="h-9" /></FormControl><FormMessage className="text-xs px-2" /></FormItem>} />
+                                        </TableCell>
+                                        <TableCell className="p-1">
+                                            <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeGroupingRule(index)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                                        </TableCell>
+                                    </TableRow>
+                                    ))}
+                                </TableBody>
+                                </Table>
+                            </div>
+                            <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => appendGroupingRule({ groupName: '', keywords: '' })}><PlusCircle className="mr-2 h-4 w-4" />新增群組規則</Button>
+                        </AccordionContent>
+                    </AccordionItem>
                     <AccordionItem value="quick-filters">
                        <AccordionTrigger>快速篩選</AccordionTrigger>
                        <AccordionContent>
@@ -535,7 +589,7 @@ function SettingsManager({
 
 // =======================================================================
 // COMPONENT: ResultsDisplay
-// =======================================================================
+// =_blank=====================================================================
 const cashTransactionSchema = z.object({
     date: z.date({ required_error: "請選擇日期" }),
     description: z.string().min(1, "請輸入交易項目"),
@@ -668,8 +722,8 @@ function CashTransactionForm({
                                 </Select>
                                 <FormMessage /></FormItem>
                             )} />
-                            <FormField control={form.control} name="amount" render={({ field }) => <FormItem><FormLabel>金額 (收入請填負數)</FormLabel><FormControl><Input type="number" placeholder="支出填 120, 收入填 -120" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)}/></FormControl><FormMessage /></FormItem>} />
-                            <FormField control={form.control} name="category" render={({ field }) => <FormItem><FormLabel>類型</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="選擇一個類型" /></SelectTrigger></FormControl><SelectContent>{settings.availableCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>} />
+                            <FormField control={form.control} name="amount" render={({ field }) => <FormItem><FormLabel>金額 (收入請填負數)</FormLabel><FormControl><Input type="number" placeholder="支出填 120, 收入填 -120" {...field} onChange={e => field.onChange(parseFloat(e.target.value))}/></FormControl><FormMessage /></FormItem>} />
+                            <FormField control={form.control} name="category" render={({ field }) => <FormItem><FormLabel>類型</FormLabel><Select onValuechange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="選擇一個類型" /></SelectTrigger></FormControl><SelectContent>{settings.availableCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>} />
                             <FormField control={form.control} name="notes" render={({ field }) => <FormItem><FormLabel>備註</FormLabel><FormControl><Input placeholder="（選填）" {...field} /></FormControl><FormMessage /></FormItem>} />
                         </div>
                         <div className="flex justify-end">
@@ -686,8 +740,9 @@ function CashTransactionForm({
 
 type CombinedData = { id: string; date: string; dateObj: Date; category: string; description: string; amount: number; source: '信用卡' | '活存帳戶' | '現金'; notes?: string; bankCode?: string; };
 
-function FixedItemsSummary({ combinedData }: { combinedData: CombinedData[] }) {
+function FixedItemsSummary({ combinedData, settings }: { combinedData: CombinedData[], settings: AppSettings }) {
     const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
+    const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
     const fixedItemsData = useMemo(() => {
         const years = new Set<string>();
@@ -699,6 +754,12 @@ function FixedItemsSummary({ combinedData }: { combinedData: CombinedData[] }) {
             }
             return false;
         });
+
+        // Pre-process rules for faster lookup
+        const groupingRules = (settings.descriptionGroupingRules || []).map(rule => ({
+            groupName: rule.groupName,
+            keywords: rule.keywords.split(',').map(k => k.trim()).filter(Boolean)
+        }));
 
         const itemsByDescription: Record<string, { monthly: Record<number, number>, total: number }> = {};
         
@@ -712,25 +773,82 @@ function FixedItemsSummary({ combinedData }: { combinedData: CombinedData[] }) {
             itemsByDescription[desc].total += transaction.amount;
         });
         
-        const tableData = Object.entries(itemsByDescription).map(([description, data]) => ({
+        const individualRows = Object.entries(itemsByDescription).map(([description, data]) => ({
             description,
             ...data.monthly,
             total: data.total
-        })).sort((a,b) => a.description.localeCompare(b.description, 'zh-Hant'));
+        }));
+        
+        const groupedRows: Record<string, typeof individualRows> = {};
+        const ungroupedRows: typeof individualRows = [];
+
+        individualRows.forEach(row => {
+            let assignedGroup: string | null = null;
+            for (const rule of groupingRules) {
+                if (rule.keywords.some(keyword => row.description.includes(keyword))) {
+                    assignedGroup = rule.groupName;
+                    break;
+                }
+            }
+            if (assignedGroup) {
+                if (!groupedRows[assignedGroup]) {
+                    groupedRows[assignedGroup] = [];
+                }
+                groupedRows[assignedGroup].push(row);
+            } else {
+                ungroupedRows.push(row);
+            }
+        });
+
+        const finalTableData = [
+            ...Object.entries(groupedRows).map(([groupName, items]) => {
+                const groupTotalMonthly = items.reduce((acc, item) => {
+                    for(let i=0; i<12; i++) {
+                        acc[i] = (acc[i] || 0) + (item[i as keyof typeof item] as number || 0);
+                    }
+                    return acc;
+                }, {} as Record<number, number>);
+
+                const groupTotal = items.reduce((sum, item) => sum + item.total, 0);
+
+                return {
+                    isGroup: true,
+                    description: groupName,
+                    ...groupTotalMonthly,
+                    total: groupTotal,
+                    items: items.sort((a,b) => a.description.localeCompare(b.description, 'zh-Hant')),
+                };
+            }).sort((a,b) => a.description.localeCompare(b.description, 'zh-Hant')),
+            ...ungroupedRows.sort((a,b) => a.description.localeCompare(b.description, 'zh-Hant'))
+        ];
+
+        const monthlyTotals = finalTableData
+          .filter(row => !row.isGroup)
+          .reduce((acc, row) => {
+              for (let i = 0; i < 12; i++) {
+                acc[i] += (row[i as keyof typeof row] as number || 0);
+              }
+              return acc;
+          }, Array(12).fill(0));
+          
+        const grandTotal = monthlyTotals.reduce((sum, total) => sum + total, 0);
 
         return {
             years: Array.from(years).sort((a, b) => parseInt(b) - parseInt(a)),
-            tableData,
-            monthlyTotals: Array.from({ length: 12 }, (_, i) => 
-                tableData.reduce((sum, row) => sum + (row[i as keyof typeof row] as number || 0), 0)
-            ),
-            grandTotal: tableData.reduce((sum, row) => sum + row.total, 0)
+            tableData: finalTableData,
+            monthlyTotals,
+            grandTotal
         };
-    }, [combinedData, selectedYear]);
 
-    if (fixedItemsData.years.length === 0) {
-        return null; // Or some placeholder if you prefer
+    }, [combinedData, selectedYear, settings.descriptionGroupingRules]);
+    
+    if (fixedItemsData.years.length === 0 && fixedItemsData.tableData.length === 0) {
+        return null;
     }
+
+    const toggleGroup = (groupName: string) => {
+        setExpandedGroups(prev => ({...prev, [groupName]: !prev[groupName]}));
+    };
 
     const months = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
     
@@ -739,49 +857,74 @@ function FixedItemsSummary({ combinedData }: { combinedData: CombinedData[] }) {
             <CardHeader>
                 <div className="flex justify-between items-center">
                     <CardTitle>固定項目詳細分析</CardTitle>
-                    <Select value={selectedYear} onValueChange={setSelectedYear}>
-                        <SelectTrigger className="w-[120px]">
-                            <SelectValue placeholder="選擇年份" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {fixedItemsData.years.map(year => (
-                                <SelectItem key={year} value={year}>{year} 年</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                    {fixedItemsData.years.length > 0 && (
+                        <Select value={selectedYear} onValueChange={setSelectedYear}>
+                            <SelectTrigger className="w-[120px]">
+                                <SelectValue placeholder="選擇年份" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {fixedItemsData.years.map(year => (
+                                    <SelectItem key={year} value={year}>{year} 年</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    )}
                 </div>
-                <CardDescription>查看「固定」分類下各項目在各月份的支出明細。</CardDescription>
+                <CardDescription>查看「固定」分類下各項目在各月份的支出明細。點擊群組名稱可展開或收合。</CardDescription>
             </CardHeader>
             <CardContent>
                 <div className="rounded-md border">
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead className="sticky left-0 bg-background/95 backdrop-blur-sm z-10">項目</TableHead>
+                                <TableHead className="sticky left-0 bg-background/95 backdrop-blur-sm z-10 w-[250px]">項目</TableHead>
                                 {months.map(m => <TableHead key={m} className="text-right">{m}</TableHead>)}
                                 <TableHead className="text-right sticky right-0 bg-background/95 backdrop-blur-sm z-10">年度總計</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {fixedItemsData.tableData.map(row => (
-                                <TableRow key={row.description}>
-                                    <TableCell className="font-medium sticky left-0 bg-background/95 backdrop-blur-sm z-10">{row.description}</TableCell>
-                                    {Array.from({ length: 12 }).map((_, i) => (
-                                        <TableCell key={i} className="text-right font-mono">
-                                            {(row[i as keyof typeof row] as number || 0) !== 0 ? (row[i as keyof typeof row] as number).toLocaleString() : '-'}
+                                <React.Fragment key={row.description}>
+                                    <TableRow 
+                                        className={cn(row.isGroup && "bg-muted/50 font-bold hover:bg-muted/60", row.isGroup && expandedGroups[row.description] && "border-b-0")}
+                                        onClick={() => row.isGroup && toggleGroup(row.description)}
+                                    >
+                                        <TableCell className="font-medium sticky left-0 bg-inherit backdrop-blur-sm z-10">
+                                            <div className="flex items-center gap-2">
+                                                {row.isGroup ? (
+                                                     expandedGroups[row.description] ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />
+                                                ) : <div className="w-4"/>}
+                                                {row.description}
+                                            </div>
                                         </TableCell>
+                                        {Array.from({ length: 12 }).map((_, i) => (
+                                            <TableCell key={i} className="text-right font-mono">
+                                                {(row[i as keyof typeof row] as number || 0) !== 0 ? (row[i as keyof typeof row] as number).toLocaleString() : '-'}
+                                            </TableCell>
+                                        ))}
+                                        <TableCell className="text-right font-mono font-bold sticky right-0 bg-inherit backdrop-blur-sm z-10">{row.total.toLocaleString()}</TableCell>
+                                    </TableRow>
+                                    {row.isGroup && expandedGroups[row.description] && row.items.map(item => (
+                                         <TableRow key={item.description} className="hover:bg-muted/30">
+                                             <TableCell className="font-normal sticky left-0 bg-inherit backdrop-blur-sm z-10 pl-12">{item.description}</TableCell>
+                                             {Array.from({ length: 12 }).map((_, i) => (
+                                                 <TableCell key={i} className="text-right font-mono text-sm">
+                                                     {(item[i as keyof typeof item] as number || 0) !== 0 ? (item[i as keyof typeof item] as number).toLocaleString() : '-'}
+                                                 </TableCell>
+                                             ))}
+                                             <TableCell className="text-right font-mono font-bold sticky right-0 bg-inherit backdrop-blur-sm z-10 text-sm">{item.total.toLocaleString()}</TableCell>
+                                         </TableRow>
                                     ))}
-                                    <TableCell className="text-right font-mono font-bold sticky right-0 bg-background/95 backdrop-blur-sm z-10">{row.total.toLocaleString()}</TableCell>
-                                </TableRow>
+                                </React.Fragment>
                             ))}
                         </TableBody>
                         <TableBody>
-                           <TableRow className="bg-muted hover:bg-muted font-bold">
+                           <TableRow className="bg-muted hover:bg-muted font-bold border-t-2 border-primary">
                                <TableCell className="sticky left-0 bg-muted/95 backdrop-blur-sm z-10">每月總計</TableCell>
                                {fixedItemsData.monthlyTotals.map((total, i) => (
-                                   <TableCell key={i} className="text-right font-mono">{total.toLocaleString()}</TableCell>
+                                   <TableCell key={i} className="text-right font-mono">{total > 0 ? total.toLocaleString() : '-'}</TableCell>
                                ))}
-                               <TableCell className="text-right font-mono sticky right-0 bg-muted/95 backdrop-blur-sm z-10">{fixedItemsData.grandTotal.toLocaleString()}</TableCell>
+                               <TableCell className="text-right font-mono sticky right-0 bg-muted/95 backdrop-blur-sm z-10">{fixedItemsData.grandTotal > 0 ? fixedItemsData.grandTotal.toLocaleString() : '-'}</TableCell>
                            </TableRow>
                         </TableBody>
                     </Table>
@@ -993,7 +1136,7 @@ function ResultsDisplay({
                         <div className="rounded-md border">
                             <Table><TableHeader><TableRow>{summaryReportData.headers.map(h => <TableHead key={h} className={h !== '日期（年月）' ? 'text-right' : ''}>{h}</TableHead>)}</TableRow></TableHeader><TableBody>{summaryReportData.rows.map((row, i) => (<TableRow key={i}>{summaryReportData.headers.map(header => { const value = row[header]; const isClickable = header !== '日期（年月）' && header !== '總計' && typeof value === 'number' && value !== 0; let textColor = ''; if (typeof value === 'number') { if (value < 0) textColor = 'text-green-600'; } return (<TableCell key={header} className={`font-mono ${header !== '日期（年月）' ? 'text-right' : ''} ${textColor}`}>{isClickable ? <button onClick={() => handleSummaryCellClick(row['日期（年月）'] as string, header)} className="hover:underline hover:text-blue-500">{value.toLocaleString()}</button> : (typeof value === 'number' ? value.toLocaleString() : value)}</TableCell>);})}</TableRow>))}</TableBody></Table>
                         </div>
-                        <FixedItemsSummary combinedData={combinedData} />
+                        <FixedItemsSummary combinedData={combinedData} settings={settings} />
                       </TabsContent>
                       <TabsContent value="chart"><Card><CardHeader><CardTitle>信用卡消費分類統計</CardTitle><CardDescription>此圖表顯示信用卡的各類別總支出。 (僅計算正數金額)</CardDescription></CardHeader><CardContent><div style={{ width: '100%', height: 400 }}><ResponsiveContainer><BarChart layout="vertical" data={categoryChartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" /><XAxis type="number" /><YAxis dataKey="name" type="category" width={80} /><Tooltip formatter={(v: number) => v.toLocaleString()} /><Legend /><Bar dataKey="total" fill="hsl(var(--chart-1))" name="總支出" /></BarChart></ResponsiveContainer></div></CardContent></Card></TabsContent>
                     </Tabs>
@@ -1057,6 +1200,7 @@ export function FinanceFlowClient() {
             categoryRules: savedSettings.categoryRules?.length ? savedSettings.categoryRules : DEFAULT_SETTINGS.categoryRules,
             quickFilters: savedSettings.quickFilters?.length ? savedSettings.quickFilters : DEFAULT_SETTINGS.quickFilters,
             cashTransactionDescriptions: savedSettings.cashTransactionDescriptions?.length ? savedSettings.cashTransactionDescriptions : DEFAULT_SETTINGS.cashTransactionDescriptions,
+            descriptionGroupingRules: savedSettings.descriptionGroupingRules?.length ? savedSettings.descriptionGroupingRules : DEFAULT_SETTINGS.descriptionGroupingRules,
         };
         setSettings(mergedSettings);
     } else if (user && !savedSettings && !isLoadingSettings) {

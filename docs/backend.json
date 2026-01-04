@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "CreditCardTransaction": {
@@ -170,6 +171,24 @@
           "type": "array",
           "items": { "type": "string" },
           "description": "A list of predefined descriptions for cash transactions."
+        },
+        "descriptionGroupingRules": {
+          "type": "array",
+          "description": "Rules for grouping transaction descriptions in reports.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "groupName": {
+                "type": "string",
+                "description": "The name of the group, e.g., '汽車'."
+              },
+              "keywords": {
+                "type": "string",
+                "description": "A comma-separated list of keywords to identify items belonging to this group."
+              }
+            },
+            "required": ["groupName", "keywords"]
+          }
         }
       }
     }
