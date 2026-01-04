@@ -231,6 +231,7 @@ export async function parseCreditCard(text: string): Promise<ParsedCreditDataWit
 
     if (rawDescription) {
       // Create a deterministic ID based on the most stable raw transaction content
+      // CRITICAL: The ID must NOT include the category, as the category can be changed by the user.
       const idString = `${transactionDate}-${postingDate}-${rawDescription}-${amount}`;
       const id = await sha1(idString);
 
@@ -240,7 +241,7 @@ export async function parseCreditCard(text: string): Promise<ParsedCreditDataWit
         postingDate,
         description: rawDescription,
         amount,
-        category, // This might be an initially parsed category, or empty
+        category: category, // This might be an initially parsed category, or empty
         bankCode,
       });
     }
@@ -292,7 +293,7 @@ export async function parseDepositAccount(text: string): Promise<DepositData[]> 
       const withdraw = parts[2]?.replace(/,/g, '').trim() ?? '';
       const deposit = parts[3]?.replace(/,/g, '').trim() ?? '';
       const amount = withdraw ? parseFloat(withdraw) : (deposit ? -parseFloat(deposit) : 0);
-      const remark = parts.length > 5 ? (parts.slice(5).join(' ').trim() ?? '') : '';
+      const remark = parts.length > 5 ? (parts[5]?.trim() ?? '') : '';
 
       if (!rawDescription && !amount) continue;
 

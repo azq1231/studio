@@ -103,7 +103,14 @@ export async function processBankStatement(
             // Process credit card entries by applying rules
             rawCreditParsed.forEach(c => { if(c.category) detectedCategories.add(c.category) });
             const processedCreditPromises = rawCreditParsed.map(entry => processSingleCreditEntry(entry, replacementRules, categoryRules));
-            allCreditData = (await Promise.all(processedCreditPromises)).filter((e): e is CreditData => e !== null);
+            const processedCreditData = (await Promise.all(processedCreditPromises)).filter((e): e is CreditData => e !== null);
+            
+            // When merging, give priority to the newly parsed data in case of ID collision
+            // This is less common now with stable IDs, but is a safeguard.
+            const creditDataMap = new Map<string, CreditData>();
+            processedCreditData.forEach(item => creditDataMap.set(item.id, item));
+            allCreditData = Array.from(creditDataMap.values());
+
 
             // Process deposit account entries by applying rules
             const processedDepositPromises = rawDepositParsed.map(async (entry) => {
