@@ -8,7 +8,7 @@ import { processBankStatement } from '@/app/actions';
 import type { CreditData, DepositData, CashData } from '@/lib/parser';
 import { StatementImporter } from '@/components/statement-importer';
 import { SettingsManager, DEFAULT_SETTINGS, type AppSettings } from '@/components/finance-flow/settings-manager';
-import { ResultsDisplay } from '@/components/finance-flow/results-display';
+import { ResultsDisplay, CombinedData } from '@/components/finance-flow/results-display';
 import { FixedItemsSummary } from '@/components/finance-flow/fixed-items-summary';
 
 
@@ -108,8 +108,7 @@ export function FinanceFlowClient() {
     }
 
     // Sanitize data before saving to prevent Firestore errors with `undefined`.
-    const sanitizedSettings = JSON.parse(JSON.stringify(newSettings));
-
+    const sanitizedSettings = JSON.parse(JSON.stringify(newSettings, (key, value) => value === undefined ? null : value));
 
     try {
       await setDoc(settingsDocRef, sanitizedSettings, { merge: true });
@@ -267,16 +266,34 @@ export function FinanceFlowClient() {
 
   const isLoadingData = isLoadingCredit || isLoadingDeposit || isLoadingCash || (user && isLoadingSettings);
   
-  const combinedData = useMemo(() => {
-    const combined = [];
-    combined.push(...creditData.map(d => ({ ...d, source: '信用卡' })));
-    combined.push(...depositData.map(d => ({ ...d, source: '活存帳戶' })));
-    combined.push(...cashData.map(d => ({ ...d, source: '現金' })));
+  const combinedData: CombinedData[] = useMemo(() => {
+    const combined: CombinedData[] = [];
+    combined.push(...creditData.map(d => ({ ...d, source: '信用卡' as const })));
+    combined.push(...depositData.map(d => ({ ...d, source: '活存帳戶' as const })));
+    combined.push(...cashData.map(d => ({ ...d, source: '現金' as const })));
     return combined;
   }, [creditData, depositData, cashData]);
 
-  const hasData = combinedData.length > 0;
+  const hasData = useMemo(() => combinedData.length > 0, [combinedData]);
   const hasFixedItems = useMemo(() => combinedData.some(d => d.category === '固定'), [combinedData]);
+  
+  // Logic to determine the default tab after data loading, used in useEffect
+  const defaultTab = useMemo(() => {
+    if (!hasData) return "importer";
+    if (creditData.length > 0) return "results";
+    if (depositData.length > 0) return "results";
+    if (cashData.length > 0) return "results";
+    return "importer";
+  }, [hasData, creditData.length, depositData.length, cashData.length]);
+
+  // Effect to switch tab only after initial data load
+  useEffect(() => {
+    if (!isLoadingData && hasData && activeTab === "importer") {
+      setActiveTab(defaultTab);
+    }
+  }, [isLoadingData, hasData, activeTab, defaultTab]);
+
+
   const showResults = hasProcessed || (!isUserLoading && hasData && !isLoadingData);
 
   return (

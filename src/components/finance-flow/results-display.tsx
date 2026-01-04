@@ -116,7 +116,11 @@ export function ResultsDisplay({
     const [summarySelectedCategories, setSummarySelectedCategories] = useState<string[]>([]);
     const [isSummaryFilterOpen, setIsSummaryFilterOpen] = useState(false);
     
-    useEffect(() => { if (hasProcessed) setSummarySelectedCategories(settings.availableCategories); }, [hasProcessed, settings.availableCategories]);
+    useEffect(() => { 
+        if (hasProcessed || creditData.length > 0 || depositData.length > 0 || cashData.length > 0) {
+            setSummarySelectedCategories(settings.availableCategories); 
+        }
+    }, [hasProcessed, settings.availableCategories, creditData, depositData, cashData]);
     
     const handleCreditSort = (key: keyof CreditData) => { setCreditPage(1); if (creditSortKey === key) setCreditSortDirection(prev => prev === 'asc' ? 'desc' : 'asc'); else { setCreditSortKey(key); setCreditSortDirection('desc'); } };
     const handleDepositSort = (key: keyof DepositData) => { setDepositPage(1); if (depositSortKey === key) setDepositSortDirection(prev => prev === 'asc' ? 'desc' : 'asc'); else { setDepositSortKey(key); setDepositSortDirection('desc'); } };
@@ -315,33 +319,6 @@ export function ResultsDisplay({
                         <div className="rounded-md border">
                             <Table><TableHeader><TableRow>{summaryReportData.headers.map(h => <TableHead key={h} className={h !== '日期（年月）' ? 'text-right' : ''}>{h}</TableHead>)}</TableRow></TableHeader><TableBody>{summaryReportData.rows.map((row, i) => (<TableRow key={i}>{summaryReportData.headers.map(header => { const value = row[header]; const isClickable = header !== '日期（年月）' && header !== '總計' && typeof value === 'number' && value !== 0; let textColor = ''; if (typeof value === 'number') { if (value < 0) textColor = 'text-green-600'; } return (<TableCell key={header} className={`font-mono ${header !== '日期（年月）' ? 'text-right' : ''} ${textColor}`}>{isClickable ? <button onClick={() => handleSummaryCellClick(row['日期（年月）'] as string, header)} className="hover:underline hover:text-blue-500">{value.toLocaleString()}</button> : (typeof value === 'number' ? value.toLocaleString() : value)}</TableCell>);})}</TableRow>))}</TableBody></Table>
                         </div>
-                        {summaryReportData.fixedItemsYearly.length > 0 && (
-                            <Card className="mt-6">
-                                <CardHeader>
-                                    <CardTitle>固定項目彙總</CardTitle>
-                                    <CardDescription>此處僅加總「固定」分類的項目。</CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
-                                            <h4 className="font-semibold mb-2">年度總計</h4>
-                                            <Table>
-                                                <TableHeader><TableRow><TableHead>年份</TableHead><TableHead className="text-right">總金額</TableHead></TableRow></TableHeader>
-                                                <TableBody>
-                                                    {summaryReportData.fixedItemsYearly.map(([year, total]) => (
-                                                        <TableRow key={year}><TableCell>{year}</TableCell><TableCell className="text-right font-mono">{total.toLocaleString()}</TableCell></TableRow>
-                                                    ))}
-                                                </TableBody>
-                                            </Table>
-                                        </div>
-                                        <div>
-                                            <h4 className="font-semibold mb-2">每月平均</h4>
-                                            <p className="text-2xl font-bold">{summaryReportData.fixedAverageMonthly.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        )}
                       </TabsContent>
                     </Tabs>
                   </>
