@@ -161,9 +161,9 @@ export function FixedItemsSummary({ combinedData, settings }: { combinedData: Co
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead className="sticky left-0 bg-background/95 backdrop-blur-sm z-10 w-[250px]">項目</TableHead>
-                                {months.map(m => <TableHead key={m} className="text-right">{m}</TableHead>)}
-                                <TableHead className="text-right sticky right-0 bg-background/95 backdrop-blur-sm z-10">年度總計</TableHead>
+                                <TableHead className="sticky left-0 bg-background/95 backdrop-blur-sm z-10 w-[250px] px-2">項目</TableHead>
+                                {months.map(m => <TableHead key={m} className="text-right px-2">{m}</TableHead>)}
+                                <TableHead className="text-right sticky right-0 bg-background/95 backdrop-blur-sm z-10 px-2">年度總計</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -173,7 +173,7 @@ export function FixedItemsSummary({ combinedData, settings }: { combinedData: Co
                                         className={cn(row.isGroup && "bg-muted/50 font-bold hover:bg-muted/60", row.isGroup && expandedGroups[row.description] && "border-b-0")}
                                         onClick={() => row.isGroup && toggleGroup(row.description)}
                                     >
-                                        <TableCell className="font-medium sticky left-0 bg-inherit backdrop-blur-sm z-10">
+                                        <TableCell className="font-medium sticky left-0 bg-inherit backdrop-blur-sm z-10 px-2">
                                             <div className="flex items-center gap-2">
                                                 {row.isGroup ? (
                                                      expandedGroups[row.description] ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />
@@ -182,21 +182,21 @@ export function FixedItemsSummary({ combinedData, settings }: { combinedData: Co
                                             </div>
                                         </TableCell>
                                         {Array.from({ length: 12 }).map((_, i) => (
-                                            <TableCell key={i} className="text-right font-mono">
+                                            <TableCell key={i} className="text-right font-mono px-2">
                                                 {(row[i as keyof typeof row] as number || 0) !== 0 ? (row[i as keyof typeof row] as number).toLocaleString() : '-'}
                                             </TableCell>
                                         ))}
-                                        <TableCell className="text-right font-mono font-bold sticky right-0 bg-inherit backdrop-blur-sm z-10">{row.total.toLocaleString()}</TableCell>
+                                        <TableCell className="text-right font-mono font-bold sticky right-0 bg-inherit backdrop-blur-sm z-10 px-2">{row.total.toLocaleString()}</TableCell>
                                     </TableRow>
                                     {row.isGroup && expandedGroups[row.description] && row.items.map(item => (
                                          <TableRow key={item.description} className="hover:bg-muted/30">
-                                             <TableCell className="font-normal sticky left-0 bg-inherit backdrop-blur-sm z-10 pl-12">{item.description}</TableCell>
+                                             <TableCell className="font-normal sticky left-0 bg-inherit backdrop-blur-sm z-10 pl-10 px-2">{item.description}</TableCell>
                                              {Array.from({ length: 12 }).map((_, i) => (
-                                                 <TableCell key={i} className="text-right font-mono text-sm">
+                                                 <TableCell key={i} className="text-right font-mono text-sm px-2">
                                                      {(item[i as keyof typeof item] as number || 0) !== 0 ? (item[i as keyof typeof item] as number).toLocaleString() : '-'}
                                                  </TableCell>
                                              ))}
-                                             <TableCell className="text-right font-mono font-bold sticky right-0 bg-inherit backdrop-blur-sm z-10 text-sm">{item.total.toLocaleString()}</TableCell>
+                                             <TableCell className="text-right font-mono font-bold sticky right-0 bg-inherit backdrop-blur-sm z-10 text-sm px-2">{item.total.toLocaleString()}</TableCell>
                                          </TableRow>
                                     ))}
                                 </React.Fragment>
@@ -204,11 +204,11 @@ export function FixedItemsSummary({ combinedData, settings }: { combinedData: Co
                         </TableBody>
                         <TableBody>
                            <TableRow className="bg-muted hover:bg-muted font-bold border-t-2 border-primary">
-                               <TableCell className="sticky left-0 bg-muted/95 backdrop-blur-sm z-10">每月總計</TableCell>
+                               <TableCell className="sticky left-0 bg-muted/95 backdrop-blur-sm z-10 px-2">每月總計</TableCell>
                                {fixedItemsData.monthlyTotals.map((total, i) => (
-                                   <TableCell key={i} className="text-right font-mono">{total > 0 ? total.toLocaleString() : '-'}</TableCell>
+                                   <TableCell key={i} className="text-right font-mono px-2">{total > 0 ? total.toLocaleString() : '-'}</TableCell>
                                ))}
-                               <TableCell className="text-right font-mono sticky right-0 bg-muted/95 backdrop-blur-sm z-10">{fixedItemsData.grandTotal > 0 ? fixedItemsData.grandTotal.toLocaleString() : '-'}</TableCell>
+                               <TableCell className="text-right font-mono sticky right-0 bg-muted/95 backdrop-blur-sm z-10 px-2">{fixedItemsData.grandTotal > 0 ? fixedItemsData.grandTotal.toLocaleString() : '-'}</TableCell>
                            </TableRow>
                         </TableBody>
                     </Table>
