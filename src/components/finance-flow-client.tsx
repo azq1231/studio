@@ -798,9 +798,9 @@ function ResultsDisplay({
         })
         .sort((a, b) => {
             try {
-                return parse(a['日期（年月）'] as string, 'yyyy年M月', new Date()).getTime() - parse(b['日期（年月）'] as string, 'yyyy年M月', new Date()).getTime();
+                return parse(b['日期（年月）'] as string, 'yyyy年M月', new Date()).getTime() - parse(a['日期（年月）'] as string, 'yyyy年M月', new Date()).getTime();
             } catch {
-                return (a['日期（年月）'] as string).localeCompare(b['日期（年月）'] as string);
+                return (b['日期（年月）'] as string).localeCompare(a['日期（年月）'] as string);
             }
         });
         
