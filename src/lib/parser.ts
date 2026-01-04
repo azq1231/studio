@@ -291,20 +291,21 @@ export async function parseDepositAccount(text: string): Promise<DepositData[]> 
         } catch {}
       }
 
-      const parts = line.split('\t');
+      const parts = line.split(/\s+/); // Split by whitespace instead of tab
       if (parts.length < 2) continue;
 
-      const rawDescription = parts[1]?.trim() ?? '';
-      const withdraw = parts[2]?.replace(/,/g, '').trim() ?? '';
-      const deposit = parts[3]?.replace(/,/g, '').trim() ?? '';
-      const amount = withdraw ? parseFloat(withdraw) : (deposit ? -parseFloat(deposit) : 0);
-      const remark = parts.length > 5 ? (parts[5]?.trim() ?? '') : '';
+      const time = parts[0];
+      const description = parts[1];
+      const withdraw = parts[2]?.replace(/,/g, '') || '';
+      const deposit = parts[3]?.replace(/,/g, '') || '';
+      const balance = parts[4]?.replace(/,/g, '') || '';
+      const remark = parts.slice(5).join(' '); // Join the rest as remark
       
-      const description = rawDescription;
+      const amount = withdraw ? parseFloat(withdraw) : (deposit ? -parseFloat(deposit) : 0);
       
       if (!description && !amount) continue;
 
-      const idString = `${currentDate}-${description}-${amount}-${remark}`;
+      const idString = `${currentDate}-${time}-${description}-${amount}-${remark}`;
       const id = await sha1(idString);
 
       results.push({
@@ -324,16 +325,32 @@ export async function parseDepositAccount(text: string): Promise<DepositData[]> 
 
 export const getCreditDisplayDate = (dateString: string) => {
     try {
-        if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(dateString)) return dateString;
-        if (!/^\d{1,2}\/\d{1,2}$/.test(dateString)) return dateString;
+        // If the date is already in yyyy/MM/dd format, return it directly.
+        if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(dateString)) {
+            return dateString;
+        }
+        // If the date is not in MM/dd format, return it as is to avoid errors.
+        if (!/^\d{1,2}\/\d{1,2}$/.test(dateString)) {
+            return dateString;
+        }
+
         const now = new Date();
         const currentYear = now.getFullYear();
         const currentMonth = now.getMonth();
         const parsedDate = parse(dateString, 'MM/dd', new Date());
         const transactionMonth = parsedDate.getMonth();
-        const dateObj = new Date(new Date(parsedDate).setFullYear(transactionMonth > currentMonth ? currentYear - 1 : currentYear));
+        
+        // If the transaction month is later in the year than the current month,
+        // it likely belongs to the previous year.
+        const yearToSet = transactionMonth > currentMonth ? currentYear - 1 : currentYear;
+        
+        const dateObj = new Date(parsedDate);
+        dateObj.setFullYear(yearToSet);
+        
         return format(dateObj, 'yyyy/MM/dd');
     } catch {
+        // Return original string if any parsing fails.
         return dateString;
     }
 };
+
