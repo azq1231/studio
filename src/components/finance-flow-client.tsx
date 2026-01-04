@@ -502,9 +502,8 @@ const cashTransactionSchema = z.object({
     date: z.date({ required_error: "請選擇日期" }),
     description: z.string().min(1, "請輸入交易項目"),
     category: z.string().min(1, "請選擇類型"),
-    amount: z.number({ required_error: "請輸入金額", invalid_type_error: "請輸入有效數字" }).min(1, "金額必須大於 0"),
+    amount: z.number({ required_error: "請輸入金額", invalid_type_error: "請輸入有效數字" }),
     notes: z.string().optional(),
-    type: z.enum(['expense', 'income']).default('expense'),
 });
 type CashTransactionFormData = z.infer<typeof cashTransactionSchema>;
 
@@ -578,18 +577,18 @@ function CashTransactionForm({
     user
 }: {
     settings: AppSettings;
-    onSubmit: (data: Omit<CashData, 'id'| 'amount'> & {amount: number, type: 'expense' | 'income'}) => void;
+    onSubmit: (data: Omit<CashData, 'id'>) => void;
     user: User | null;
 }) {
     const form = useForm<CashTransactionFormData>({
         resolver: zodResolver(cashTransactionSchema),
-        defaultValues: { description: '', category: '', notes: '', type: 'expense' },
+        defaultValues: { description: '', category: '', notes: '' },
     });
     const { formState: { isSubmitSuccessful } } = form;
     
     useEffect(() => {
         if (isSubmitSuccessful) {
-            form.reset({ description: '', category: '', notes: '', type: 'expense', date: undefined, amount: undefined });
+            form.reset({ description: '', category: '', notes: '', date: undefined, amount: undefined });
         }
     }, [isSubmitSuccessful, form]);
     
@@ -600,7 +599,6 @@ function CashTransactionForm({
             category: values.category,
             amount: values.amount,
             notes: values.notes,
-            type: values.type,
         });
     };
 
@@ -632,7 +630,7 @@ function CashTransactionForm({
                                 </Select>
                                 <FormMessage /></FormItem>
                             )} />
-                            <FormField control={form.control} name="amount" render={({ field }) => <FormItem><FormLabel>金額</FormLabel><FormControl><Input type="number" placeholder="120" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)}/></FormControl><FormMessage /></FormItem>} />
+                            <FormField control={form.control} name="amount" render={({ field }) => <FormItem><FormLabel>金額 (收入請填負數)</FormLabel><FormControl><Input type="number" placeholder="支出填 120, 收入填 -120" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)}/></FormControl><FormMessage /></FormItem>} />
                             <FormField control={form.control} name="category" render={({ field }) => <FormItem><FormLabel>類型</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue placeholder="選擇一個類型" /></SelectTrigger></FormControl><SelectContent>{settings.availableCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>} />
                             <FormField control={form.control} name="notes" render={({ field }) => <FormItem><FormLabel>備註</FormLabel><FormControl><Input placeholder="（選填）" {...field} /></FormControl><FormMessage /></FormItem>} />
                         </div>
@@ -652,7 +650,7 @@ function ResultsDisplay({
     creditData, depositData, cashData, settings, onAddCashTransaction, onUpdateTransaction, onDeleteTransaction, hasProcessed, user
 }: {
     creditData: CreditData[]; depositData: DepositData[]; cashData: CashData[]; settings: AppSettings;
-    onAddCashTransaction: (data: Omit<CashData, 'id' | 'amount'> & {amount: number, type: 'expense' | 'income'}) => void;
+    onAddCashTransaction: (data: Omit<CashData, 'id'>) => void;
     onUpdateTransaction: (id: string, field: keyof any, value: string | number, type: 'credit' | 'deposit' | 'cash') => void;
     onDeleteTransaction: (id: string, type: 'credit' | 'deposit' | 'cash') => void;
     hasProcessed: boolean; user: User | null;
@@ -1016,13 +1014,11 @@ export function FinanceFlowClient() {
     setActiveTab("results");
   }, [user, firestore, toast, settings, handleSaveSettings]);
 
-  const handleAddCashTransaction = useCallback(async (newTransactionData: Omit<CashData, 'id' | 'amount'> & {amount: number, type: 'expense' | 'income'}) => {
+  const handleAddCashTransaction = useCallback(async (newTransactionData: Omit<CashData, 'id'>) => {
     if (!user || !firestore) { toast({ variant: 'destructive', title: '錯誤', description: '請先登入' }); return; }
-    const amount = newTransactionData.type === 'expense' ? newTransactionData.amount : -newTransactionData.amount;
-    const { type, ...transData } = newTransactionData;
-    const idString = `${transData.date}-${transData.description}-${amount}-${Date.now()}`;
+    const idString = `${newTransactionData.date}-${newTransactionData.description}-${newTransactionData.amount}-${Date.now()}`;
     const id = await sha1(idString);
-    const newTransaction: CashData = { ...transData, id, amount };
+    const newTransaction: CashData = { ...newTransactionData, id };
     try {
       const cashCollectionRef = collection(firestore, 'users', user.uid, 'cashTransactions');
       await setDoc(doc(cashCollectionRef, newTransaction.id), { ...newTransaction, createdAt: serverTimestamp() });
@@ -1156,6 +1152,8 @@ export function FinanceFlowClient() {
     </Tabs>
   );
 }
+
+    
 
     
 
