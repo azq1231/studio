@@ -152,44 +152,68 @@ export async function parseCreditCard(text: string): Promise<RawCreditData[]> {
     const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
     const results: RawCreditData[] = [];
 
+    const dateRegex = /^\d{1,2}\/\d{1,2}$/;
+    const amountRegex = /^-?[\d,]+(\.\d+)?$/;
+
     for (const line of lines) {
-        const parts = line.split(/\s+/);
+        const parts = line.split(/\s+/).filter(Boolean);
         if (parts.length < 3) continue;
 
         let transactionDate = '';
         let postingDate = '';
         let description = '';
         let amount = 0;
-        let bankCode = '';
-        let initialCategory = '';
+        let bankCode: string | undefined = undefined;
 
-        const dateRegex = /^\d{1,2}\/\d{1,2}$/;
+        // 1. Identify date(s)
         if (dateRegex.test(parts[0])) {
             transactionDate = parts[0];
-            postingDate = (dateRegex.test(parts[1])) ? parts[1] : transactionDate;
+            let descStartIndex = 1;
+            if (dateRegex.test(parts[1])) {
+                postingDate = parts[1];
+                descStartIndex = 2;
+            } else {
+                postingDate = transactionDate;
+            }
 
-            const amountStr = parts[parts.length - 1].replace(/,/g, '');
-            const potentialAmount = parseFloat(amountStr);
-
-            if (!isNaN(potentialAmount)) {
-                amount = potentialAmount;
-                const descStartIndex = dateRegex.test(parts[1]) ? 2 : 1;
-                let descEndIndex = parts.length - 1;
+            // 2. Identify amount from the end
+            const lastPart = parts[parts.length - 1];
+            if (amountRegex.test(lastPart)) {
+                amount = parseFloat(lastPart.replace(/,/g, ''));
                 
-                // The text between the date(s) and the amount is the description
+                // 3. Identify potential bankCode (the part before amount)
+                const secondLastPart = parts[parts.length - 2];
+                let descEndIndex = parts.length - 1;
+
+                // Check if the second to last part is NOT part of a multi-word description
+                // by seeing if it's purely numeric or alphanumeric, common for remarks.
+                // This is a heuristic. A more robust way might need more rules.
+                const potentialRemarkRegex = /^[a-zA-Z0-9/.-]+$/;
+                if (potentialRemarkRegex.test(secondLastPart) && isNaN(parseFloat(secondLastPart))) {
+                   // It's likely a remark/bank code.
+                   const thirdLastPart = parts.length > 3 ? parts[parts.length - 3] : '';
+                   const thirdLastIsNumeric = !isNaN(parseFloat(thirdLastPart));
+
+                   // Avoid grabbing final word of a description like 'UBER TRIP 12345'
+                   // If the word before the potential remark is not numeric, it's safer to assume it's a remark.
+                   if (!thirdLastIsNumeric) {
+                     bankCode = secondLastPart;
+                     descEndIndex = parts.length - 2;
+                   }
+                }
+
                 description = parts.slice(descStartIndex, descEndIndex).join(' ');
 
             } else {
                 continue; // Cannot determine amount
             }
         } else {
-             continue; // Line doesn't start with a date
+            continue; // Line doesn't start with a date
         }
-        
+
         if (!description || !amount) continue;
 
-        // Use only the most stable fields for ID generation
-        const idString = `${transactionDate}-${description}-${amount}`;
+        const idString = `${transactionDate}-${description}-${bankCode || ''}-${amount}`;
         const id = await sha1(idString);
 
         results.push({
@@ -199,7 +223,7 @@ export async function parseCreditCard(text: string): Promise<RawCreditData[]> {
             description,
             amount,
             bankCode,
-            initialCategory,
+            initialCategory: '', // No initial category from this format
         });
     }
     return results;
@@ -249,40 +273,63 @@ export async function parseDepositAccount(text: string): Promise<DepositData[]> 
         }
     }
     
-    const entryRegex = /^(?<time>\d{2}:\d{2}:\d{2})\s+(?<desc>.*?)\s+(?<withdrawal>[\d,.-]+)\s+(?<deposit>[\d,.-]*)\s+(?<balance>[\d,.-]+)\s+(?<remark>.*)$/;
-
     for (const entry of mergedEntries) {
         if (!entry.date) continue;
         
-        const match = entry.content.match(entryRegex);
-        if (!match || !match.groups) continue;
-
-        let { time, desc, withdrawal, deposit, balance, remark } = match.groups;
+        let { content } = entry;
+        const parts = content.split(/\s+/).filter(Boolean);
         
-        const withdrawalAmount = parseFloat(withdrawal.replace(/,/g, '')) || 0;
-        const depositAmount = parseFloat(deposit.replace(/,/g, '')) || 0;
-        const amount = withdrawalAmount > 0 ? withdrawalAmount : (depositAmount > 0 ? -depositAmount : 0);
+        if (parts.length < 4) continue;
+
+        // Reverse-peel strategy
+        let finalRemark = parts.pop() || '';
+        let balanceStr = parts.pop() || '';
+        let depositStr = parts.pop() || '';
+        let withdrawalStr = parts.pop() || '';
+
+        // Handle case where deposit is empty (two spaces)
+        if (!/^\d/.test(depositStr) && /^\d/.test(withdrawalStr)) {
+            depositStr = withdrawalStr;
+            withdrawalStr = depositStr;
+        }
+        
+        const time = parts.shift() || '';
+        let description = parts.join(' ');
+        
+        const withdrawalAmount = parseFloat(withdrawalStr.replace(/,/g, '')) || 0;
+        const depositAmount = parseFloat(depositStr.replace(/,/g, '')) || 0;
+        let amount = 0;
+        if (withdrawalAmount > 0) {
+            amount = withdrawalAmount;
+        } else if (depositAmount > 0) {
+            amount = -depositAmount;
+        }
 
         if (amount === 0) continue;
 
-        // SPECIAL HANDLING for "行銀非約跨優"
-        if (desc.includes('行銀非約跨優')) {
-            const originalDesc = desc;
-            desc = remark; // The remark becomes the description
-            remark = originalDesc; // The original description becomes the remark/bankCode
+        let finalDescription = description;
+        let finalBankCode = finalRemark;
+
+        const specialTransferMarker = '行銀非約跨優';
+        if (description.includes(specialTransferMarker)) {
+            finalDescription = finalRemark; // The remark is the real description
+            
+            // The account number part is what's left in the description after the marker
+            const markerIndex = description.indexOf(specialTransferMarker);
+            const accountInfo = description.substring(markerIndex + specialTransferMarker.length).trim();
+            finalBankCode = accountInfo;
         }
 
-        // The ID should be based on the final, intended data, but before replacement rules
-        const idString = `${entry.date}-${time}-${desc}-${amount}`;
+        const idString = `${entry.date}-${time}-${finalDescription}-${amount}`;
         const id = await sha1(idString);
 
         results.push({
             id,
             date: entry.date,
             category: '', 
-            description: desc,
+            description: finalDescription,
             amount,
-            bankCode: remark
+            bankCode: finalBankCode,
         });
     }
 
@@ -322,6 +369,7 @@ export const getCreditDisplayDate = (dateString: string) => {
 };
 
     
+
 
 
 
