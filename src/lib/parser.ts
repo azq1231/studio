@@ -163,45 +163,42 @@ export async function parseCreditCard(text: string): Promise<RawCreditData[]> {
         let bankCode = '';
         let initialCategory = '';
 
-        // Case 1: 交易日 入帳日 類別 描述 金額 備註
-        // 11/14 11/15 吃 摩斯漢堡 150 12345
         const dateRegex = /^\d{1,2}\/\d{1,2}$/;
-        if (dateRegex.test(parts[0]) && dateRegex.test(parts[1])) {
+        if (dateRegex.test(parts[0])) {
             transactionDate = parts[0];
-            postingDate = parts[1];
-            
-            const lastPart = parts[parts.length - 1].replace(/,/g, '');
-            const secondLastPart = parts[parts.length - 2].replace(/,/g, '');
+            postingDate = (dateRegex.test(parts[1])) ? parts[1] : transactionDate;
 
-            if (!isNaN(parseFloat(lastPart)) && isNaN(parseFloat(secondLastPart))) {
-                 amount = parseFloat(lastPart);
-                 initialCategory = parts[2];
-                 description = parts.slice(3, -1).join(' ');
-            } else if (!isNaN(parseFloat(lastPart)) && !isNaN(parseFloat(secondLastPart))) {
-                // Format: ... DESC AMOUNT BANK_CODE
-                amount = parseFloat(secondLastPart);
-                bankCode = lastPart;
-                initialCategory = parts[2];
-                description = parts.slice(3, -2).join(' ');
-            }
-        }
-        // Case 2: 交易日 描述 金額
-        // 11/14 摩斯漢堡 150
-        else if (dateRegex.test(parts[0])) {
-            transactionDate = parts[0];
-            postingDate = transactionDate; // Assume posting date is the same
+            const amountStr = parts[parts.length - 1].replace(/,/g, '');
+            const potentialAmount = parseFloat(amountStr);
 
-            const lastPart = parts[parts.length - 1].replace(/,/g, '');
-            if (!isNaN(parseFloat(lastPart))) {
-                amount = parseFloat(lastPart);
-                description = parts.slice(1, -1).join(' ');
+            if (!isNaN(potentialAmount)) {
+                amount = potentialAmount;
+                const descStartIndex = dateRegex.test(parts[1]) ? 2 : 1;
+                let descEndIndex = parts.length - 1;
+
+                // Check if the word before the amount is a category or part of the description
+                if (descEndIndex > descStartIndex) {
+                     const potentialCategory = parts[descStartIndex];
+                     // Simple check if it's a short word, likely a category. This can be improved.
+                     if (potentialCategory.length <= 5) {
+                         initialCategory = potentialCategory;
+                         description = parts.slice(descStartIndex + 1, descEndIndex).join(' ');
+                     } else {
+                         description = parts.slice(descStartIndex, descEndIndex).join(' ');
+                     }
+                }
+
+            } else {
+                continue; // Cannot determine amount
             }
+        } else {
+             continue; // Line doesn't start with a date
         }
         
         if (!description || !amount) continue;
 
         // Use only the most stable fields for ID generation
-        const idString = `${transactionDate}-${postingDate}-${description}-${amount}-${bankCode}`;
+        const idString = `${transactionDate}-${description}-${amount}`;
         const id = await sha1(idString);
 
         results.push({
@@ -231,7 +228,7 @@ export type CashData = {
   id: string;
   date: string;
   category: string;
-  description: string;
+  description:string;
   amount: number;
   notes?: string;
 };
@@ -255,27 +252,33 @@ export async function parseDepositAccount(text: string): Promise<DepositData[]> 
         if (transactionLineRegex.test(line)) {
             mergedEntries.push({ date: currentDate, content: line });
         } else if (mergedEntries.length > 0 && line) {
+            // This is a supplementary line, append it to the last entry's content
             const lastEntry = mergedEntries[mergedEntries.length - 1];
             lastEntry.content += ` ${line}`;
         }
     }
-
+    
     // Step 2: Process each merged entry using the reverse-peel strategy
     for (const entry of mergedEntries) {
         if (!entry.date) continue;
         
         let parts = entry.content.split(/\s+/).filter(Boolean);
-        if (parts.length < 5) continue; // Basic validation
+        if (parts.length < 4) continue; // Basic validation for time, desc, amount, balance
 
-        // 1. Peel off remark from the end
-        const remark = parts.pop() || '';
-        
+        // 1. Peel off remark from the end (if it exists)
+        // A remark is typically non-numeric, whereas balance is numeric.
+        const lastPart = parts[parts.length - 1];
+        let remark = '';
+        if (isNaN(parseFloat(lastPart.replace(/,/g, '')))) {
+            remark = parts.pop() || '';
+        }
+
         // 2. Peel off balance
-        parts.pop(); // Balance is not used, so just discard it
+        if (parts.length > 0) parts.pop(); // Balance is not used, so just discard it
 
         // 3. Peel off deposit and withdrawal, then determine the amount
-        const depositStr = parts.pop() || '';
-        const withdrawalStr = parts.pop() || '';
+        const depositStr = parts.length > 0 ? parts.pop() || '' : '';
+        const withdrawalStr = parts.length > 0 ? parts.pop() || '' : '';
         const withdrawalAmount = parseFloat(withdrawalStr.replace(/,/g, '')) || 0;
         const depositAmount = parseFloat(depositStr.replace(/,/g, '')) || 0;
         const amount = withdrawalAmount > 0 ? withdrawalAmount : (depositAmount > 0 ? -depositAmount : 0);
@@ -286,9 +289,16 @@ export async function parseDepositAccount(text: string): Promise<DepositData[]> 
         const time = parts.shift() || '';
 
         // 5. The rest is the description
-        const description = parts.join(' ');
+        let description = parts.join(' ');
         
         if (!description) continue;
+
+        // SPECIAL LOGIC for '行銀非約跨優'
+        if (description.includes('行銀非約跨優') && remark) {
+            const originalDescription = description;
+            description = remark; // Swap: Use the remark as the main description
+            remark = originalDescription; // The original description becomes the remark/bankCode
+        }
 
         const idString = `${entry.date}-${time}-${description}-${amount}`;
         const id = await sha1(idString);
@@ -339,6 +349,7 @@ export const getCreditDisplayDate = (dateString: string) => {
 };
 
     
+
 
 
 
