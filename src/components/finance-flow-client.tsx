@@ -209,8 +209,10 @@ function SettingsManager({
     const renderSortedCategoryFields = useMemo(() => {
         if (!sortKey) return categoryFields;
         return [...categoryFields].sort((a, b) => {
-            const aValue = settingsForm.getValues(`categoryRules.${categoryFields.findIndex(f => f.id === a.id)}.keyword`) || '';
-            const bValue = settingsForm.getValues(`categoryRules.${categoryFields.findIndex(f => f.id === b.id)}.keyword`) || '';
+            const aIndex = categoryFields.findIndex(f => f.id === a.id);
+            const bIndex = categoryFields.findIndex(f => f.id === b.id);
+            const aValue = settingsForm.getValues(`categoryRules.${aIndex}.${sortKey}`) || '';
+            const bValue = settingsForm.getValues(`categoryRules.${bIndex}.${sortKey}`) || '';
             const comparison = aValue.localeCompare(bValue, 'zh-Hant');
             return sortDirection === 'asc' ? comparison : -comparison;
         });
@@ -334,7 +336,10 @@ function SettingsManager({
                     <AccordionItem value="category">
                        <AccordionTrigger>分類規則</AccordionTrigger>
                        <AccordionContent>
-                          <CardDescription className="mb-4">設定交易項目關鍵字與對應的類型。處理報表時，將會自動帶入符合的第一個類型。</CardDescription>
+                          <div className="flex justify-between items-center mb-4">
+                            <CardDescription className="pr-4">設定交易項目關鍵字與對應的類型。處理報表時，將會自動帶入符合的第一個類型。</CardDescription>
+                            <Button type="button" variant="outline" size="sm" onClick={() => appendCategory({ keyword: '', category: '' })}><PlusCircle className="mr-2 h-4 w-4" />新增規則</Button>
+                          </div>
                           <div className="rounded-md border">
                             <Table>
                               <TableHeader><TableRow>
@@ -357,7 +362,6 @@ function SettingsManager({
                               </TableBody>
                             </Table>
                           </div>
-                          <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => appendCategory({ keyword: '', category: '' })}><PlusCircle className="mr-2 h-4 w-4" />新增分類規則</Button>
                        </AccordionContent>
                     </AccordionItem>
                     <AccordionItem value="quick-filters">
@@ -709,10 +713,10 @@ function ResultsDisplay({
 
     const summaryReportData = useMemo(() => {
         const monthlyData: Record<string, Record<string, number>> = {};
-        const categoriesInReport = new Set(summarySelectedCategories);
+        const categoriesToDisplay = settings.availableCategories.sort((a, b) => a.localeCompare(b, 'zh-Hant'));
     
         combinedData.forEach(transaction => {
-            if (!categoriesInReport.has(transaction.category)) {
+             if (!summarySelectedCategories.includes(transaction.category)) {
                 return;
             }
             try {
@@ -720,8 +724,6 @@ function ResultsDisplay({
                 if (!monthlyData[monthKey]) {
                     monthlyData[monthKey] = {};
                 }
-                
-                // This will sum both positive (expenses) and negative (income/credits) amounts
                 monthlyData[monthKey][transaction.category] = (monthlyData[monthKey][transaction.category] || 0) + transaction.amount;
     
             } catch(e) {
@@ -729,13 +731,12 @@ function ResultsDisplay({
             }
         });
     
-        const sortedCategories = Array.from(categoriesInReport).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
-        const headers = ['日期（年月）', ...sortedCategories, '總計'];
+        const headers = ['日期（年月）', ...categoriesToDisplay, '總計'];
         const rows = Object.entries(monthlyData).map(([month, categoryData]) => {
           let total = 0;
           const row: Record<string, string | number> = { '日期（年月）': month };
           
-          sortedCategories.forEach(cat => {
+          categoriesToDisplay.forEach(cat => {
             const value = categoryData[cat] || 0;
             row[cat] = value;
             total += value;
@@ -753,7 +754,7 @@ function ResultsDisplay({
         });
         
         return { headers, rows };
-    }, [combinedData, summarySelectedCategories]);
+    }, [combinedData, summarySelectedCategories, settings.availableCategories]);
 
     const categoryChartData = useMemo(() => {
         if (!creditData || creditData.length === 0) return [];
@@ -1005,7 +1006,8 @@ export function FinanceFlowClient() {
     if (!user || !firestore) { toast({ variant: 'destructive', title: '錯誤', description: '請先登入' }); return; }
     const amount = newTransactionData.type === 'expense' ? newTransactionData.amount : -newTransactionData.amount;
     const { type, ...transData } = newTransactionData;
-    const id = await sha1(`${transData.date}-${transData.description}-${amount}-${Date.now()}`);
+    const idString = `${transData.date}-${transData.description}-${amount}-${Date.now()}`;
+    const id = await sha1(idString);
     const newTransaction: CashData = { ...transData, id, amount };
     try {
       const cashCollectionRef = collection(firestore, 'users', user.uid, 'cashTransactions');
