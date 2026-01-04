@@ -14,7 +14,7 @@ import { ResultsDisplay } from '@/components/finance-flow/results-display';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Text, Settings, ClipboardCopy, FileText } from 'lucide-react';
+import { Text, Settings, ClipboardCopy, FileText, BarChart2 } from 'lucide-react';
 
 // =======================================================================
 // HELPER: sha1 (UNIVERSAL)
@@ -106,13 +106,24 @@ export function FinanceFlowClient() {
       return;
     }
 
+    // Sanitize data before saving to prevent Firestore errors with `undefined`.
+    const sanitizedSettings = { ...newSettings };
+    if (sanitizedSettings.replacementRules) {
+        sanitizedSettings.replacementRules = sanitizedSettings.replacementRules.map(rule => ({
+            ...rule,
+            notes: rule.notes ?? '', // Ensure notes is never undefined
+        }));
+    }
+
+
     try {
-      await setDoc(settingsDocRef, newSettings, { merge: true });
-      setSettings(newSettings); // Optimistically update local state
+      await setDoc(settingsDocRef, sanitizedSettings, { merge: true });
+      setSettings(sanitizedSettings); // Optimistically update local state with sanitized data
        if (!isInitial) {
          // toast({ title: "設定已儲存", description: "您的變更已成功同步到雲端。" });
        }
     } catch (e: any) {
+       console.error("Failed to save settings:", e);
        if (!isInitial) toast({ variant: "destructive", title: "儲存失敗", description: e.message || "無法將設定儲存到資料庫。" });
     }
   }, [user, firestore, settingsDocRef, toast]);
@@ -263,6 +274,10 @@ export function FinanceFlowClient() {
   const hasData = creditData.length > 0 || depositData.length > 0 || cashData.length > 0;
   const showResults = (hasProcessed && hasData) || (!isUserLoading && !hasProcessed && hasData && !isLoadingData);
 
+  const hasFixedItems = useMemo(() => {
+    return (creditData.some(d => d.category === '固定') || depositData.some(d => d.category === '固定') || cashData.some(d => d.category === '固定'));
+  }, [creditData, depositData, cashData]);
+
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
       <TabsList className="grid w-full grid-cols-3">
@@ -311,6 +326,8 @@ export function FinanceFlowClient() {
                 onDeleteTransaction={handleDeleteTransaction}
                 hasProcessed={hasProcessed}
                 user={user}
+                hasFixedItems={hasFixedItems}
+                onSwitchToAnalysisTab={() => setActiveTab('analysis')}
             />
         ) : (isLoadingData && !hasData) ? (
             <div className="space-y-4 pt-4">

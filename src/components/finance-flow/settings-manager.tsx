@@ -133,43 +133,8 @@ export function SettingsManager({
 
     const watchedValues = settingsForm.watch();
 
-    useEffect(() => {
-        const subscription = settingsForm.watch((value, { name, type }) => {
-            if (type === 'change') {
-                setIsDirty(true);
-            }
-        });
-        return () => subscription.unsubscribe();
-    }, [settingsForm]);
-
-    useEffect(() => {
-        if (!isDirty) return;
-
-        setIsSaving(true);
-        const debounceTimer = setTimeout(() => {
-            handleSaveSettings(watchedValues);
-        }, 1500); // 1.5 second debounce
-
-        return () => clearTimeout(debounceTimer);
-    }, [watchedValues, isDirty]);
-
-
-    useEffect(() => {
-        settingsForm.reset({
-            replacementRules: settings.replacementRules,
-            categoryRules: settings.categoryRules,
-            quickFilters: settings.quickFilters,
-            descriptionGroupingRules: settings.descriptionGroupingRules,
-        });
-    }, [settings, settingsForm]);
-
-    const { fields: replacementFields, append: appendReplacement, remove: removeReplacement } = useFieldArray({ control: settingsForm.control, name: 'replacementRules' });
-    const { fields: categoryFields, append: appendCategory, remove: removeCategory } = useFieldArray({ control: settingsForm.control, name: 'categoryRules' });
-    const { fields: quickFilterFields, append: appendQuickFilter, remove: removeQuickFilter } = useFieldArray({ control: settingsForm.control, name: "quickFilters" });
-    const { fields: groupingRuleFields, append: appendGroupingRule, remove: removeGroupingRule } = useFieldArray({ control: settingsForm.control, name: "descriptionGroupingRules" });
-
-
-    const handleSaveSettings = async (data: SettingsFormData) => {
+    const handleSaveSettings = useCallback(
+      (data: SettingsFormData) => {
         const keywords = new Set<string>();
         for (const rule of data.categoryRules) {
             if (keywords.has(rule.keyword)) {
@@ -190,44 +155,87 @@ export function SettingsManager({
         };
 
         setIsSaving(true);
-        await onSaveSettings(newSettings);
-        setIsSaving(false);
-        setIsDirty(false);
-    };
+        onSaveSettings(newSettings).then(() => {
+            setIsSaving(false);
+            setIsDirty(false);
+        });
+    }, [settings, onSaveSettings, toast]);
+
+    useEffect(() => {
+        const subscription = settingsForm.watch((value, { name, type }) => {
+            if (type === 'change') {
+                setIsDirty(true);
+            }
+        });
+        return () => subscription.unsubscribe();
+    }, [settingsForm.watch]);
+
+    useEffect(() => {
+        if (!isDirty) return;
+
+        setIsSaving(true);
+        const debounceTimer = setTimeout(() => {
+            handleSaveSettings(settingsForm.getValues());
+        }, 1500); // 1.5 second debounce
+
+        return () => clearTimeout(debounceTimer);
+    }, [isDirty, settingsForm, handleSaveSettings]);
+
+
+    useEffect(() => {
+        settingsForm.reset({
+            replacementRules: settings.replacementRules,
+            categoryRules: settings.categoryRules,
+            quickFilters: settings.quickFilters,
+            descriptionGroupingRules: settings.descriptionGroupingRules,
+        });
+    }, [settings, settingsForm]);
+
+    const { fields: replacementFields, append: appendReplacement, remove: removeReplacement } = useFieldArray({ control: settingsForm.control, name: 'replacementRules' });
+    const { fields: categoryFields, append: appendCategory, remove: removeCategory } = useFieldArray({ control: settingsForm.control, name: 'categoryRules' });
+    const { fields: quickFilterFields, append: appendQuickFilter, remove: removeQuickFilter } = useFieldArray({ control: settingsForm.control, name: "quickFilters" });
+    const { fields: groupingRuleFields, append: appendGroupingRule, remove: removeGroupingRule } = useFieldArray({ control: settingsForm.control, name: "descriptionGroupingRules" });
+
+
     
     const handleAddCategory = () => {
         if (newCategory && !settings.availableCategories.includes(newCategory)) {
-            setSettings(prev => ({ ...prev, availableCategories: [...prev.availableCategories, newCategory] }));
+            const newCategories = [...settings.availableCategories, newCategory];
+            setSettings(prev => ({ ...prev, availableCategories: newCategories }));
+            onSaveSettings({ ...settings, availableCategories: newCategories });
             setNewCategory('');
             toast({ title: '類型已新增', description: `「${newCategory}」已成功新增。` });
-            setIsDirty(true);
         } else if (settings.availableCategories.includes(newCategory)) {
             toast({ variant: 'destructive', title: '新增失敗', description: '此類型已存在。' });
         }
     };
 
     const handleRemoveCategory = (categoryToRemove: string) => {
-        setSettings(prev => ({...prev, availableCategories: prev.availableCategories.filter(c => c !== categoryToRemove)}));
-        settingsForm.setValue('categoryRules', settingsForm.getValues('categoryRules').filter(rule => rule.category !== categoryToRemove));
+        const newCategories = settings.availableCategories.filter(c => c !== categoryToRemove);
+        const newCategoryRules = settingsForm.getValues('categoryRules').filter(rule => rule.category !== categoryToRemove);
+        setSettings(prev => ({...prev, availableCategories: newCategories}));
+        settingsForm.setValue('categoryRules', newCategoryRules);
+        onSaveSettings({ ...settings, availableCategories: newCategories, categoryRules: newCategoryRules });
         toast({ title: '類型已刪除', description: `「${categoryToRemove}」已被移除。` });
-        setIsDirty(true);
     };
 
     const handleAddCashDescription = () => {
         if (newCashDescription && !settings.cashTransactionDescriptions.includes(newCashDescription)) {
-            setSettings(prev => ({ ...prev, cashTransactionDescriptions: [...prev.cashTransactionDescriptions, newCashDescription] }));
+            const newDescriptions = [...settings.cashTransactionDescriptions, newCashDescription];
+            setSettings(prev => ({ ...prev, cashTransactionDescriptions: newDescriptions }));
+            onSaveSettings({ ...settings, cashTransactionDescriptions: newDescriptions });
             setNewCashDescription('');
             toast({ title: '現金項目已新增', description: `「${newCashDescription}」已成功新增。` });
-            setIsDirty(true);
         } else if (settings.cashTransactionDescriptions.includes(newCashDescription)) {
             toast({ variant: 'destructive', title: '新增失敗', description: '此項目已存在。' });
         }
     };
 
     const handleRemoveCashDescription = (descriptionToRemove: string) => {
-        setSettings(prev => ({...prev, cashTransactionDescriptions: prev.cashTransactionDescriptions.filter(d => d !== descriptionToRemove)}));
+        const newDescriptions = settings.cashTransactionDescriptions.filter(d => d !== descriptionToRemove);
+        setSettings(prev => ({...prev, cashTransactionDescriptions: newDescriptions}));
+        onSaveSettings({ ...settings, cashTransactionDescriptions: newDescriptions });
         toast({ title: '現金項目已刪除', description: `「${descriptionToRemove}」已被移除。` });
-        setIsDirty(true);
     };
 
     const handleSort = (key: SortKey) => {
@@ -249,8 +257,8 @@ export function SettingsManager({
 
     const resetAllSettings = () => {
         setSettings(DEFAULT_SETTINGS);
-        toast({ title: '所有設定已重置為預設值', description: '變更將在幾秒後自動儲存。' });
-        setIsDirty(true);
+        onSaveSettings(DEFAULT_SETTINGS);
+        toast({ title: '所有設定已重置為預設值' });
     };
 
     const handleExportSettings = () => {
@@ -302,9 +310,9 @@ export function SettingsManager({
           }
 
           setSettings(importedSettings);
-          setIsDirty(true);
+          onSaveSettings(importedSettings);
 
-          toast({ title: '設定已成功匯入', description: '請檢查匯入的規則，變更將在幾秒後自動儲存。' });
+          toast({ title: '設定已成功匯入', description: '請檢查匯入的規則。' });
 
         } catch (error: any) {
           toast({ variant: 'destructive', title: '匯入失敗', description: error.message || '無法解析設定檔案，請確認檔案是否正確。' });
@@ -340,7 +348,7 @@ export function SettingsManager({
             </CardHeader>
             <CardContent>
               <Form {...settingsForm}>
-                <form className="space-y-6">
+                <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
                   <Accordion type="single" collapsible className="w-full" defaultValue="replacement">
                     <AccordionItem value="replacement">
                       <AccordionTrigger>取代規則</AccordionTrigger>
