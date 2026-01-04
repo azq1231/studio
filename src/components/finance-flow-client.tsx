@@ -127,7 +127,7 @@ function SettingsManager({
     setSettings,
 }: {
     onDeleteAllData: () => Promise<void>;
-    onSaveSettings: (newSettings: AppSettings) => Promise<void>;
+    onSaveSettings: (newSettings: AppSettings, isInitial?: boolean) => Promise<void>;
     isProcessing: boolean;
     user: User | null;
     settings: AppSettings;
@@ -138,6 +138,8 @@ function SettingsManager({
     const [newCashDescription, setNewCashDescription] = useState('');
     const [sortKey, setSortKey] = useState<SortKey | null>(null);
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+    const [isSaving, setIsSaving] = useState(false);
+    const [isDirty, setIsDirty] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const settingsForm = useForm<SettingsFormData>({
@@ -148,6 +150,29 @@ function SettingsManager({
             quickFilters: settings.quickFilters,
         }
     });
+
+    const watchedValues = settingsForm.watch();
+
+    useEffect(() => {
+        const subscription = settingsForm.watch((value, { name, type }) => {
+            if (type === 'change') {
+                setIsDirty(true);
+            }
+        });
+        return () => subscription.unsubscribe();
+    }, [settingsForm]);
+
+    useEffect(() => {
+        if (!isDirty) return;
+
+        setIsSaving(true);
+        const debounceTimer = setTimeout(() => {
+            handleSaveSettings(watchedValues);
+        }, 1500); // 1.5 second debounce
+
+        return () => clearTimeout(debounceTimer);
+    }, [watchedValues, isDirty]);
+
 
     useEffect(() => {
         settingsForm.reset({
@@ -170,6 +195,7 @@ function SettingsManager({
                     title: '儲存失敗',
                     description: `分類規則中的關鍵字 「${rule.keyword}」 重複了。請移除重複的項目後再儲存。`,
                 });
+                setIsSaving(false);
                 return;
             }
             keywords.add(rule.keyword);
@@ -179,8 +205,11 @@ function SettingsManager({
             ...settings,
             ...data,
         };
+
+        setIsSaving(true);
         await onSaveSettings(newSettings);
-        toast({ title: "設定已儲存", description: "您的規則已成功儲存到雲端。" });
+        setIsSaving(false);
+        setIsDirty(false);
     };
     
     const handleAddCategory = () => {
@@ -188,6 +217,7 @@ function SettingsManager({
             setSettings(prev => ({ ...prev, availableCategories: [...prev.availableCategories, newCategory] }));
             setNewCategory('');
             toast({ title: '類型已新增', description: `「${newCategory}」已成功新增。` });
+            setIsDirty(true);
         } else if (settings.availableCategories.includes(newCategory)) {
             toast({ variant: 'destructive', title: '新增失敗', description: '此類型已存在。' });
         }
@@ -197,6 +227,7 @@ function SettingsManager({
         setSettings(prev => ({...prev, availableCategories: prev.availableCategories.filter(c => c !== categoryToRemove)}));
         settingsForm.setValue('categoryRules', settingsForm.getValues('categoryRules').filter(rule => rule.category !== categoryToRemove));
         toast({ title: '類型已刪除', description: `「${categoryToRemove}」已被移除。` });
+        setIsDirty(true);
     };
 
     const handleAddCashDescription = () => {
@@ -204,6 +235,7 @@ function SettingsManager({
             setSettings(prev => ({ ...prev, cashTransactionDescriptions: [...prev.cashTransactionDescriptions, newCashDescription] }));
             setNewCashDescription('');
             toast({ title: '現金項目已新增', description: `「${newCashDescription}」已成功新增。` });
+            setIsDirty(true);
         } else if (settings.cashTransactionDescriptions.includes(newCashDescription)) {
             toast({ variant: 'destructive', title: '新增失敗', description: '此項目已存在。' });
         }
@@ -212,6 +244,7 @@ function SettingsManager({
     const handleRemoveCashDescription = (descriptionToRemove: string) => {
         setSettings(prev => ({...prev, cashTransactionDescriptions: prev.cashTransactionDescriptions.filter(d => d !== descriptionToRemove)}));
         toast({ title: '現金項目已刪除', description: `「${descriptionToRemove}」已被移除。` });
+        setIsDirty(true);
     };
 
     const handleSort = (key: SortKey) => {
@@ -233,7 +266,8 @@ function SettingsManager({
 
     const resetAllSettings = () => {
         setSettings(DEFAULT_SETTINGS);
-        toast({ title: '所有設定已重置為預設值', description: '請記得點擊儲存來保存變更。' });
+        toast({ title: '所有設定已重置為預設值', description: '變更將在幾秒後自動儲存。' });
+        setIsDirty(true);
     };
 
     const handleExportSettings = () => {
@@ -285,8 +319,9 @@ function SettingsManager({
           }
 
           setSettings(importedSettings);
+          setIsDirty(true);
 
-          toast({ title: '設定已成功匯入', description: '請檢查匯入的規則，並點擊「儲存設定」以保存變更。' });
+          toast({ title: '設定已成功匯入', description: '請檢查匯入的規則，變更將在幾秒後自動儲存。' });
 
         } catch (error: any) {
           toast({ variant: 'destructive', title: '匯入失敗', description: error.message || '無法解析設定檔案，請確認檔案是否正確。' });
@@ -322,7 +357,7 @@ function SettingsManager({
             </CardHeader>
             <CardContent>
               <Form {...settingsForm}>
-                <form onSubmit={settingsForm.handleSubmit(handleSaveSettings)} className="space-y-6">
+                <form className="space-y-6">
                   <Accordion type="single" collapsible className="w-full" defaultValue="replacement">
                     <AccordionItem value="replacement">
                       <AccordionTrigger>取代規則</AccordionTrigger>
@@ -484,10 +519,13 @@ function SettingsManager({
                       </AccordionContent>
                     </AccordionItem>
                   </Accordion>
-                  <div className="flex justify-end items-center mt-6"><Button type="submit" disabled={isProcessing}>
-                    {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    儲存設定
-                  </Button></div>
+                  <div className="flex justify-end items-center mt-6 h-6">
+                    <p className="text-sm text-muted-foreground flex items-center gap-2">
+                        {isSaving && <><Loader2 className="h-4 w-4 animate-spin" />儲存中...</>}
+                        {!isSaving && isDirty && "編輯中..."}
+                        {!isSaving && !isDirty && "所有變更已儲存"}
+                    </p>
+                  </div>
                 </form>
               </Form>
             </CardContent>
@@ -724,19 +762,17 @@ function ResultsDisplay({
 
     const summaryReportData = useMemo(() => {
         const monthlyData: Record<string, Record<string, number>> = {};
-        const categoriesToDisplay = settings.availableCategories.sort((a, b) => a.localeCompare(b, 'zh-Hant'));
-    
+        
         combinedData.forEach(transaction => {
             if (!summarySelectedCategories.includes(transaction.category)) {
                 return;
             }
-    
             try {
                 const monthKey = format(transaction.dateObj, 'yyyy年M月');
                 if (!monthlyData[monthKey]) {
                     monthlyData[monthKey] = {};
                 }
-    
+                
                 monthlyData[monthKey][transaction.category] = (monthlyData[monthKey][transaction.category] || 0) + transaction.amount;
     
             } catch(e) {
@@ -744,7 +780,9 @@ function ResultsDisplay({
             }
         });
     
+        const categoriesToDisplay = settings.availableCategories.sort((a, b) => a.localeCompare(b, 'zh-Hant'));
         const headers = ['日期（年月）', ...categoriesToDisplay, '總計'];
+        
         const rows = Object.entries(monthlyData).map(([month, categoryData]) => {
           let total = 0;
           const row: Record<string, string | number> = { '日期（年月）': month };
@@ -861,7 +899,7 @@ export function FinanceFlowClient() {
   const { toast } = useToast();
 
   const [isLoading, setIsLoading] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  
   const [hasProcessed, setHasProcessed] = useState(false);
   
   const [creditData, setCreditData] = useState<CreditData[]>([]);
@@ -919,14 +957,15 @@ export function FinanceFlowClient() {
       if (!isInitial) toast({ variant: "destructive", title: "儲存失敗", description: "請先登入才能儲存設定。" });
       return;
     }
-    setIsSaving(true);
+
     try {
       await setDoc(settingsDocRef, newSettings, { merge: true });
       setSettings(newSettings); // Optimistically update local state
+       if (!isInitial) {
+         // toast({ title: "設定已儲存", description: "您的變更已成功同步到雲端。" });
+       }
     } catch (e: any) {
        if (!isInitial) toast({ variant: "destructive", title: "儲存失敗", description: e.message || "無法將設定儲存到資料庫。" });
-    } finally {
-      setIsSaving(false);
     }
   }, [user, firestore, settingsDocRef, toast]);
 
@@ -1105,7 +1144,7 @@ export function FinanceFlowClient() {
             <SettingsManager 
                 onDeleteAllData={handleDeleteAllData} 
                 onSaveSettings={handleSaveSettings}
-                isProcessing={isLoading || isSaving}
+                isProcessing={isLoading}
                 user={user}
                 settings={settings}
                 setSettings={setSettings}
@@ -1152,6 +1191,8 @@ export function FinanceFlowClient() {
     </Tabs>
   );
 }
+
+    
 
     
 
