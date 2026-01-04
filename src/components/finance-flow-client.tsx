@@ -162,6 +162,19 @@ function SettingsManager({
     const { fields: quickFilterFields, append: appendQuickFilter, remove: removeQuickFilter } = useFieldArray({ control: settingsForm.control, name: "quickFilters" });
 
     const handleSaveSettings = async (data: SettingsFormData) => {
+        const keywords = new Set<string>();
+        for (const rule of data.categoryRules) {
+            if (keywords.has(rule.keyword)) {
+                toast({
+                    variant: 'destructive',
+                    title: '儲存失敗',
+                    description: `分類規則中的關鍵字 「${rule.keyword}」 重複了。請移除重複的項目後再儲存。`,
+                });
+                return;
+            }
+            keywords.add(rule.keyword);
+        }
+
         const newSettings: AppSettings = {
             ...settings,
             ...data,
@@ -716,7 +729,7 @@ function ResultsDisplay({
         const categoriesToDisplay = settings.availableCategories.sort((a, b) => a.localeCompare(b, 'zh-Hant'));
     
         combinedData.forEach(transaction => {
-             if (!summarySelectedCategories.includes(transaction.category)) {
+            if (!summarySelectedCategories.includes(transaction.category)) {
                 return;
             }
             try {
@@ -724,6 +737,7 @@ function ResultsDisplay({
                 if (!monthlyData[monthKey]) {
                     monthlyData[monthKey] = {};
                 }
+                
                 monthlyData[monthKey][transaction.category] = (monthlyData[monthKey][transaction.category] || 0) + transaction.amount;
     
             } catch(e) {
@@ -1142,5 +1156,7 @@ export function FinanceFlowClient() {
     </Tabs>
   );
 }
+
+    
 
     
