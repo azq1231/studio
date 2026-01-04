@@ -732,12 +732,13 @@ function ResultsDisplay({
             if (!summarySelectedCategories.includes(transaction.category)) {
                 return;
             }
+    
             try {
                 const monthKey = format(transaction.dateObj, 'yyyy年M月');
                 if (!monthlyData[monthKey]) {
                     monthlyData[monthKey] = {};
                 }
-                
+    
                 monthlyData[monthKey][transaction.category] = (monthlyData[monthKey][transaction.category] || 0) + transaction.amount;
     
             } catch(e) {
@@ -939,7 +940,6 @@ export function FinanceFlowClient() {
     const result = await processBankStatement(text || '', settings.replacementRules, settings.categoryRules, !!excelData, excelData);
     
     if (result.success) {
-      // Calculate totals for the toast message
       const creditTotal = result.creditData.reduce((sum, item) => sum + item.amount, 0);
       const depositTotal = result.depositData.reduce((sum, item) => sum + item.amount, 0);
       const cashTotal = result.cashData.reduce((sum, item) => sum + item.amount, 0);
@@ -962,17 +962,16 @@ export function FinanceFlowClient() {
                       {summaryLines.map((line, index) => <li key={index}>{line}</li>)}
                   </ul>
               ),
-              duration: 10000, // Show for 10 seconds
+              duration: 10000,
           });
       }
-
 
       if (result.detectedCategories.length > 0) {
         const currentCats = settings.availableCategories;
         const newCats = result.detectedCategories.filter(c => !currentCats.includes(c));
         if (newCats.length > 0) {
             const updatedSettings = {...settings, availableCategories: [...currentCats, ...newCats]};
-            setSettings(updatedSettings); // Update local state immediately
+            setSettings(updatedSettings);
             await handleSaveSettings(updatedSettings);
             toast({ title: '自動新增類型', description: `已新增：${newCats.join(', ')}`});
         }
@@ -998,7 +997,8 @@ export function FinanceFlowClient() {
         if (transactionsSaved > 0) {
           try {
             await batch.commit();
-            toast({ title: "儲存成功", description: `${transactionsSaved} 筆新資料已自動儲存到您的帳戶。` });
+            // We already showed a summary toast, so this one might be redundant unless we want a specific "saved" message.
+            // toast({ title: "儲存成功", description: `${transactionsSaved} 筆新資料已自動儲存到您的帳戶。` });
           } catch (e: any) {
             toast({ variant: "destructive", title: "儲存失敗", description: e.message || "無法將資料儲存到資料庫。" });
           }
