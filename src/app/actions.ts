@@ -7,6 +7,7 @@ export type ReplacementRule = {
     find: string;
     replace: string;
     deleteRow?: boolean;
+    notes?: string;
 };
 
 export type CategoryRule = {

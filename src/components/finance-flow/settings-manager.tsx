@@ -24,6 +24,7 @@ const replacementRuleSchema = z.object({
   find: z.string().min(1, { message: '請輸入要尋找的文字' }),
   replace: z.string(),
   deleteRow: z.boolean().default(false),
+  notes: z.string().optional(),
 });
 
 const categoryRuleSchema = z.object({
@@ -67,8 +68,8 @@ type SortDirection = 'asc' | 'desc';
 export type QuickFilter = z.infer<typeof quickFilterSchema>;
 
 const DEFAULT_REPLACEMENT_RULES: ReplacementRule[] = [
-  { find: '行銀非約跨優', replace: '', deleteRow: false },
-  { find: 'ＣＤＭ存款', replace: '', deleteRow: true }
+  { find: '行銀非約跨優', replace: '', deleteRow: false, notes: '' },
+  { find: 'ＣＤＭ存款', replace: '', deleteRow: true, notes: '' }
 ];
 
 const DEFAULT_CATEGORY_RULES: CategoryRule[] = [
@@ -347,12 +348,13 @@ export function SettingsManager({
                           <CardDescription className="mb-4">設定自動取代或刪除規則。勾選「刪除整筆資料」後，符合條件的資料將被整筆移除。</CardDescription>
                           <div className="rounded-md border">
                             <Table>
-                              <TableHeader><TableRow><TableHead className="w-2/5">尋找文字</TableHead><TableHead className="w-2_5">取代為</TableHead><TableHead className="w-1/5 text-center">刪除整筆資料</TableHead><TableHead className="w-[50px]">操作</TableHead></TableRow></TableHeader>
+                              <TableHeader><TableRow><TableHead className="w-1/4">尋找文字</TableHead><TableHead className="w-1/4">取代為</TableHead><TableHead className="w-1/4">備註</TableHead><TableHead className="w-1/6 text-center">刪除整筆資料</TableHead><TableHead className="w-[50px]">操作</TableHead></TableRow></TableHeader>
                               <TableBody>
                                 {replacementFields.map((field, index) => (
                                   <TableRow key={field.id}>
                                     <TableCell className="p-1"><FormField control={settingsForm.control} name={`replacementRules.${index}.find`} render={({ field }) => <FormItem><FormControl><Input placeholder="要被取代的文字" {...field} className="h-9"/></FormControl><FormMessage className="text-xs px-2"/></FormItem>}/></TableCell>
                                     <TableCell className="p-1"><FormField control={settingsForm.control} name={`replacementRules.${index}.replace`} render={({ field }) => <FormItem><FormControl><Input placeholder="新的文字 (留空為刪除)" {...field} className="h-9"/></FormControl><FormMessage className="text-xs px-2"/></FormItem>}/></TableCell>
+                                    <TableCell className="p-1"><FormField control={settingsForm.control} name={`replacementRules.${index}.notes`} render={({ field }) => <FormItem><FormControl><Input placeholder="新增備註說明" {...field} className="h-9"/></FormControl><FormMessage className="text-xs px-2"/></FormItem>}/></TableCell>
                                     <TableCell className="p-1 text-center"><FormField control={settingsForm.control} name={`replacementRules.${index}.deleteRow`} render={({ field }) => <FormItem className="flex justify-center items-center h-full"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange}/></FormControl></FormItem>}/></TableCell>
                                     <TableCell className="p-1"><Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeReplacement(index)}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>
                                   </TableRow>
@@ -360,7 +362,7 @@ export function SettingsManager({
                               </TableBody>
                             </Table>
                           </div>
-                          <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => appendReplacement({ find: '', replace: '', deleteRow: false })}><PlusCircle className="mr-2 h-4 w-4" />新增取代規則</Button>
+                          <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => appendReplacement({ find: '', replace: '', deleteRow: false, notes: '' })}><PlusCircle className="mr-2 h-4 w-4" />新增取代規則</Button>
                       </AccordionContent>
                     </AccordionItem>
                     <AccordionItem value="category">

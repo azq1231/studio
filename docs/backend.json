@@ -134,11 +134,24 @@
           "items": {
             "type": "object",
             "properties": {
-              "find": { "type": "string" },
-              "replace": { "type": "string" },
-              "deleteRow": { "type": "boolean" }
+              "find": {
+                "type": "string"
+              },
+              "replace": {
+                "type": "string"
+              },
+              "deleteRow": {
+                "type": "boolean"
+              },
+              "notes": {
+                "type": "string",
+                "description": "An optional note to explain the purpose of the replacement rule."
+              }
             },
-            "required": ["find", "replace"]
+            "required": [
+              "find",
+              "replace"
+            ]
           }
         },
         "categoryRules": {
@@ -146,10 +159,17 @@
           "items": {
             "type": "object",
             "properties": {
-              "keyword": { "type": "string" },
-              "category": { "type": "string" }
+              "keyword": {
+                "type": "string"
+              },
+              "category": {
+                "type": "string"
+              }
             },
-            "required": ["keyword", "category"]
+            "required": [
+              "keyword",
+              "category"
+            ]
           }
         },
         "quickFilters": {
@@ -157,19 +177,33 @@
           "items": {
             "type": "object",
             "properties": {
-              "name": { "type": "string" },
-              "categories": { "type": "array", "items": { "type": "string" } }
+              "name": {
+                "type": "string"
+              },
+              "categories": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
             },
-            "required": ["name", "categories"]
+            "required": [
+              "name",
+              "categories"
+            ]
           }
         },
         "availableCategories": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "cashTransactionDescriptions": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "A list of predefined descriptions for cash transactions."
         },
         "descriptionGroupingRules": {
@@ -187,7 +221,10 @@
                 "description": "A comma-separated list of keywords to identify items belonging to this group."
               }
             },
-            "required": ["groupName", "keywords"]
+            "required": [
+              "groupName",
+              "keywords"
+            ]
           }
         }
       }
