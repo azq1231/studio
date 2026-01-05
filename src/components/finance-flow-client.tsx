@@ -38,16 +38,16 @@ export type CombinedData = {
  * This function is safe to use in both Node.js (server-side) and browser environments.
  */
 async function sha1(str: string): Promise<string> {
-    if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle) {
-        // Browser environment
-        const buffer = new TextEncoder().encode(str);
-        const hash = await window.crypto.subtle.digest('SHA-1', buffer);
-        return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
-    } else {
-        // Node.js environment - This part is not used in this client component, but makes the function universal.
-        // The actual Node.js crypto module should be imported in server-side files.
-        throw new Error('sha1 function running in a non-browser environment without Node.js crypto module.');
-    }
+  if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle) {
+    // Browser environment
+    const buffer = new TextEncoder().encode(str);
+    const hash = await window.crypto.subtle.digest('SHA-1', buffer);
+    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+  } else {
+    // Node.js environment - This part is not used in this client component, but makes the function universal.
+    // The actual Node.js crypto module should be imported in server-side files.
+    throw new Error('sha1 function running in a non-browser environment without Node.js crypto module.');
+  }
 }
 
 
@@ -60,9 +60,9 @@ export function FinanceFlowClient() {
   const { toast } = useToast();
 
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const [hasProcessed, setHasProcessed] = useState(false);
-  
+
   const [creditData, setCreditData] = useState<CreditData[]>([]);
   const [depositData, setDepositData] = useState<DepositData[]>([]);
   const [cashData, setCashData] = useState<CashData[]>([]);
@@ -79,7 +79,7 @@ export function FinanceFlowClient() {
 
   const cashTransactionsQuery = useMemoFirebase(() => user && firestore ? collection(firestore, 'users', user.uid, 'cashTransactions') : null, [user, firestore]);
   const { data: savedCashTransactions, isLoading: isLoadingCash } = useCollection<CashData>(cashTransactionsQuery);
-  
+
   const settingsDocRef = useMemoFirebase(() => user && firestore ? doc(firestore, 'users', user.uid, 'settings', 'user-settings') : null, [user, firestore]);
   const { data: savedSettings, isLoading: isLoadingSettings } = useDoc<AppSettings>(settingsDocRef);
 
@@ -90,26 +90,26 @@ export function FinanceFlowClient() {
 
   useEffect(() => {
     if (user && savedSettings) {
-        const mergedSettings: AppSettings = {
-            ...DEFAULT_SETTINGS,
-            ...savedSettings,
-            availableCategories: savedSettings.availableCategories?.length ? savedSettings.availableCategories : DEFAULT_SETTINGS.availableCategories,
-            replacementRules: savedSettings.replacementRules?.length ? savedSettings.replacementRules : DEFAULT_SETTINGS.replacementRules,
-            categoryRules: savedSettings.categoryRules?.length ? savedSettings.categoryRules : DEFAULT_SETTINGS.categoryRules,
-            quickFilters: savedSettings.quickFilters?.length ? savedSettings.quickFilters : DEFAULT_SETTINGS.quickFilters,
-            cashTransactionDescriptions: savedSettings.cashTransactionDescriptions?.length ? savedSettings.cashTransactionDescriptions : DEFAULT_SETTINGS.cashTransactionDescriptions,
-            descriptionGroupingRules: savedSettings.descriptionGroupingRules?.length ? savedSettings.descriptionGroupingRules : DEFAULT_SETTINGS.descriptionGroupingRules,
-        };
-        setSettings(mergedSettings);
+      const mergedSettings: AppSettings = {
+        ...DEFAULT_SETTINGS,
+        ...savedSettings,
+        availableCategories: savedSettings.availableCategories?.length ? savedSettings.availableCategories : DEFAULT_SETTINGS.availableCategories,
+        replacementRules: savedSettings.replacementRules?.length ? savedSettings.replacementRules : DEFAULT_SETTINGS.replacementRules,
+        categoryRules: savedSettings.categoryRules?.length ? savedSettings.categoryRules : DEFAULT_SETTINGS.categoryRules,
+        quickFilters: savedSettings.quickFilters?.length ? savedSettings.quickFilters : DEFAULT_SETTINGS.quickFilters,
+        cashTransactionDescriptions: savedSettings.cashTransactionDescriptions?.length ? savedSettings.cashTransactionDescriptions : DEFAULT_SETTINGS.cashTransactionDescriptions,
+        descriptionGroupingRules: savedSettings.descriptionGroupingRules?.length ? savedSettings.descriptionGroupingRules : DEFAULT_SETTINGS.descriptionGroupingRules,
+      };
+      setSettings(mergedSettings);
     } else if (user && !savedSettings && !isLoadingSettings) {
-        if(!settingsDocRef) return;
-         getDoc(settingsDocRef).then(docSnap => {
-            if (!docSnap.exists()) {
-                handleSaveSettings(DEFAULT_SETTINGS, true);
-            }
-         });
+      if (!settingsDocRef) return;
+      getDoc(settingsDocRef).then(docSnap => {
+        if (!docSnap.exists()) {
+          handleSaveSettings(DEFAULT_SETTINGS, true);
+        }
+      });
     } else if (!user) {
-        setSettings(DEFAULT_SETTINGS);
+      setSettings(DEFAULT_SETTINGS);
     }
   }, [user, savedSettings, isLoadingSettings]);
 
@@ -126,12 +126,12 @@ export function FinanceFlowClient() {
     try {
       await setDoc(settingsDocRef, sanitizedSettings, { merge: true });
       setSettings(sanitizedSettings); // Optimistically update local state with sanitized data
-       if (!isInitial) {
-         // toast({ title: "設定已儲存", description: "您的變更已成功同步到雲端。" });
-       }
+      if (!isInitial) {
+        // toast({ title: "設定已儲存", description: "您的變更已成功同步到雲端。" });
+      }
     } catch (e: any) {
-       console.error("Failed to save settings:", e);
-       if (!isInitial) toast({ variant: "destructive", title: "儲存失敗", description: e.message || "無法將設定儲存到資料庫。" });
+      console.error("Failed to save settings:", e);
+      if (!isInitial) toast({ variant: "destructive", title: "儲存失敗", description: e.message || "無法將設定儲存到資料庫。" });
     }
   }, [user, firestore, settingsDocRef, toast]);
 
@@ -139,59 +139,69 @@ export function FinanceFlowClient() {
   const handleProcessAndSave = useCallback(async ({ text, excelData }: { text?: string; excelData?: any[][] }) => {
     setIsLoading(true);
     setHasProcessed(false);
-    
-    const result = await processBankStatement(text || '', settings.replacementRules, settings.categoryRules, creditData, !!excelData, excelData);
-    
+
+    const result = await processBankStatement(text || '', settings.replacementRules, settings.categoryRules, creditData, depositData, cashData, !!excelData, excelData);
+
     if (result.success) {
       const creditTotal = result.creditData.reduce((sum, item) => sum + item.amount, 0);
       const depositTotal = result.depositData.reduce((sum, item) => sum + item.amount, 0);
       const cashTotal = result.cashData.reduce((sum, item) => sum + item.amount, 0);
       const summaryLines: string[] = [];
       if (result.creditData.length > 0) {
-          summaryLines.push(`信用卡 ${result.creditData.length} 筆，總金額 ${creditTotal.toLocaleString()}`);
+        summaryLines.push(`信用卡 ${result.creditData.length} 筆，總金額 ${creditTotal.toLocaleString()}`);
       }
       if (result.depositData.length > 0) {
-          summaryLines.push(`活存帳戶 ${result.depositData.length} 筆，總金額 ${depositTotal.toLocaleString()}`);
+        summaryLines.push(`活存帳戶 ${result.depositData.length} 筆，總金額 ${depositTotal.toLocaleString()}`);
       }
       if (result.cashData.length > 0) {
-          summaryLines.push(`Excel 現金 ${result.cashData.length} 筆，總金額 ${cashTotal.toLocaleString()}`);
+        summaryLines.push(`Excel 現金 ${result.cashData.length} 筆，總金額 ${cashTotal.toLocaleString()}`);
+      }
+
+      // 顯示跳過的重複資料數量
+      const totalSkipped = result.skippedDuplicates.credit + result.skippedDuplicates.deposit + result.skippedDuplicates.cash;
+      if (totalSkipped > 0) {
+        const skippedDetails: string[] = [];
+        if (result.skippedDuplicates.credit > 0) skippedDetails.push(`信用卡 ${result.skippedDuplicates.credit} 筆`);
+        if (result.skippedDuplicates.deposit > 0) skippedDetails.push(`活存 ${result.skippedDuplicates.deposit} 筆`);
+        if (result.skippedDuplicates.cash > 0) skippedDetails.push(`現金 ${result.skippedDuplicates.cash} 筆`);
+        summaryLines.push(`已跳過重複資料：${skippedDetails.join('、')}`);
       }
 
       if (summaryLines.length > 0) {
-          toast({
-              title: "報表解析摘要",
-              description: (
-                  <ul className="list-disc pl-5">
-                      {summaryLines.map((line, index) => <li key={index}>{line}</li>)}
-                  </ul>
-              ),
-              duration: 10000,
-          });
+        toast({
+          title: "報表解析摘要",
+          description: (
+            <ul className="list-disc pl-5">
+              {summaryLines.map((line, index) => <li key={index}>{line}</li>)}
+            </ul>
+          ),
+          duration: 10000,
+        });
       }
 
       if (result.detectedCategories.length > 0) {
         const currentCats = settings.availableCategories;
         const newCats = result.detectedCategories.filter(c => !currentCats.includes(c));
         if (newCats.length > 0) {
-            const updatedSettings = {...settings, availableCategories: [...currentCats, ...newCats]};
-            setSettings(updatedSettings);
-            await handleSaveSettings(updatedSettings);
-            toast({ title: '自動新增類型', description: `已新增：${newCats.join(', ')}`});
+          const updatedSettings = { ...settings, availableCategories: [...currentCats, ...newCats] };
+          setSettings(updatedSettings);
+          await handleSaveSettings(updatedSettings);
+          toast({ title: '自動新增類型', description: `已新增：${newCats.join(', ')}` });
         }
       }
-      
+
       if (user && firestore) {
         const batch = writeBatch(firestore);
         let transactionsSaved = 0;
         const processData = (data: (CreditData | DepositData | CashData)[], collectionName: string) => {
-            if (data.length > 0) {
-                const coll = collection(firestore, 'users', user.uid, collectionName);
-                data.forEach(transaction => {
-                    const docRef = doc(coll, transaction.id);
-                    batch.set(docRef, transaction, { merge: true });
-                });
-                transactionsSaved += data.length;
-            }
+          if (data.length > 0) {
+            const coll = collection(firestore, 'users', user.uid, collectionName);
+            data.forEach(transaction => {
+              const docRef = doc(coll, transaction.id);
+              batch.set(docRef, transaction, { merge: true });
+            });
+            transactionsSaved += data.length;
+          }
         };
         processData(result.creditData, 'creditCardTransactions');
         processData(result.depositData, 'depositAccountTransactions');
@@ -200,24 +210,48 @@ export function FinanceFlowClient() {
         if (transactionsSaved > 0) {
           try {
             await batch.commit();
-            // We already showed a summary toast, so this one might be redundant unless we want a specific "saved" message.
-            // toast({ title: "儲存成功", description: `${transactionsSaved} 筆新資料已自動儲存到您的帳戶。` });
+            // 立即更新本地 state，這樣連續貼上時能立即檢測到重複
+            if (result.creditData.length > 0) {
+              setCreditData(prev => {
+                const existingIds = new Set(prev.map(d => d.id));
+                const newItems = result.creditData.filter(d => !existingIds.has(d.id));
+                return [...prev, ...newItems];
+              });
+            }
+            if (result.depositData.length > 0) {
+              setDepositData(prev => {
+                const existingIds = new Set(prev.map(d => d.id));
+                const newItems = result.depositData.filter(d => !existingIds.has(d.id));
+                return [...prev, ...newItems];
+              });
+            }
+            if (result.cashData.length > 0) {
+              setCashData(prev => {
+                const existingIds = new Set(prev.map(d => d.id));
+                const newItems = result.cashData.filter(d => !existingIds.has(d.id));
+                return [...prev, ...newItems];
+              });
+            }
           } catch (e: any) {
             toast({ variant: "destructive", title: "儲存失敗", description: e.message || "無法將資料儲存到資料庫。" });
           }
         }
       }
       if (result.creditData.length === 0 && result.depositData.length === 0 && result.cashData.length === 0) {
-        toast({ variant: "default", title: "提醒", description: "未解析到任何有效資料，請檢查您的報表格式或規則是否正確。" });
+        if (totalSkipped > 0) {
+          toast({ variant: "default", title: "提醒", description: `所有資料都是重複的，已自動跳過 ${totalSkipped} 筆重複資料。` });
+        } else {
+          toast({ variant: "default", title: "提醒", description: "未解析到任何有效資料，請檢查您的報表格式或規則是否正確。" });
+        }
       }
     } else {
       toast({ variant: "destructive", title: "處理失敗", description: result.error || '發生未知錯誤，請稍後再試。' });
     }
-    
+
     setIsLoading(false);
     setHasProcessed(true);
     setActiveTab("results");
-  }, [user, firestore, toast, settings, creditData, handleSaveSettings]);
+  }, [user, firestore, toast, settings, creditData, depositData, cashData, handleSaveSettings]);
 
   const handleAddCashTransaction = useCallback(async (newTransactionData: Omit<CashData, 'id'>) => {
     if (!user || !firestore) { toast({ variant: 'destructive', title: '錯誤', description: '請先登入' }); return; }
@@ -237,68 +271,68 @@ export function FinanceFlowClient() {
     if (!user || !firestore) { toast({ variant: 'destructive', title: '錯誤', description: '請先登入' }); return; }
     setIsLoading(true);
     try {
-        const batch = writeBatch(firestore);
-        for (const collectionName of ['creditCardTransactions', 'depositAccountTransactions', 'cashTransactions']) {
-            const snapshot = await getDocs(query(collection(firestore, 'users', user.uid, collectionName)));
-            snapshot.forEach(doc => batch.delete(doc.ref));
-        }
-        await batch.commit();
-        setCreditData([]); setDepositData([]); setCashData([]);
-        toast({ title: '成功', description: '您的所有交易資料已被刪除。' });
+      const batch = writeBatch(firestore);
+      for (const collectionName of ['creditCardTransactions', 'depositAccountTransactions', 'cashTransactions']) {
+        const snapshot = await getDocs(query(collection(firestore, 'users', user.uid, collectionName)));
+        snapshot.forEach(doc => batch.delete(doc.ref));
+      }
+      await batch.commit();
+      setCreditData([]); setDepositData([]); setCashData([]);
+      toast({ title: '成功', description: '您的所有交易資料已被刪除。' });
     } catch (e: any) {
-        toast({ variant: 'destructive', title: '刪除失敗', description: e.message || '刪除所有資料時發生錯誤。' });
+      toast({ variant: 'destructive', title: '刪除失敗', description: e.message || '刪除所有資料時發生錯誤。' });
     } finally {
-        setIsLoading(false);
+      setIsLoading(false);
     }
   }, [user, firestore, toast]);
-  
-  const handleUpdateTransaction = useCallback(async (id: string, field: keyof any, value: string | number, type: 'credit' | 'deposit' | 'cash') => {
-        if (!user || !firestore) return;
-        const collectionNameMap = { credit: 'creditCardTransactions', deposit: 'depositAccountTransactions', cash: 'cashTransactions' };
-        const setterMap = { credit: setCreditData, deposit: setDepositData, cash: setCashData };
-        
-        setterMap[type](prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
-        try {
-            await updateDoc(doc(firestore, 'users', user.uid, collectionNameMap[type], id), { [field]: value });
-        } catch (error) {
-            toast({ variant: "destructive", title: "更新失敗", description: `無法將變更儲存到資料庫。` });
-        }
-    }, [user, firestore, toast]);
 
-    const handleDeleteTransaction = useCallback(async (id: string, type: 'credit' | 'deposit' | 'cash') => {
-        if (!user || !firestore) return;
-        const collectionNameMap = { credit: 'creditCardTransactions', deposit: 'depositAccountTransactions', cash: 'cashTransactions' };
-        const setterMap = { credit: setCreditData, deposit: setDepositData, cash: setCashData };
-        setterMap[type](prev => prev.filter(item => item.id !== id));
-        try {
-            await deleteDoc(doc(firestore, 'users', user.uid, collectionNameMap[type], id));
-        } catch (error) {
-            toast({ variant: "destructive", title: "刪除失敗", description: `無法從資料庫中刪除此筆交易。` });
-        }
-    }, [user, firestore, toast]);
+  const handleUpdateTransaction = useCallback(async (id: string, field: keyof any, value: string | number, type: 'credit' | 'deposit' | 'cash') => {
+    if (!user || !firestore) return;
+    const collectionNameMap = { credit: 'creditCardTransactions', deposit: 'depositAccountTransactions', cash: 'cashTransactions' };
+    const setterMap = { credit: setCreditData, deposit: setDepositData, cash: setCashData };
+
+    setterMap[type](prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
+    try {
+      await updateDoc(doc(firestore, 'users', user.uid, collectionNameMap[type], id), { [field]: value });
+    } catch (error) {
+      toast({ variant: "destructive", title: "更新失敗", description: `無法將變更儲存到資料庫。` });
+    }
+  }, [user, firestore, toast]);
+
+  const handleDeleteTransaction = useCallback(async (id: string, type: 'credit' | 'deposit' | 'cash') => {
+    if (!user || !firestore) return;
+    const collectionNameMap = { credit: 'creditCardTransactions', deposit: 'depositAccountTransactions', cash: 'cashTransactions' };
+    const setterMap = { credit: setCreditData, deposit: setDepositData, cash: setCashData };
+    setterMap[type](prev => prev.filter(item => item.id !== id));
+    try {
+      await deleteDoc(doc(firestore, 'users', user.uid, collectionNameMap[type], id));
+    } catch (error) {
+      toast({ variant: "destructive", title: "刪除失敗", description: `無法從資料庫中刪除此筆交易。` });
+    }
+  }, [user, firestore, toast]);
 
   const isLoadingData = isLoadingCredit || isLoadingDeposit || isLoadingCash || (user && isLoadingSettings);
-  
+
   const combinedData: CombinedData[] = useMemo(() => {
     const parseDateSafe = (dateString: string, formatString: string): Date => {
-        try {
-            return parse(dateString, formatString, new Date());
-        } catch {
-            return new Date(0); // Invalid date
-        }
+      try {
+        return parse(dateString, formatString, new Date());
+      } catch {
+        return new Date(0); // Invalid date
+      }
     };
-    
+
     const combined: CombinedData[] = [];
-    
+
     const mapData = (data: any[], source: CombinedData['source'], dateKey: string) => {
-        data.forEach(d => {
-            const displayDate = dateKey === 'transactionDate' ? getCreditDisplayDate(d[dateKey]) : d[dateKey];
-            let dateObj = parseDateSafe(displayDate, 'yyyy/MM/dd');
-            if (dateObj.getTime() === new Date(0).getTime()) {
-               dateObj = parseDateSafe(displayDate, 'MM/dd', new Date());
-            }
-            combined.push({ ...d, date: displayDate, dateObj, source });
-        });
+      data.forEach(d => {
+        const displayDate = dateKey === 'transactionDate' ? getCreditDisplayDate(d[dateKey]) : d[dateKey];
+        let dateObj = parseDateSafe(displayDate, 'yyyy/MM/dd');
+        if (dateObj.getTime() === new Date(0).getTime()) {
+          dateObj = parseDateSafe(displayDate, 'MM/dd', new Date());
+        }
+        combined.push({ ...d, date: displayDate, dateObj, source });
+      });
     };
 
     mapData(creditData, '信用卡', 'transactionDate');
@@ -310,7 +344,7 @@ export function FinanceFlowClient() {
 
   const hasData = useMemo(() => combinedData.length > 0, [combinedData]);
   const hasFixedItems = useMemo(() => combinedData.some(d => d.category === '固定'), [combinedData]);
-  
+
   useEffect(() => {
     if (!isLoadingData && hasData) {
       setActiveTab((currentTab) =>
@@ -326,20 +360,20 @@ export function FinanceFlowClient() {
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
       <TabsList className="grid w-full grid-cols-4">
         <TabsTrigger value="importer">
-            <ClipboardCopy className="mr-2" />
-            貼上報表
+          <ClipboardCopy className="mr-2" />
+          貼上報表
         </TabsTrigger>
         <TabsTrigger value="settings">
-            <Settings className="mr-2" />
-            規則設定
+          <Settings className="mr-2" />
+          規則設定
         </TabsTrigger>
         <TabsTrigger value="results">
-            <FileText className="mr-2" />
-            處理結果
+          <FileText className="mr-2" />
+          處理結果
         </TabsTrigger>
-         <TabsTrigger value="analysis" disabled={!hasFixedItems}>
-            <BarChart2 className="mr-2" />
-            詳細分析
+        <TabsTrigger value="analysis" disabled={!hasFixedItems}>
+          <BarChart2 className="mr-2" />
+          詳細分析
         </TabsTrigger>
       </TabsList>
       <TabsContent value="importer" className="mt-4">
@@ -347,71 +381,71 @@ export function FinanceFlowClient() {
       </TabsContent>
       <TabsContent value="settings" className="mt-4">
         {isLoadingData && user ? (
-            <div className="space-y-4 pt-4">
-                <Card><CardHeader><Skeleton className="h-8 w-48 rounded-md" /></CardHeader>
-                <CardContent className="space-y-4"><Skeleton className="h-48 w-full rounded-md" /></CardContent></Card>
-            </div>
+          <div className="space-y-4 pt-4">
+            <Card><CardHeader><Skeleton className="h-8 w-48 rounded-md" /></CardHeader>
+              <CardContent className="space-y-4"><Skeleton className="h-48 w-full rounded-md" /></CardContent></Card>
+          </div>
         ) : (
-            <SettingsManager 
-                onDeleteAllData={handleDeleteAllData} 
-                onSaveSettings={handleSaveSettings}
-                isProcessing={isLoading}
-                user={user}
-                settings={settings}
-                setSettings={setSettings}
-            />
+          <SettingsManager
+            onDeleteAllData={handleDeleteAllData}
+            onSaveSettings={handleSaveSettings}
+            isProcessing={isLoading}
+            user={user}
+            settings={settings}
+            setSettings={setSettings}
+          />
         )}
       </TabsContent>
       <TabsContent value="results" className="mt-4">
         {(isLoading || showResults) ? (
-            <ResultsDisplay
-                creditData={creditData}
-                depositData={depositData}
-                cashData={cashData}
-                settings={settings}
-                onAddCashTransaction={handleAddCashTransaction}
-                onUpdateTransaction={handleUpdateTransaction}
-                onDeleteTransaction={handleDeleteTransaction}
-                hasProcessed={hasProcessed}
-                user={user}
-            />
+          <ResultsDisplay
+            creditData={creditData}
+            depositData={depositData}
+            cashData={cashData}
+            settings={settings}
+            onAddCashTransaction={handleAddCashTransaction}
+            onUpdateTransaction={handleUpdateTransaction}
+            onDeleteTransaction={handleDeleteTransaction}
+            hasProcessed={hasProcessed}
+            user={user}
+          />
         ) : (isLoadingData && !hasData) ? (
-            <div className="space-y-4 pt-4">
-                <Card>
-                    <CardHeader>
-                        <Skeleton className="h-8 w-48 rounded-md" />
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="flex items-center space-x-4"><Skeleton className="h-10 w-24 rounded-md" /><Skeleton className="h-10 w-24 rounded-md" /></div>
-                        <div><Skeleton className="h-48 w-full rounded-md" /></div>
-                    </CardContent>
-                </Card>
-            </div>
-        ) : (
+          <div className="space-y-4 pt-4">
             <Card>
-                <CardContent className="pt-6">
-                    <div className="text-center py-10">
-                        <Text className="mx-auto h-12 w-12 text-muted-foreground" />
-                        <h3 className="mt-4 text-lg font-semibold">沒有可顯示的資料</h3>
-                        <p className="mt-2 text-sm text-muted-foreground">請先到「貼上報表」分頁處理您的銀行資料。</p>
-                    </div>
-                </CardContent>
+              <CardHeader>
+                <Skeleton className="h-8 w-48 rounded-md" />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center space-x-4"><Skeleton className="h-10 w-24 rounded-md" /><Skeleton className="h-10 w-24 rounded-md" /></div>
+                <div><Skeleton className="h-48 w-full rounded-md" /></div>
+              </CardContent>
             </Card>
+          </div>
+        ) : (
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-center py-10">
+                <Text className="mx-auto h-12 w-12 text-muted-foreground" />
+                <h3 className="mt-4 text-lg font-semibold">沒有可顯示的資料</h3>
+                <p className="mt-2 text-sm text-muted-foreground">請先到「貼上報表」分頁處理您的銀行資料。</p>
+              </div>
+            </CardContent>
+          </Card>
         )}
       </TabsContent>
-       <TabsContent value="analysis" className="mt-4">
+      <TabsContent value="analysis" className="mt-4">
         {showResults ? (
-            <FixedItemsSummary combinedData={combinedData} settings={settings} />
+          <FixedItemsSummary combinedData={combinedData} settings={settings} />
         ) : (
-            <Card>
-                <CardContent className="pt-6">
-                    <div className="text-center py-10">
-                        <Text className="mx-auto h-12 w-12 text-muted-foreground" />
-                        <h3 className="mt-4 text-lg font-semibold">沒有可顯示的資料</h3>
-                        <p className="mt-2 text-sm text-muted-foreground">請先處理您的銀行資料，並確保有「固定」分類的項目。</p>
-                    </div>
-                </CardContent>
-            </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-center py-10">
+                <Text className="mx-auto h-12 w-12 text-muted-foreground" />
+                <h3 className="mt-4 text-lg font-semibold">沒有可顯示的資料</h3>
+                <p className="mt-2 text-sm text-muted-foreground">請先處理您的銀行資料，並確保有「固定」分類的項目。</p>
+              </div>
+            </CardContent>
+          </Card>
         )}
       </TabsContent>
     </Tabs>
