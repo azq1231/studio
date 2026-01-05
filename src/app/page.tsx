@@ -13,7 +13,7 @@ export default function Home() {
             </div>
             <div>
               <h1 className="text-3xl md:text-4xl font-bold font-headline">FinanceFlow</h1>
-              <p className="text-muted-foreground mt-1">您的智慧銀行報表整理工具</p>
+              <p className="text-muted-foreground mt-1">您的智慧銀行報表整理工具 v1.0</p>
             </div>
           </div>
           <AuthButton />
