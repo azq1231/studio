@@ -1,36 +1,25 @@
-# To learn more about how to use Nix to configure your environment
-# see: https://firebase.google.com/docs/studio/customize-workspace
-{pkgs}: {
-  # Which nixpkgs channel to use.
-  channel = "stable-24.11"; # or "unstable"
+
+{ pkgs, ... }: {
+  # Which channel of the NixPackages repository to use.
+  channel = "stable-23.11"; # or "unstable"
+
   # Use https://search.nixos.org/packages to find packages
   packages = [
     pkgs.nodejs_20
-    pkgs.zulu
   ];
+
   # Sets environment variables in the workspace
   env = {};
-  # This adds a file watcher to startup the firebase emulators. The emulators will only start if
-  # a firebase.json file is written into the user's directory
-  services.firebase.emulators = {
-    # Disabling because we are using prod backends right now
-    detect = false;
-    projectId = "demo-app";
-    services = ["auth" "firestore"];
-  };
+
   idx = {
     # Search for the extensions you want on https://open-vsx.org/ and use "publisher.id"
     extensions = [
-      # "vscodevim.vim"
+      "dsznajder.es7-react-js-snippets"
+      "dbaeumer.vscode-eslint"
+      "esbenp.prettier-vscode"
     ];
-    workspace = {
-      onCreate = {
-        default.openFiles = [
-          "src/app/page.tsx"
-        ];
-      };
-    };
-    # Enable previews and customize configuration
+
+    # Enable previews
     previews = {
       enable = true;
       previews = {
@@ -38,6 +27,18 @@
           command = ["npm" "run" "dev" "--" "--port" "$PORT" "--hostname" "0.0.0.0"];
           manager = "web";
         };
+      };
+    };
+
+    # Workspace lifecycle hooks
+    workspace = {
+      # Runs when a workspace is first created
+      onCreate = {
+        npm-install = "npm install";
+      };
+      # Runs when the workspace is (re)started
+      onStart = {
+        # Optional: You can put any starting commands here
       };
     };
   };
