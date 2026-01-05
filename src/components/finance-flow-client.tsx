@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useUser, useFirestore, useCollection, useDoc, useMemoFirebase } from '@/firebase';
 import { collection, writeBatch, doc, getDocs, query, setDoc, serverTimestamp, updateDoc, deleteDoc, getDoc } from 'firebase/firestore';
 import { useToast } from "@/hooks/use-toast"
-import { processBankStatement } from '@/app/actions';
+import { processBankStatement } from '@/lib/processor';
 import type { CreditData, DepositData, CashData } from '@/lib/parser';
 import { StatementImporter } from '@/components/statement-importer';
 import { SettingsManager, DEFAULT_SETTINGS, type AppSettings } from '@/components/finance-flow/settings-manager';

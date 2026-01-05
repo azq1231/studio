@@ -7,7 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import type { User } from 'firebase/auth';
 
 import { useToast } from "@/hooks/use-toast";
-import type { ReplacementRule, CategoryRule } from '@/app/actions';
+import type { ReplacementRule, CategoryRule } from '@/lib/processor';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
