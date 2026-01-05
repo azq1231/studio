@@ -15,7 +15,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text, Settings, ClipboardCopy, FileText, BarChart2 } from 'lucide-react';
-import { parse, getCreditDisplayDate } from '@/lib/parser';
+import { parse } from 'date-fns';
+import { getCreditDisplayDate } from '@/lib/parser';
 
 // CombinedData is used by both ResultsDisplay and FixedItemsSummary
 export type CombinedData = {
@@ -299,7 +300,7 @@ export function FinanceFlowClient() {
     const collectionNameMap = { credit: 'creditCardTransactions', deposit: 'depositAccountTransactions', cash: 'cashTransactions' };
     const setterMap = { credit: setCreditData, deposit: setDepositData, cash: setCashData };
 
-    setterMap[type](prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
+    (setterMap[type] as React.Dispatch<React.SetStateAction<any[]>>)(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
     try {
       await updateDoc(doc(firestore, 'users', user.uid, collectionNameMap[type], id), { [field]: value });
     } catch (error) {
@@ -311,7 +312,7 @@ export function FinanceFlowClient() {
     if (!user || !firestore) return;
     const collectionNameMap = { credit: 'creditCardTransactions', deposit: 'depositAccountTransactions', cash: 'cashTransactions' };
     const setterMap = { credit: setCreditData, deposit: setDepositData, cash: setCashData };
-    setterMap[type](prev => prev.filter(item => item.id !== id));
+    (setterMap[type] as React.Dispatch<React.SetStateAction<any[]>>)(prev => prev.filter(item => item.id !== id));
     try {
       await deleteDoc(doc(firestore, 'users', user.uid, collectionNameMap[type], id));
     } catch (error) {
@@ -322,12 +323,21 @@ export function FinanceFlowClient() {
   const isLoadingData = isLoadingCredit || isLoadingDeposit || isLoadingCash || (user && isLoadingSettings);
 
   const combinedData: CombinedData[] = useMemo(() => {
-    const parseDateSafe = (dateString: string, formatString: string): Date => {
+    const parseDateSafe = (dateString: string): Date => {
+      const now = new Date();
+      if (!dateString) return now;
+
       try {
-        return parse(dateString, formatString, new Date());
-      } catch {
-        return new Date(0); // Invalid date
-      }
+        const d = parse(dateString, 'yyyy/MM/dd', now);
+        if (!isNaN(d.getTime()) && d.getFullYear() > 1900) return d;
+      } catch (e) { }
+
+      try {
+        const d = parse(dateString, 'MM/dd', now);
+        if (!isNaN(d.getTime())) return d;
+      } catch (e) { }
+
+      return now;
     };
 
     const combined: CombinedData[] = [];
@@ -335,10 +345,7 @@ export function FinanceFlowClient() {
     const mapData = (data: any[], source: CombinedData['source'], dateKey: string) => {
       data.forEach(d => {
         const displayDate = dateKey === 'transactionDate' ? getCreditDisplayDate(d[dateKey]) : d[dateKey];
-        let dateObj = parseDateSafe(displayDate, 'yyyy/MM/dd');
-        if (dateObj.getTime() === new Date(0).getTime()) {
-          dateObj = parseDateSafe(displayDate, 'MM/dd', new Date());
-        }
+        const dateObj = parseDateSafe(displayDate);
         combined.push({ ...d, date: displayDate, dateObj, source });
       });
     };
