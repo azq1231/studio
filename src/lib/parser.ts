@@ -253,10 +253,14 @@ export async function parseDepositAccount(text: string): Promise<DepositData[]> 
     const results: DepositData[] = [];
     
     // Step 1: Merge multi-line entries
-    const mergedEntries: { date: string, content: string }[] = [];
+    // 銀行報表格式 (以 TAB 分隔):
+    // 第一行: 日期 (yyyy/MM/dd)
+    // 第二行: 時間 \t 交易類型 \t 提出 \t 存入 \t 餘額 \t 摘要
+    // 第三行 (可選): 帳號/備註資訊
+    const mergedEntries: { date: string, mainLine: string, supplementaryLine: string }[] = [];
     let currentDate = '';
     const dateLineRegex = /^(\d{4}\/\d{2}\/\d{2})$/;
-    const transactionLineRegex = /^\d{2}:\d{2}:\d{2}\s+/;
+    const transactionLineRegex = /^\d{2}:\d{2}:\d{2}/;
 
     for (const line of rawLines) {
         if (dateLineRegex.test(line)) {
@@ -265,37 +269,58 @@ export async function parseDepositAccount(text: string): Promise<DepositData[]> 
         }
 
         if (transactionLineRegex.test(line)) {
-            mergedEntries.push({ date: currentDate, content: line });
+            mergedEntries.push({ date: currentDate, mainLine: line, supplementaryLine: '' });
         } else if (mergedEntries.length > 0 && line) {
-            // This is a supplementary line, append it to the last entry's content
+            // 這是補充行 (帳號/備註)，追加到最後一筆
             const lastEntry = mergedEntries[mergedEntries.length - 1];
-            lastEntry.content += ` ${line}`;
+            lastEntry.supplementaryLine = lastEntry.supplementaryLine 
+                ? `${lastEntry.supplementaryLine} ${line}` 
+                : line;
         }
     }
     
     for (const entry of mergedEntries) {
         if (!entry.date) continue;
         
-        let { content } = entry;
-        const parts = content.split(/\s+/).filter(Boolean);
+        // 優先使用 TAB 分隔解析主行
+        // 格式: 時間 \t 交易類型 \t 提出 \t 存入 \t 餘額 \t 摘要
+        const tabParts = entry.mainLine.split('\t').map(p => p.trim());
         
-        if (parts.length < 4) continue;
-
-        // Reverse-peel strategy
-        let finalRemark = parts.pop() || '';
-        let balanceStr = parts.pop() || '';
-        let depositStr = parts.pop() || '';
-        let withdrawalStr = parts.pop() || '';
-
-        // Handle case where deposit is empty (two spaces)
-        if (!/^\d/.test(depositStr) && /^\d/.test(withdrawalStr)) {
-            depositStr = withdrawalStr;
-            withdrawalStr = depositStr;
+        let time = '';
+        let transactionType = '';
+        let withdrawalStr = '';
+        let depositStr = '';
+        let balanceStr = '';
+        let description = '';
+        
+        if (tabParts.length >= 6) {
+            // TAB 分隔格式
+            time = tabParts[0] || '';
+            transactionType = tabParts[1] || '';
+            withdrawalStr = tabParts[2] || '';
+            depositStr = tabParts[3] || '';
+            balanceStr = tabParts[4] || '';
+            description = tabParts[5] || '';
+        } else {
+            // 回退到空白分隔解析
+            const parts = entry.mainLine.split(/\s+/).filter(Boolean);
+            if (parts.length < 4) continue;
+            
+            time = parts.shift() || '';
+            // 反向剝離: 餘額、存入、提出
+            const reverseParts = [...parts].reverse();
+            balanceStr = reverseParts.shift() || '';
+            depositStr = reverseParts.shift() || '';
+            withdrawalStr = reverseParts.shift() || '';
+            // 剩餘的是交易類型 + 摘要
+            const remaining = reverseParts.reverse();
+            if (remaining.length > 0) {
+                transactionType = remaining.shift() || '';
+                description = remaining.join(' ');
+            }
         }
         
-        const time = parts.shift() || '';
-        let description = parts.join(' ');
-        
+        // 解析金額
         const withdrawalAmount = parseFloat(withdrawalStr.replace(/,/g, '')) || 0;
         const depositAmount = parseFloat(depositStr.replace(/,/g, '')) || 0;
         let amount = 0;
@@ -307,17 +332,18 @@ export async function parseDepositAccount(text: string): Promise<DepositData[]> 
 
         if (amount === 0) continue;
 
-        let finalDescription = description;
-        let finalBankCode = finalRemark;
+        // 處理補充行 (帳號/備註)
+        let finalBankCode = entry.supplementaryLine || '';
 
+        // 處理特殊轉帳標記
         const specialTransferMarker = '行銀非約跨優';
-        if (description.includes(specialTransferMarker)) {
-            finalDescription = finalRemark; // The remark is the real description
-            
-            // The account number part is what's left in the description after the marker
-            const markerIndex = description.indexOf(specialTransferMarker);
-            const accountInfo = description.substring(markerIndex + specialTransferMarker.length).trim();
-            finalBankCode = accountInfo;
+        let finalDescription = description;
+        
+        if (transactionType.includes(specialTransferMarker) || description.includes(specialTransferMarker)) {
+            // 對於「行銀非約跨優」類型的轉帳:
+            // - 真正的摘要在主行的「摘要」欄位
+            // - 帳號/備註在補充行
+            finalDescription = description || transactionType.replace(specialTransferMarker, '').trim();
         }
 
         const idString = `${entry.date}-${time}-${finalDescription}-${amount}`;
