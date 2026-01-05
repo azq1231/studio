@@ -13,24 +13,50 @@ export type CategoryRule = {
     category: string;
 };
 
-function applyReplacementRules(text: string | undefined, rules: ReplacementRule[]): { processedText: string, shouldDelete: boolean } {
+function applyReplacementRules(text: string | undefined, rules: ReplacementRule[]): { processedText: string, shouldDelete: boolean, capturedText?: string } {
     if (text === undefined) {
         return { processedText: '', shouldDelete: false };
     }
 
     let processedText = text;
     let shouldDelete = false;
+    let capturedText: string | undefined = undefined;
 
     for (const rule of rules) {
-        if (rule.find && processedText.includes(rule.find)) {
-            if (rule.deleteRow) {
-                shouldDelete = true;
-                break;
+        if (!rule.find) continue;
+
+        try {
+            // 嘗試作為正則表達式匹配
+            const regex = new RegExp(rule.find, 'g');
+            const match = regex.exec(processedText);
+
+            if (match) {
+                if (rule.deleteRow) {
+                    shouldDelete = true;
+                    break;
+                }
+
+                // 如果匹配中包含捕獲組 (Capturing Groups)，提取第一組
+                // 注意：match[0] 是完整匹配，match[1] 是第一組捕獲
+                if (match.length > 1 && match[1]) {
+                    capturedText = match[1];
+                }
+
+                // 執行取代
+                processedText = processedText.replace(regex, rule.replace);
             }
-            processedText = processedText.replace(new RegExp(rule.find, 'g'), rule.replace);
+        } catch (e) {
+            // 如果不是有效的正則表達式，回退到字串包含檢查
+            if (processedText.includes(rule.find)) {
+                if (rule.deleteRow) {
+                    shouldDelete = true;
+                    break;
+                }
+                processedText = processedText.replace(new RegExp(rule.find, 'g'), rule.replace);
+            }
         }
     }
-    return { processedText: processedText.trim(), shouldDelete };
+    return { processedText: processedText.trim(), shouldDelete, capturedText };
 }
 
 
@@ -171,18 +197,25 @@ export async function processBankStatement(
                 }
 
                 // Apply rules to both description and bankCode
-                const { processedText: processedDescription, shouldDelete } = applyReplacementRules(entry.description, replacementRules);
+                const { processedText: processedDescription, shouldDelete, capturedText: capturedFromDesc } = applyReplacementRules(entry.description, replacementRules);
                 if (shouldDelete) return null;
 
-                const { processedText: processedBankCode } = applyReplacementRules(entry.bankCode, replacementRules);
+                const { processedText: processedBankCode, capturedText: capturedFromBankCode } = applyReplacementRules(entry.bankCode, replacementRules);
 
                 const category = applyCategoryRules(processedDescription, categoryRules);
                 detectedCategories.add(category);
 
+                // 整合捕獲到的文字到 bankCode
+                let finalBankCode = processedBankCode;
+                const captured = capturedFromDesc || capturedFromBankCode;
+                if (captured) {
+                    finalBankCode = finalBankCode ? `${finalBankCode} (${captured})` : captured;
+                }
+
                 return {
                     ...entry,
                     description: processedDescription,
-                    bankCode: processedBankCode,
+                    bankCode: finalBankCode,
                     category: category
                 };
             });

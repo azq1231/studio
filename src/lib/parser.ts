@@ -1,6 +1,5 @@
 import { createHash } from 'crypto';
-import { format } from 'date-fns';
-export { parse } from 'date-fns';
+import { format, parse } from 'date-fns';
 
 // Helper function to create a SHA-1 hash for generating consistent IDs
 async function sha1(str: string): Promise<string> {
@@ -336,15 +335,26 @@ export async function parseDepositAccount(text: string): Promise<DepositData[]> 
         let finalBankCode = entry.supplementaryLine || '';
 
         // 項目/摘要 = 交易類型 + 最後欄位（合併）
-        // 例如：「連結帳戶交易 391-1504531614」、「行銀非約跨優 花都管理費」、「匯款存入 吳葉秀屘」
-        // 取代規則會在後續的 applyReplacementRules 中處理（例如移除「行銀非約跨優」）
+        // 但如果最後一欄 (description) 看起來像帳號或 ID，我們將其移至 bankCode
+        const looksLikeId = description && (/^\d+$/.test(description) || /^[\d-]+$/.test(description) || description.length > 10);
+
         let finalDescription = '';
         if (transactionType && description) {
-            finalDescription = `${transactionType} ${description}`;
+            if (looksLikeId) {
+                finalDescription = transactionType;
+                finalBankCode = finalBankCode ? `${finalBankCode} ${description}` : description;
+            } else {
+                finalDescription = `${transactionType} ${description}`;
+            }
         } else if (transactionType) {
             finalDescription = transactionType;
         } else if (description) {
-            finalDescription = description;
+            if (looksLikeId) {
+                finalDescription = '轉帳/交易'; // 給一個預設名稱
+                finalBankCode = finalBankCode ? `${finalBankCode} ${description}` : description;
+            } else {
+                finalDescription = description;
+            }
         }
 
         const idString = `${entry.date}-${time}-${finalDescription}-${amount}`;

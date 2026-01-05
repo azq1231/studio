@@ -23,8 +23,8 @@ import { AlertCircle, Trash2, ChevronsUpDown, ArrowDown, ArrowUp, Loader2, Setti
 const replacementRuleSchema = z.object({
   find: z.string().min(1, { message: '請輸入要尋找的文字' }),
   replace: z.string(),
-  deleteRow: z.boolean().default(false),
-  notes: z.string().optional(),
+  deleteRow: z.boolean().or(z.undefined()).transform(v => !!v),
+  notes: z.string().optional().or(z.null()).transform(v => v ?? ''),
 });
 
 const categoryRuleSchema = z.object({
@@ -124,7 +124,12 @@ export function SettingsManager({
   const settingsForm = useForm<SettingsFormData>({
     resolver: zodResolver(settingsFormSchema),
     values: {
-      replacementRules: settings.replacementRules,
+      replacementRules: settings.replacementRules.map(r => ({
+        find: r.find,
+        replace: r.replace,
+        deleteRow: !!r.deleteRow,
+        notes: r.notes || ''
+      })),
       categoryRules: settings.categoryRules,
       quickFilters: settings.quickFilters,
       descriptionGroupingRules: settings.descriptionGroupingRules,
@@ -336,6 +341,20 @@ export function SettingsManager({
                 <AccordionTrigger>取代規則</AccordionTrigger>
                 <AccordionContent>
                   <CardDescription className="mb-4">設定自動取代或刪除規則。勾選「刪除整筆資料」後，符合條件的資料將被整筆移除。</CardDescription>
+                  <div className="mb-4">
+                    <details className="group border border-dashed border-primary/30 rounded-lg bg-muted/50 overflow-hidden">
+                      <summary className="flex items-center gap-2 p-3 font-semibold text-primary cursor-pointer hover:bg-primary/5 transition-colors list-none">
+                        <DatabaseZap className="h-4 w-4" /> 💡 需要幫忙？點此查看「如何自動提取案號/序號」
+                      </summary>
+                      <div className="px-3 pb-3 text-sm text-muted-foreground border-t border-primary/10 pt-2">
+                        <ul className="list-disc list-inside space-y-1 ml-1">
+                          <li>使用 <code>(\d+)</code> 抓取變動數字（如：案號、序號、帳號後幾碼）。</li>
+                          <li>使用 <code>(.*)</code> 抓取任何剩餘文字。</li>
+                          <li><strong>範例</strong>：尋找 <code>代繳健保費 (\d+)</code> 取代為 <code>代繳健保費</code>，系統會自動將案號移至備註。</li>
+                        </ul>
+                      </div>
+                    </details>
+                  </div>
                   <div className="rounded-md border">
                     <Table>
                       <TableHeader><TableRow><TableHead className="w-1/4">尋找文字</TableHead><TableHead className="w-1/4">取代為</TableHead><TableHead className="w-1/4">備註</TableHead><TableHead className="w-1/6 text-center">刪除整筆資料</TableHead><TableHead className="w-[50px]">操作</TableHead></TableRow></TableHeader>
