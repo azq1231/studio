@@ -165,18 +165,14 @@ export async function processBankStatement(
 
             // 3. Process deposit account entries by applying rules
             const processedDepositPromises = rawDepositParsed.map(async (entry): Promise<DepositData | null> => {
-                console.log('[DEBUG] Processing deposit entry:', JSON.stringify(entry));
-
                 // 檢查是否已存在
                 if (existingDepositIds.has(entry.id)) {
-                    console.log('[DEBUG] Skipping duplicate:', entry.id);
                     skippedDuplicates.deposit++;
                     return null;
                 }
 
                 // Apply rules to both description and bankCode
                 const { processedText: processedDescription, shouldDelete } = applyReplacementRules(entry.description, replacementRules);
-                console.log('[DEBUG] After replacement rules - description:', processedDescription, 'shouldDelete:', shouldDelete);
                 if (shouldDelete) return null;
 
                 const { processedText: processedBankCode } = applyReplacementRules(entry.bankCode, replacementRules);

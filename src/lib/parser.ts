@@ -249,12 +249,7 @@ export type CashData = {
 };
 
 export async function parseDepositAccount(text: string): Promise<DepositData[]> {
-    console.log('[PARSER DEBUG] parseDepositAccount called with text length:', text?.length);
-    console.log('[PARSER DEBUG] Input text:', text?.substring(0, 500));
-
     const rawLines = text.split('\n').map(l => l.trim()).filter(l => l);
-    console.log('[PARSER DEBUG] rawLines:', rawLines);
-
     const results: DepositData[] = [];
 
     // Step 1: Merge multi-line entries

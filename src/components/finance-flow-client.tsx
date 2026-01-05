@@ -140,7 +140,15 @@ export function FinanceFlowClient() {
     setIsLoading(true);
     setHasProcessed(false);
 
-    const result = await processBankStatement(text || '', settings.replacementRules, settings.categoryRules, creditData, depositData, cashData, !!excelData, excelData);
+    // 將 Firestore 資料轉換成純物件（移除 createdAt 等 Firestore 特定欄位）
+    const cleanData = <T extends { id: string }>(data: T[]): T[] => {
+      return data.map(item => {
+        const { createdAt, updatedAt, ...rest } = item as any;
+        return rest as T;
+      });
+    };
+
+    const result = await processBankStatement(text || '', settings.replacementRules, settings.categoryRules, cleanData(creditData), cleanData(depositData), cleanData(cashData), !!excelData, excelData);
 
     if (result.success) {
       const creditTotal = result.creditData.reduce((sum, item) => sum + item.amount, 0);
