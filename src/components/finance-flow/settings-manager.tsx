@@ -42,15 +42,28 @@ const descriptionGroupingRuleSchema = z.object({
   keywords: z.string().min(1, { message: '請輸入至少一個關鍵字' }),
 });
 
+const balanceAccountSchema = z.object({
+  name: z.string().min(1, { message: '請輸入帳戶名稱' }),
+  category: z.string().min(1, { message: '請選擇一個類別' }),
+  keywords: z.string().min(1, { message: '請輸入關鍵字（逗號分隔）' }),
+});
+
 const settingsFormSchema = z.object({
   replacementRules: z.array(replacementRuleSchema),
   categoryRules: z.array(categoryRuleSchema),
   quickFilters: z.array(quickFilterSchema),
   descriptionGroupingRules: z.array(descriptionGroupingRuleSchema),
+  balanceAccounts: z.array(balanceAccountSchema),
 });
 
 export type DescriptionGroupingRule = {
   groupName: string;
+  keywords: string;
+};
+
+export type BalanceAccount = {
+  name: string;
+  category: string;
   keywords: string;
 };
 
@@ -61,6 +74,7 @@ export type AppSettings = {
   quickFilters: QuickFilter[];
   cashTransactionDescriptions: string[];
   descriptionGroupingRules: DescriptionGroupingRule[];
+  balanceAccounts: BalanceAccount[];
 };
 type SettingsFormData = z.infer<typeof settingsFormSchema>;
 type SortKey = 'keyword' | 'category';
@@ -95,6 +109,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   quickFilters: DEFAULT_QUICK_FILTERS,
   cashTransactionDescriptions: DEFAULT_CASH_DESCRIPTIONS,
   descriptionGroupingRules: DEFAULT_DESCRIPTION_GROUPING_RULES,
+  balanceAccounts: [
+    { name: '老弟停車費', category: '弟', keywords: '停車費, 預付' }
+  ],
 };
 
 export function SettingsManager({
@@ -133,6 +150,7 @@ export function SettingsManager({
       categoryRules: settings.categoryRules,
       quickFilters: settings.quickFilters,
       descriptionGroupingRules: settings.descriptionGroupingRules,
+      balanceAccounts: settings.balanceAccounts || [],
     }
   });
 
@@ -169,19 +187,13 @@ export function SettingsManager({
     }
   }, [settings, onSaveSettings, toast, settingsForm]);
 
-  useEffect(() => {
-    settingsForm.reset({
-      replacementRules: settings.replacementRules,
-      categoryRules: settings.categoryRules,
-      quickFilters: settings.quickFilters,
-      descriptionGroupingRules: settings.descriptionGroupingRules,
-    });
-  }, [settings, settingsForm]);
+  // Removed redundant reset Effect as useForm uses the 'values' property for automatic syncing
 
   const { fields: replacementFields, append: appendReplacement, remove: removeReplacement } = useFieldArray({ control: settingsForm.control, name: 'replacementRules' });
   const { fields: categoryFields, append: appendCategory, remove: removeCategory } = useFieldArray({ control: settingsForm.control, name: 'categoryRules' });
   const { fields: quickFilterFields, append: appendQuickFilter, remove: removeQuickFilter } = useFieldArray({ control: settingsForm.control, name: "quickFilters" });
   const { fields: groupingRuleFields, append: appendGroupingRule, remove: removeGroupingRule } = useFieldArray({ control: settingsForm.control, name: "descriptionGroupingRules" });
+  const { fields: balanceAccountFields, append: appendBalanceAccount, remove: removeBalanceAccount } = useFieldArray({ control: settingsForm.control, name: "balanceAccounts" });
 
 
 
@@ -430,20 +442,66 @@ export function SettingsManager({
                         {groupingRuleFields.map((field, index) => (
                           <TableRow key={field.id}>
                             <TableCell className="p-1">
-                              <FormField control={settingsForm.control} name={`descriptionGroupingRules.${index}.groupName`} render={({ field }) => <FormItem><FormControl><Input placeholder="例如：汽車" {...field} className="h-9" /></FormControl><FormMessage className="text-xs px-2" /></FormItem>} />
+                              <FormField control={settingsForm.control} name={`descriptionGroupingRules.${index}.groupName`} render={({ field }) => <FormItem><FormControl><Input placeholder="例如：汽車" {...field} className="h-9" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl><FormMessage className="text-xs px-2" /></FormItem>} />
                             </TableCell>
                             <TableCell className="p-1">
-                              <FormField control={settingsForm.control} name={`descriptionGroupingRules.${index}.keywords`} render={({ field }) => <FormItem><FormControl><Input placeholder="例如：汽車,中油,加油站" {...field} className="h-9" /></FormControl><FormMessage className="text-xs px-2" /></FormItem>} />
+                              <FormField control={settingsForm.control} name={`descriptionGroupingRules.${index}.keywords`} render={({ field }) => <FormItem><FormControl><Input placeholder="例如：汽車,中油,加油站" {...field} className="h-9" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl><FormMessage className="text-xs px-2" /></FormItem>} />
                             </TableCell>
                             <TableCell className="p-1">
-                              <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeGroupingRule(index)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                              <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => { removeGroupingRule(index); handleSaveSettings(); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                             </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
                     </Table>
                   </div>
-                  <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => appendGroupingRule({ groupName: '', keywords: '' })}><PlusCircle className="mr-2 h-4 w-4" />新增群組規則</Button>
+                  <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => { appendGroupingRule({ groupName: '', keywords: '' }); setIsDirty(true); }}><PlusCircle className="mr-2 h-4 w-4" />新增群組規則</Button>
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="balance-accounts">
+                <AccordionTrigger>餘額帳戶設定</AccordionTrigger>
+                <AccordionContent>
+                  <CardDescription className="mb-4">設定需要自動追蹤餘額的「專款帳戶」。只有屬於該類別且描述包含「關鍵字」的交易會被計算入內。例如：類別為「弟」，關鍵字為「停車費」。</CardDescription>
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-1/4">帳戶名稱</TableHead>
+                          <TableHead className="w-1/4">監控類別</TableHead>
+                          <TableHead className="w-1/2">關鍵字 (逗號分隔)</TableHead>
+                          <TableHead className="w-[50px]">操作</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {balanceAccountFields.map((field, index) => (
+                          <TableRow key={field.id}>
+                            <TableCell className="p-1">
+                              <FormField control={settingsForm.control} name={`balanceAccounts.${index}.name`} render={({ field }) => <FormItem><FormControl><Input placeholder="例如：弟的停車費" {...field} className="h-9" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl><FormMessage className="text-xs px-2" /></FormItem>} />
+                            </TableCell>
+                            <TableCell className="p-1">
+                              <FormField control={settingsForm.control} name={`balanceAccounts.${index}.category`} render={({ field }) => (
+                                <FormItem>
+                                  <Select onValueChange={(value) => { field.onChange(value); handleSaveSettings(); }} value={field.value}>
+                                    <FormControl><SelectTrigger className="h-9"><SelectValue placeholder="選擇類別" /></SelectTrigger></FormControl>
+                                    <SelectContent>
+                                      {settings.availableCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                                    </SelectContent>
+                                  </Select>
+                                </FormItem>
+                              )} />
+                            </TableCell>
+                            <TableCell className="p-1">
+                              <FormField control={settingsForm.control} name={`balanceAccounts.${index}.keywords`} render={({ field }) => <FormItem><FormControl><Input placeholder="例如：停車費, 預付" {...field} className="h-9" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl><FormMessage className="text-xs px-2" /></FormItem>} />
+                            </TableCell>
+                            <TableCell className="p-1">
+                              <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => { removeBalanceAccount(index); handleSaveSettings(); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => { appendBalanceAccount({ name: '', category: '', keywords: '' }); setIsDirty(true); }}><PlusCircle className="mr-2 h-4 w-4" />新增餘額帳戶</Button>
                 </AccordionContent>
               </AccordionItem>
               <AccordionItem value="quick-filters">
@@ -454,7 +512,7 @@ export function SettingsManager({
                     {quickFilterFields.map((field, index) => (
                       <Card key={field.id} className="p-4 relative">
                         <div className="space-y-4">
-                          <FormField control={settingsForm.control} name={`quickFilters.${index}.name`} render={({ field }) => <FormItem><FormLabel>按鈕名稱</FormLabel><FormControl><Input {...field} className="max-w-xs" /></FormControl><FormMessage /></FormItem>} />
+                          <FormField control={settingsForm.control} name={`quickFilters.${index}.name`} render={({ field }) => <FormItem><FormLabel>按鈕名稱</FormLabel><FormControl><Input {...field} className="max-w-xs" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl><FormMessage /></FormItem>} />
                           <FormField control={settingsForm.control} name={`quickFilters.${index}.categories`} render={() => (
                             <FormItem>
                               <FormLabel>包含的類型</FormLabel>
@@ -462,7 +520,11 @@ export function SettingsManager({
                                 {settings.availableCategories.map((cat) => (
                                   <FormField key={cat} control={settingsForm.control} name={`quickFilters.${index}.categories`} render={({ field }) => (
                                     <FormItem key={cat} className="flex flex-row items-start space-x-2 space-y-0">
-                                      <FormControl><Checkbox checked={field.value?.includes(cat)} onCheckedChange={(c) => c ? field.onChange([...(field.value || []), cat]) : field.onChange((field.value || []).filter(v => v !== cat))} /></FormControl>
+                                      <FormControl><Checkbox checked={field.value?.includes(cat)} onCheckedChange={(c) => {
+                                        const newValue = c ? [...(field.value || []), cat] : (field.value || []).filter(v => v !== cat);
+                                        field.onChange(newValue);
+                                        handleSaveSettings();
+                                      }} /></FormControl>
                                       <FormLabel className="font-normal">{cat}</FormLabel>
                                     </FormItem>
                                   )} />
@@ -471,11 +533,11 @@ export function SettingsManager({
                             </FormItem>
                           )} />
                         </div>
-                        <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2 h-8 w-8" onClick={() => removeQuickFilter(index)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                        <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2 h-8 w-8" onClick={() => { removeQuickFilter(index); handleSaveSettings(); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                       </Card>
                     ))}
                   </div>
-                  <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => appendQuickFilter({ name: `篩選 ${quickFilterFields.length + 1}`, categories: [] })}><PlusCircle className="mr-2 h-4 w-4" />新增快速篩選</Button>
+                  <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => { appendQuickFilter({ name: `篩選 ${quickFilterFields.length + 1}`, categories: [] }); setIsDirty(true); }}><PlusCircle className="mr-2 h-4 w-4" />新增快速篩選</Button>
                 </AccordionContent>
               </AccordionItem>
               <AccordionItem value="manage-categories">

@@ -10,11 +10,12 @@ import { StatementImporter } from '@/components/statement-importer';
 import { SettingsManager, DEFAULT_SETTINGS, type AppSettings } from '@/components/finance-flow/settings-manager';
 import { ResultsDisplay } from '@/components/finance-flow/results-display';
 import { FixedItemsSummary } from '@/components/finance-flow/fixed-items-summary';
+import { BalanceTracker } from '@/components/finance-flow/balance-tracker';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Text, Settings, ClipboardCopy, FileText, BarChart2 } from 'lucide-react';
+import { Text, Settings, ClipboardCopy, FileText, BarChart2, Wallet } from 'lucide-react';
 import { parse } from 'date-fns';
 import { getCreditDisplayDate } from '@/lib/parser';
 
@@ -373,7 +374,7 @@ export function FinanceFlowClient() {
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-      <TabsList className="grid w-full grid-cols-4">
+      <TabsList className="grid w-full grid-cols-5">
         <TabsTrigger value="importer">
           <ClipboardCopy className="mr-2" />
           貼上報表
@@ -389,6 +390,10 @@ export function FinanceFlowClient() {
         <TabsTrigger value="analysis" disabled={!hasFixedItems}>
           <BarChart2 className="mr-2" />
           詳細分析
+        </TabsTrigger>
+        <TabsTrigger value="balances" disabled={!hasData}>
+          <Wallet className="mr-2" />
+          專款餘額
         </TabsTrigger>
       </TabsList>
       <TabsContent value="importer" className="mt-4">
@@ -458,6 +463,21 @@ export function FinanceFlowClient() {
                 <Text className="mx-auto h-12 w-12 text-muted-foreground" />
                 <h3 className="mt-4 text-lg font-semibold">沒有可顯示的資料</h3>
                 <p className="mt-2 text-sm text-muted-foreground">請先處理您的銀行資料，並確保有「固定」分類的項目。</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </TabsContent>
+      <TabsContent value="balances" className="mt-4">
+        {showResults ? (
+          <BalanceTracker combinedData={combinedData} balanceAccounts={settings.balanceAccounts || []} />
+        ) : (
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-center py-10">
+                <Wallet className="mx-auto h-12 w-12 text-muted-foreground" />
+                <h3 className="mt-4 text-lg font-semibold">沒有可顯示的資料</h3>
+                <p className="mt-2 text-sm text-muted-foreground">請先處理您的銀行資料，或在「規則設定」中設定餘額帳戶。</p>
               </div>
             </CardContent>
           </Card>

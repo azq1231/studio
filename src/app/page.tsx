@@ -4,7 +4,7 @@ import { AuthButton } from '@/components/auth-button';
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col items-center p-4 sm:p-6 md:p-8">
+    <div className="min-h-screen bg-background text-foreground flex flex-col items-center p-4 sm:p-6 md:p-8" suppressHydrationWarning>
       <div className="w-full max-w-7xl mx-auto">
         <header className="flex items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-4">
