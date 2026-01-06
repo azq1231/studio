@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useUser, useFirestore, useCollection, useDoc, useMemoFirebase } from '@/firebase';
 import { collection, writeBatch, doc, getDocs, query, setDoc, serverTimestamp, updateDoc, deleteDoc, getDoc } from 'firebase/firestore';
 import { useToast } from "@/hooks/use-toast"
@@ -361,11 +361,13 @@ export function FinanceFlowClient() {
   const hasData = useMemo(() => combinedData.length > 0, [combinedData]);
   const hasFixedItems = useMemo(() => combinedData.some(d => d.category === '固定'), [combinedData]);
 
+  const isFirstLoadRef = useRef(true);
   useEffect(() => {
-    if (!isLoadingData && hasData) {
+    if (!isLoadingData && hasData && isFirstLoadRef.current) {
       setActiveTab((currentTab) =>
         currentTab === "importer" ? "results" : currentTab
       );
+      isFirstLoadRef.current = false;
     }
   }, [isLoadingData, hasData]);
 
@@ -387,11 +389,11 @@ export function FinanceFlowClient() {
           <FileText className="mr-2" />
           處理結果
         </TabsTrigger>
-        <TabsTrigger value="analysis" disabled={!combinedData.some(d => d.category === '固定' || d.category === '收入')}>
+        <TabsTrigger value="analysis">
           <BarChart2 className="mr-2" />
           詳細分析
         </TabsTrigger>
-        <TabsTrigger value="balances" disabled={!hasData}>
+        <TabsTrigger value="balances">
           <Wallet className="mr-2" />
           專款餘額
         </TabsTrigger>
@@ -454,29 +456,39 @@ export function FinanceFlowClient() {
         )}
       </TabsContent>
       <TabsContent value="analysis" className="mt-4">
-        {showResults ? (
+        {isLoadingData ? (
+          <div className="space-y-4 pt-4">
+            <Card><CardHeader><Skeleton className="h-8 w-48 rounded-md" /></CardHeader>
+              <CardContent className="space-y-4"><Skeleton className="h-48 w-full rounded-md" /></CardContent></Card>
+          </div>
+        ) : showResults && (combinedData.some(d => d.category === '固定' || d.category === '收入')) ? (
           <FixedItemsSummary combinedData={combinedData} settings={settings} />
         ) : (
           <Card>
             <CardContent className="pt-6">
               <div className="text-center py-10">
                 <Text className="mx-auto h-12 w-12 text-muted-foreground" />
-                <h3 className="mt-4 text-lg font-semibold">沒有可顯示的資料</h3>
-                <p className="mt-2 text-sm text-muted-foreground">請先處理您的銀行資料，並確保有「固定」分類的項目。</p>
+                <h3 className="mt-4 text-lg font-semibold">沒有可顯示的分析資料</h3>
+                <p className="mt-2 text-sm text-muted-foreground">請先處理您的銀行資料，並確保有「固定」或「收入」分類的項目。</p>
               </div>
             </CardContent>
           </Card>
         )}
       </TabsContent>
       <TabsContent value="balances" className="mt-4">
-        {showResults ? (
+        {isLoadingData ? (
+          <div className="space-y-4 pt-4">
+            <Card><CardHeader><Skeleton className="h-8 w-48 rounded-md" /></CardHeader>
+              <CardContent className="space-y-4"><Skeleton className="h-48 w-full rounded-md" /></CardContent></Card>
+          </div>
+        ) : (showResults && hasData) ? (
           <BalanceTracker combinedData={combinedData} balanceAccounts={settings.balanceAccounts || []} />
         ) : (
           <Card>
             <CardContent className="pt-6">
               <div className="text-center py-10">
                 <Wallet className="mx-auto h-12 w-12 text-muted-foreground" />
-                <h3 className="mt-4 text-lg font-semibold">沒有可顯示的資料</h3>
+                <h3 className="mt-4 text-lg font-semibold">沒有可顯示的餘額資料</h3>
                 <p className="mt-2 text-sm text-muted-foreground">請先處理您的銀行資料，或在「規則設定」中設定餘額帳戶。</p>
               </div>
             </CardContent>

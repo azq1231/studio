@@ -110,7 +110,7 @@ export function FixedItemsSummary({ combinedData, settings }: { combinedData: Co
                 return acc;
             }, Array(keys.length).fill(0));
 
-            return { finalData, colTotals, grandTotal: colTotals.reduce((a, b) => a + b, 0) };
+            return { finalData, colTotals, grandTotal: colTotals.reduce((a: number, b: number) => a + b, 0) };
         };
 
         const monthlyResults = getTableRows(itemsByDescriptionMonthly, 'monthly', Array.from({ length: 12 }, (_, i) => i));
@@ -130,6 +130,14 @@ export function FixedItemsSummary({ combinedData, settings }: { combinedData: Co
 
     const months = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
 
+    // Auto-switch to a year with data if current selection is empty
+    React.useEffect(() => {
+        if (analysisData.years.length > 0 && !analysisData.years.includes(selectedYear)) {
+            // Since years are sorted descending, [0] is the most recent year with data
+            setSelectedYear(analysisData.years[0]);
+        }
+    }, [analysisData.years, selectedYear]);
+
     return (
         <Card className="mt-6 border-primary/20 shadow-md">
             <CardHeader className="pb-3">
@@ -143,20 +151,29 @@ export function FixedItemsSummary({ combinedData, settings }: { combinedData: Co
                             分析「{selectedCategory}」項目的趨勢與分佈
                         </CardDescription>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <Select value={selectedCategory} onValueChange={(v: any) => setSelectedCategory(v)}>
-                            <SelectTrigger className="w-[110px] bg-primary/5 border-primary/20">
-                                <SelectValue placeholder="類別" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="固定">固定支出</SelectItem>
-                                <SelectItem value="收入">收入分析</SelectItem>
-                            </SelectContent>
-                        </Select>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex bg-muted p-1 rounded-md mb-0">
+                            <Button
+                                variant={selectedCategory === '固定' ? "secondary" : "ghost"}
+                                size="sm"
+                                className={cn("h-8 px-3 text-xs md:text-sm", selectedCategory === '固定' && "bg-background shadow-sm")}
+                                onClick={() => setSelectedCategory('固定')}
+                            >
+                                固定支出
+                            </Button>
+                            <Button
+                                variant={selectedCategory === '收入' ? "secondary" : "ghost"}
+                                size="sm"
+                                className={cn("h-8 px-3 text-xs md:text-sm", selectedCategory === '收入' && "bg-background shadow-sm")}
+                                onClick={() => setSelectedCategory('收入')}
+                            >
+                                收入分析
+                            </Button>
+                        </div>
 
                         {analysisMode === 'monthly' && analysisData.years.length > 0 && (
                             <Select value={selectedYear} onValueChange={setSelectedYear}>
-                                <SelectTrigger className="w-[110px]">
+                                <SelectTrigger className="w-[110px] h-10 border-primary/20 bg-primary/5">
                                     <SelectValue placeholder="年份" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -165,7 +182,7 @@ export function FixedItemsSummary({ combinedData, settings }: { combinedData: Co
                                     ))}
                                 </SelectContent>
                             </Select>
-                        ) || <div className="w-[110px]" />}
+                        )}
                     </div>
                 </div>
             </CardHeader>
