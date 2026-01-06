@@ -387,7 +387,7 @@ export function FinanceFlowClient() {
           <FileText className="mr-2" />
           處理結果
         </TabsTrigger>
-        <TabsTrigger value="analysis" disabled={!hasFixedItems}>
+        <TabsTrigger value="analysis" disabled={!combinedData.some(d => d.category === '固定' || d.category === '收入')}>
           <BarChart2 className="mr-2" />
           詳細分析
         </TabsTrigger>

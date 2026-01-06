@@ -18,6 +18,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { cn } from '@/lib/utils';
 import { AlertCircle, Trash2, ChevronsUpDown, ArrowDown, ArrowUp, Loader2, Settings, PlusCircle, RotateCcw, DatabaseZap, FileUp, Download as DownloadIcon } from 'lucide-react';
 
 const replacementRuleSchema = z.object({
@@ -136,6 +137,8 @@ export function SettingsManager({
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [isSaving, setIsSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const [ruleSearch, setRuleSearch] = useState('');
+  const [selectedFilterCategory, setSelectedFilterCategory] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const settingsForm = useForm<SettingsFormData>({
@@ -243,8 +246,30 @@ export function SettingsManager({
   };
 
   const renderSortedCategoryFields = useMemo(() => {
-    if (!sortKey) return categoryFields;
-    return [...categoryFields].sort((a, b) => {
+    let filtered = [...categoryFields];
+
+    // Search Filter
+    if (ruleSearch) {
+      filtered = filtered.filter(field => {
+        const index = categoryFields.findIndex(f => f.id === field.id);
+        const keyword = settingsForm.getValues(`categoryRules.${index}.keyword`) || '';
+        const category = settingsForm.getValues(`categoryRules.${index}.category`) || '';
+        return keyword.toLowerCase().includes(ruleSearch.toLowerCase()) ||
+          category.toLowerCase().includes(ruleSearch.toLowerCase());
+      });
+    }
+
+    // Category Filter
+    if (selectedFilterCategory) {
+      filtered = filtered.filter(field => {
+        const index = categoryFields.findIndex(f => f.id === field.id);
+        return settingsForm.getValues(`categoryRules.${index}.category`) === selectedFilterCategory;
+      });
+    }
+
+    // Sorting
+    if (!sortKey) return filtered;
+    return filtered.sort((a, b) => {
       const aIndex = categoryFields.findIndex(f => f.id === a.id);
       const bIndex = categoryFields.findIndex(f => f.id === b.id);
       const aValue = settingsForm.getValues(`categoryRules.${aIndex}.${sortKey}`) || '';
@@ -252,7 +277,7 @@ export function SettingsManager({
       const comparison = aValue.localeCompare(bValue, 'zh-Hant');
       return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [categoryFields, sortKey, sortDirection, settingsForm]);
+  }, [categoryFields, sortKey, sortDirection, settingsForm, ruleSearch, selectedFilterCategory]);
 
   const resetAllSettings = () => {
     setSettings(DEFAULT_SETTINGS);
@@ -397,9 +422,51 @@ export function SettingsManager({
               <AccordionItem value="category">
                 <AccordionTrigger>分類規則</AccordionTrigger>
                 <AccordionContent>
-                  <div className="flex justify-between items-center mb-4">
-                    <CardDescription className="pr-4">設定交易項目關鍵字與對應的類型。處理報表時，將會自動帶入符合的第一個類型。</CardDescription>
-                    <Button type="button" variant="outline" size="sm" onClick={() => appendCategory({ keyword: '', category: '' })}><PlusCircle className="mr-2 h-4 w-4" />新增規則</Button>
+                  <div className="space-y-4 mb-4">
+                    <div className="flex justify-between items-center">
+                      <CardDescription className="pr-4">設定交易項目關鍵字與對應的類型。處理報表時，將會自動帶入符合的第一個類型。</CardDescription>
+                      <Button type="button" variant="outline" size="sm" onClick={() => {
+                        appendCategory({ keyword: '', category: '' });
+                        setRuleSearch('');
+                        setSelectedFilterCategory(null);
+                      }}><PlusCircle className="mr-2 h-4 w-4" />新增規則</Button>
+                    </div>
+
+                    <div className="flex flex-col md:flex-row gap-3">
+                      <div className="relative flex-1">
+                        <Loader2 className={cn("absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground animate-spin", !isProcessing && "hidden")} />
+                        <Settings className={cn("absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground", isProcessing && "hidden")} />
+                        <Input
+                          placeholder="搜尋關鍵字或類型..."
+                          className="pl-9 h-9"
+                          value={ruleSearch}
+                          onChange={(e) => setRuleSearch(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 items-center">
+                        <Button
+                          type="button"
+                          variant={selectedFilterCategory === null ? "default" : "outline"}
+                          size="sm"
+                          className="h-8 px-2.5 py-0 text-xs"
+                          onClick={() => setSelectedFilterCategory(null)}
+                        >
+                          全部
+                        </Button>
+                        {settings.availableCategories.map(cat => (
+                          <Button
+                            key={cat}
+                            type="button"
+                            variant={selectedFilterCategory === cat ? "default" : "outline"}
+                            size="sm"
+                            className="h-8 px-2.5 py-0 text-xs"
+                            onClick={() => setSelectedFilterCategory(selectedFilterCategory === cat ? null : cat)}
+                          >
+                            {cat}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                   <div className="rounded-md border">
                     <Table>
