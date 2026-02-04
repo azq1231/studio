@@ -19,10 +19,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from '@/lib/utils';
-import { Download, AlertCircle, Trash2, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2, FileText, Combine, Search, ChevronsLeft, ChevronsRight, ArrowRight } from 'lucide-react';
+import { Download, AlertCircle, Trash2, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2, FileText, Combine, Search, ChevronsLeft, ChevronsRight, ArrowRight, CreditCard, Landmark, Banknote, Calendar, Tag, MoreHorizontal } from 'lucide-react';
 import { AppSettings } from './settings-manager';
 import { CashTransactionForm } from './cash-transaction-form';
 import type { CombinedData } from '../finance-flow-client';
+import { Badge } from '@/components/ui/badge';
 
 
 const EditableCell = ({ value, onUpdate, disabled }: { value: string; onUpdate: (value: string) => void; disabled?: boolean; }) => {
@@ -55,6 +56,76 @@ const PaginationControls = ({ currentPage, totalPages, onPageChange }: { current
             </div>
             <Button variant="outline" size="sm" onClick={() => onPageChange(currentPage + 1)} disabled={currentPage === totalPages}>下一頁</Button>
             <Button variant="outline" size="sm" onClick={() => onPageChange(totalPages)} disabled={currentPage === totalPages} className="hidden md:flex">最後一頁<ChevronsRight className="h-4 w-4" /></Button>
+        </div>
+    );
+};
+
+const TransactionCard = ({
+    id, date, description, amount, category, type, extra, onUpdate, onDelete, categories, disabled
+}: {
+    id: string; date: string; description: string; amount: number; category: string;
+    type: 'credit' | 'deposit' | 'cash'; extra?: string;
+    onUpdate: (id: string, field: any, value: string | number, type: 'credit' | 'deposit' | 'cash') => void;
+    onDelete: (id: string, type: 'credit' | 'deposit' | 'cash') => void;
+    categories: string[]; disabled?: boolean;
+}) => {
+    const iconMap = {
+        credit: <CreditCard className="h-4 w-4 text-blue-500" />,
+        deposit: <Landmark className="h-4 w-4 text-green-500" />,
+        cash: <Banknote className="h-4 w-4 text-orange-500" />
+    };
+
+    return (
+        <div className="p-4 border rounded-lg bg-card shadow-sm mb-3">
+            <div className="flex justify-between items-start mb-2">
+                <div className="flex items-center gap-2">
+                    {iconMap[type]}
+                    <span className="text-xs font-mono text-muted-foreground">{date}</span>
+                </div>
+                <div className={cn("font-bold font-mono text-sm pr-1", amount < 0 ? "text-green-600" : "text-foreground")}>
+                    {amount.toLocaleString()}
+                </div>
+            </div>
+
+            <div className="mb-3">
+                <EditableCell
+                    value={description}
+                    onUpdate={v => onUpdate(id, 'description', v, type)}
+                    disabled={disabled}
+                />
+            </div>
+
+            <div className="flex flex-wrap justify-between items-center gap-2">
+                <div className="flex items-center gap-2 flex-grow min-w-[120px]">
+                    <Select
+                        value={category}
+                        onValueChange={(v) => onUpdate(id, 'category', v, type)}
+                        disabled={disabled}
+                    >
+                        <SelectTrigger className="h-8 py-0 px-2 text-xs w-auto min-w-[80px]">
+                            <SelectValue placeholder="類型" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                    {extra && (
+                        <div className="text-[10px] text-muted-foreground truncate max-w-[100px]" title={extra}>
+                            {extra}
+                        </div>
+                    )}
+                </div>
+
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onDelete(id, type)}
+                    disabled={disabled}
+                    className="h-8 w-8 text-destructive ml-auto"
+                >
+                    <Trash2 className="h-4 w-4" />
+                </Button>
+            </div>
         </div>
     );
 };
@@ -269,17 +340,219 @@ export function ResultsDisplay({
                             <Button variant="outline" size="sm" onClick={handleDownload}><Download className="mr-2 h-4 w-4" />下載 Excel</Button>
                         </div>
                         <Tabs defaultValue={defaultTab} className="w-full">
-                            <TabsList>
-                                {combinedData.length > 0 && <TabsTrigger value="combined"><Combine className="w-4 h-4 mr-2" />合併報表</TabsTrigger>}
-                                {creditData.length > 0 && <TabsTrigger value="credit">信用卡 ({creditData.length})</TabsTrigger>}
-                                {depositData.length > 0 && <TabsTrigger value="deposit">活存帳戶 ({depositData.length})</TabsTrigger>}
-                                <TabsTrigger value="cash">現金 ({cashData.length})</TabsTrigger>
-                                {hasData && <TabsTrigger value="summary"><FileText className="w-4 h-4 mr-2" />彙總報表</TabsTrigger>}
+                            <TabsList className="flex flex-wrap h-auto bg-muted p-1">
+                                {combinedData.length > 0 && (
+                                    <TabsTrigger value="combined" className="px-3 py-1.5 text-xs sm:text-sm">
+                                        <Combine className="w-4 h-4 mr-1 sm:mr-2" />
+                                        <span>合併報表</span>
+                                    </TabsTrigger>
+                                )}
+                                {creditData.length > 0 && (
+                                    <TabsTrigger value="credit" className="px-3 py-1.5 text-xs sm:text-sm">
+                                        信用卡 ({creditData.length})
+                                    </TabsTrigger>
+                                )}
+                                {depositData.length > 0 && (
+                                    <TabsTrigger value="deposit" className="px-3 py-1.5 text-xs sm:text-sm">
+                                        活存 ({depositData.length})
+                                    </TabsTrigger>
+                                )}
+                                <TabsTrigger value="cash" className="px-3 py-1.5 text-xs sm:text-sm">
+                                    現金 ({cashData.length})
+                                </TabsTrigger>
+                                {hasData && (
+                                    <TabsTrigger value="summary" className="px-3 py-1.5 text-xs sm:text-sm">
+                                        <FileText className="w-4 h-4 mr-1 sm:mr-2" />
+                                        <span>彙總</span>
+                                    </TabsTrigger>
+                                )}
                             </TabsList>
 
-                            <TabsContent value="combined"><Table><TableHeader><TableRow><TableHead>日期</TableHead><TableHead className="w-[120px]">類型</TableHead><TableHead>交易項目</TableHead><TableHead className="w-[100px]">來源</TableHead><TableHead className="text-right">金額</TableHead></TableRow></TableHeader><TableBody>{combinedData.map((row) => (<TableRow key={row.id}><TableCell className="font-mono">{row.date}</TableCell><TableCell>{row.category}</TableCell><TableCell>{row.description}</TableCell><TableCell>{row.source}</TableCell><TableCell className={`text-right font-mono ${row.amount < 0 ? 'text-green-600' : ''}`}>{row.amount.toLocaleString()}</TableCell></TableRow>))}</TableBody></Table></TabsContent>
-                            <TabsContent value="credit"><Table><TableHeader><TableRow><SortableHeader sortKey="transactionDate" currentSortKey={creditSortKey} sortDirection={creditSortDirection} onSort={handleCreditSort} style={{ width: '110px' }}>日期</SortableHeader><TableHead style={{ width: '110px' }}>類型</TableHead><TableHead>交易項目</TableHead><SortableHeader sortKey="amount" currentSortKey={creditSortKey} sortDirection={creditSortDirection} onSort={handleCreditSort} style={{ width: '100px' }}>金額</SortableHeader><TableHead>銀行代碼/備註</TableHead><TableHead className="w-[80px] text-center">操作</TableHead></TableRow></TableHeader><TableBody>{sortedCreditData.data.map((row) => (<TableRow key={row.id}><TableCell style={{ width: '110px' }}><div className="font-mono">{getCreditDisplayDate(row.transactionDate)}</div></TableCell><TableCell style={{ width: '110px' }}><Select value={row.category} onValueChange={(v) => onUpdateTransaction(row.id, 'category', v, 'credit')} disabled={!user}><SelectTrigger className="h-8 w-full"><SelectValue placeholder="選擇類型" /></SelectTrigger><SelectContent>{settings.availableCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select></TableCell><TableCell><EditableCell value={row.description} onUpdate={v => onUpdateTransaction(row.id, 'description', v, 'credit')} disabled={!user} /></TableCell><TableCell style={{ width: '100px' }}><EditableCell value={row.amount.toString()} onUpdate={v => onUpdateTransaction(row.id, 'amount', parseFloat(v) || 0, 'credit')} disabled={!user} /></TableCell><TableCell><EditableCell value={row.bankCode || ''} onUpdate={v => onUpdateTransaction(row.id, 'bankCode', v, 'credit')} disabled={!user} /></TableCell><TableCell className="text-center"><Button variant="ghost" size="icon" onClick={() => onDeleteTransaction(row.id, 'credit')} disabled={!user} className="h-8 w-8"><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell></TableRow>))}</TableBody></Table><PaginationControls currentPage={creditPage} totalPages={sortedCreditData.totalPages} onPageChange={setCreditPage} /></TabsContent>
-                            <TabsContent value="deposit"><Table><TableCaption>金額：支出為正，存入為負</TableCaption><TableHeader><TableRow><SortableHeader sortKey="date" currentSortKey={depositSortKey} sortDirection={depositSortDirection} onSort={handleDepositSort} style={{ width: '110px' }}>日期</SortableHeader><SortableHeader sortKey="category" currentSortKey={depositSortKey} sortDirection={depositSortDirection} onSort={handleDepositSort} style={{ width: '110px' }}>類型</SortableHeader><SortableHeader sortKey="description" currentSortKey={depositSortKey} sortDirection={depositSortDirection} onSort={handleDepositSort}>交易項目</SortableHeader><SortableHeader sortKey="amount" currentSortKey={depositSortKey} sortDirection={depositSortDirection} onSort={handleDepositSort} style={{ width: '110px' }}>金額</SortableHeader><TableHead>銀行代碼/備註</TableHead><TableHead className="w-[80px] text-center">操作</TableHead></TableRow></TableHeader><TableBody>{sortedDepositData.data.map((row) => (<TableRow key={row.id}><TableCell style={{ width: '110px' }}><div className="font-mono">{row.date}</div></TableCell><TableCell style={{ width: '110px' }}><Select value={row.category} onValueChange={(v) => onUpdateTransaction(row.id, 'category', v, 'deposit')} disabled={!user}><SelectTrigger className="h-8 w-full"><SelectValue placeholder="選擇類型" /></SelectTrigger><SelectContent>{settings.availableCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select></TableCell><TableCell><EditableCell value={row.description} onUpdate={v => onUpdateTransaction(row.id, 'description', v, 'deposit')} disabled={!user} /></TableCell><TableCell style={{ width: '110px' }}><EditableCell value={row.amount.toString()} onUpdate={v => onUpdateTransaction(row.id, 'amount', parseFloat(v) || 0, 'deposit')} disabled={!user} /></TableCell><TableCell><EditableCell value={row.bankCode || ''} onUpdate={v => onUpdateTransaction(row.id, 'bankCode', v, 'deposit')} disabled={!user} /></TableCell><TableCell className="text-center"><Button variant="ghost" size="icon" onClick={() => onDeleteTransaction(row.id, 'deposit')} disabled={!user} className="h-8 w-8"><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell></TableRow>))}</TableBody></Table><PaginationControls currentPage={depositPage} totalPages={sortedDepositData.totalPages} onPageChange={setDepositPage} /></TabsContent>
+                            <TabsContent value="combined">
+                                {/* Desktop View */}
+                                <div className="hidden md:block">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead className="w-[100px]">日期</TableHead>
+                                                <TableHead className="w-[100px]">類型</TableHead>
+                                                <TableHead className="min-w-[150px]">交易項目</TableHead>
+                                                <TableHead className="w-[80px]">來源</TableHead>
+                                                <TableHead className="text-right w-[100px]">金額</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {combinedData.map((row) => (
+                                                <TableRow key={row.id}>
+                                                    <TableCell className="font-mono whitespace-nowrap">{row.date}</TableCell>
+                                                    <TableCell>{row.category}</TableCell>
+                                                    <TableCell>{row.description}</TableCell>
+                                                    <TableCell>{row.source}</TableCell>
+                                                    <TableCell className={`text-right font-mono ${row.amount < 0 ? 'text-green-600' : ''}`}>{row.amount.toLocaleString()}</TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+
+                                {/* Mobile View */}
+                                <div className="md:hidden space-y-1">
+                                    {combinedData.length > 0 ? (
+                                        combinedData.map((row) => (
+                                            <div key={row.id} className="p-3 border-b last:border-0">
+                                                <div className="flex justify-between items-start mb-1">
+                                                    <span className="text-[10px] font-mono text-muted-foreground">{row.date} • {row.source}</span>
+                                                    <span className={cn("font-bold text-sm font-mono", row.amount < 0 ? "text-green-600" : "")}>
+                                                        {row.amount.toLocaleString()}
+                                                    </span>
+                                                </div>
+                                                <div className="text-sm font-medium mb-1">{row.description}</div>
+                                                <div className="text-[10px] inline-flex items-center px-1.5 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">
+                                                    {row.category}
+                                                </div>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="text-center py-8 text-muted-foreground">沒有資料</div>
+                                    )}
+                                </div>
+                            </TabsContent>
+                            <TabsContent value="credit">
+                                {/* Desktop View */}
+                                <div className="hidden md:block">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <SortableHeader sortKey="transactionDate" currentSortKey={creditSortKey} sortDirection={creditSortDirection} onSort={handleCreditSort} style={{ width: '100px' }}>日期</SortableHeader>
+                                                <TableHead style={{ width: '100px' }}>類型</TableHead>
+                                                <TableHead className="min-w-[150px]">交易項目</TableHead>
+                                                <SortableHeader sortKey="amount" currentSortKey={creditSortKey} sortDirection={creditSortDirection} onSort={handleCreditSort} style={{ width: '100px' }}>金額</SortableHeader>
+                                                <TableHead className="min-w-[120px]">銀行代碼/備註</TableHead>
+                                                <TableHead className="w-[80px] text-center">操作</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {sortedCreditData.data.map((row) => (
+                                                <TableRow key={row.id}>
+                                                    <TableCell style={{ width: '100px' }}>
+                                                        <div className="font-mono whitespace-nowrap">{getCreditDisplayDate(row.transactionDate)}</div>
+                                                    </TableCell>
+                                                    <TableCell style={{ width: '100px' }}>
+                                                        <Select value={row.category} onValueChange={(v) => onUpdateTransaction(row.id, 'category', v, 'credit')} disabled={!user}>
+                                                            <SelectTrigger className="h-8 w-full"><SelectValue placeholder="類型" /></SelectTrigger>
+                                                            <SelectContent>{settings.availableCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                                                        </Select>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <EditableCell value={row.description} onUpdate={v => onUpdateTransaction(row.id, 'description', v, 'credit')} disabled={!user} />
+                                                    </TableCell>
+                                                    <TableCell style={{ width: '100px' }}>
+                                                        <EditableCell value={row.amount.toString()} onUpdate={v => onUpdateTransaction(row.id, 'amount', parseFloat(v) || 0, 'credit')} disabled={!user} />
+                                                    </TableCell>
+                                                    <TableCell style={{ minWidth: '120px' }}>
+                                                        <EditableCell value={row.bankCode || ''} onUpdate={v => onUpdateTransaction(row.id, 'bankCode', v, 'credit')} disabled={!user} />
+                                                    </TableCell>
+                                                    <TableCell className="text-center">
+                                                        <Button variant="ghost" size="icon" onClick={() => onDeleteTransaction(row.id, 'credit')} disabled={!user} className="h-8 w-8 text-destructive">
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+
+                                {/* Mobile View */}
+                                <div className="md:hidden pt-2">
+                                    {sortedCreditData.data.map((row) => (
+                                        <TransactionCard
+                                            key={row.id}
+                                            id={row.id}
+                                            date={getCreditDisplayDate(row.transactionDate)}
+                                            description={row.description}
+                                            amount={row.amount}
+                                            category={row.category}
+                                            type="credit"
+                                            extra={row.bankCode}
+                                            onUpdate={onUpdateTransaction}
+                                            onDelete={onDeleteTransaction}
+                                            categories={settings.availableCategories}
+                                            disabled={!user}
+                                        />
+                                    ))}
+                                </div>
+                                <PaginationControls currentPage={creditPage} totalPages={sortedCreditData.totalPages} onPageChange={setCreditPage} />
+                            </TabsContent>
+                            <TabsContent value="deposit">
+                                {/* Desktop View */}
+                                <div className="hidden md:block">
+                                    <Table>
+                                        <TableCaption className="hidden md:table-caption">金額：支出為正，存入為負</TableCaption>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <SortableHeader sortKey="date" currentSortKey={depositSortKey} sortDirection={depositSortDirection} onSort={handleDepositSort} style={{ width: '100px' }}>日期</SortableHeader>
+                                                <SortableHeader sortKey="category" currentSortKey={depositSortKey} sortDirection={depositSortDirection} onSort={handleDepositSort} style={{ width: '100px' }}>類型</SortableHeader>
+                                                <SortableHeader sortKey="description" currentSortKey={depositSortKey} sortDirection={depositSortDirection} onSort={handleDepositSort}>交易項目</SortableHeader>
+                                                <SortableHeader sortKey="amount" currentSortKey={depositSortKey} sortDirection={depositSortDirection} onSort={handleDepositSort} style={{ width: '100px' }}>金額</SortableHeader>
+                                                <TableHead className="min-w-[120px]">銀行代碼/備註</TableHead>
+                                                <TableHead className="w-[80px] text-center">操作</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {sortedDepositData.data.map((row) => (
+                                                <TableRow key={row.id}>
+                                                    <TableCell style={{ width: '100px' }}>
+                                                        <div className="font-mono whitespace-nowrap">{row.date}</div>
+                                                    </TableCell>
+                                                    <TableCell style={{ width: '100px' }}>
+                                                        <Select value={row.category} onValueChange={(v) => onUpdateTransaction(row.id, 'category', v, 'deposit')} disabled={!user}>
+                                                            <SelectTrigger className="h-8 w-full"><SelectValue placeholder="類型" /></SelectTrigger>
+                                                            <SelectContent>{settings.availableCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                                                        </Select>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <EditableCell value={row.description} onUpdate={v => onUpdateTransaction(row.id, 'description', v, 'deposit')} disabled={!user} />
+                                                    </TableCell>
+                                                    <TableCell style={{ width: '100px' }}>
+                                                        <EditableCell value={row.amount.toString()} onUpdate={v => onUpdateTransaction(row.id, 'amount', parseFloat(v) || 0, 'deposit')} disabled={!user} />
+                                                    </TableCell>
+                                                    <TableCell style={{ minWidth: '120px' }}>
+                                                        <EditableCell value={row.bankCode || ''} onUpdate={v => onUpdateTransaction(row.id, 'bankCode', v, 'deposit')} disabled={!user} />
+                                                    </TableCell>
+                                                    <TableCell className="text-center">
+                                                        <Button variant="ghost" size="icon" onClick={() => onDeleteTransaction(row.id, 'deposit')} disabled={!user} className="h-8 w-8 text-destructive">
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+
+                                {/* Mobile View */}
+                                <div className="md:hidden pt-2">
+                                    <div className="text-[10px] text-muted-foreground mb-4 px-1">金額：支出為正，存入為負</div>
+                                    {sortedDepositData.data.map((row) => (
+                                        <TransactionCard
+                                            key={row.id}
+                                            id={row.id}
+                                            date={row.date}
+                                            description={row.description}
+                                            amount={row.amount}
+                                            category={row.category}
+                                            type="deposit"
+                                            extra={row.bankCode}
+                                            onUpdate={onUpdateTransaction}
+                                            onDelete={onDeleteTransaction}
+                                            categories={settings.availableCategories}
+                                            disabled={!user}
+                                        />
+                                    ))}
+                                </div>
+                                <PaginationControls currentPage={depositPage} totalPages={sortedDepositData.totalPages} onPageChange={setDepositPage} />
+                            </TabsContent>
                             <TabsContent value="cash">
                                 <Accordion type="single" collapsible defaultValue="add-cash" className="w-full mb-4">
                                     <AccordionItem value="add-cash">
@@ -289,11 +562,73 @@ export function ResultsDisplay({
                                         </AccordionContent>
                                     </AccordionItem>
                                 </Accordion>
-                                <Table>
-                                    <TableCaption>金額：支出為正，存入為負</TableCaption>
-                                    <TableHeader><TableRow><SortableHeader sortKey="date" currentSortKey={cashSortKey} sortDirection={cashSortDirection} onSort={handleCashSort} style={{ width: '110px' }}>日期</SortableHeader><TableHead style={{ width: '110px' }}>類型</TableHead><TableHead>交易項目</TableHead><SortableHeader sortKey="amount" currentSortKey={cashSortKey} sortDirection={cashSortDirection} onSort={handleCashSort} style={{ width: '110px' }}>金額</SortableHeader><TableHead>備註</TableHead><TableHead className="w-[80px] text-center">操作</TableHead></TableRow></TableHeader>
-                                    <TableBody>{sortedCashData.data.map((row) => (<TableRow key={row.id}><TableCell style={{ width: '110px' }}><div className="font-mono">{row.date}</div></TableCell><TableCell style={{ width: '110px' }}><Select value={row.category} onValueChange={(v) => onUpdateTransaction(row.id, 'category', v, 'cash')} disabled={!user}><SelectTrigger className="h-8 w-full"><SelectValue placeholder="選擇類型" /></SelectTrigger><SelectContent>{settings.availableCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select></TableCell><TableCell><EditableCell value={row.description} onUpdate={v => onUpdateTransaction(row.id, 'description', v, 'cash')} disabled={!user} /></TableCell><TableCell style={{ width: '110px' }}><EditableCell value={row.amount.toString()} onUpdate={v => onUpdateTransaction(row.id, 'amount', parseFloat(v) || 0, 'cash')} disabled={!user} /></TableCell><TableCell><EditableCell value={row.notes || ''} onUpdate={v => onUpdateTransaction(row.id, 'notes', v, 'cash')} disabled={!user} /></TableCell><TableCell className="text-center"><Button variant="ghost" size="icon" onClick={() => onDeleteTransaction(row.id, 'cash')} disabled={!user} className="h-8 w-8"><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell></TableRow>))}</TableBody>
-                                </Table>
+
+                                {/* Desktop View */}
+                                <div className="hidden md:block">
+                                    <Table>
+                                        <TableCaption className="hidden md:table-caption">金額：支出為正，存入為負</TableCaption>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <SortableHeader sortKey="date" currentSortKey={cashSortKey} sortDirection={cashSortDirection} onSort={handleCashSort} style={{ width: '100px' }}>日期</SortableHeader>
+                                                <TableHead style={{ width: '100px' }}>類型</TableHead>
+                                                <TableHead className="min-w-[150px]">交易項目</TableHead>
+                                                <SortableHeader sortKey="amount" currentSortKey={cashSortKey} sortDirection={cashSortDirection} onSort={handleCashSort} style={{ width: '100px' }}>金額</SortableHeader>
+                                                <TableHead className="min-w-[120px]">備註</TableHead>
+                                                <TableHead className="w-[80px] text-center">操作</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {sortedCashData.data.map((row) => (
+                                                <TableRow key={row.id}>
+                                                    <TableCell style={{ width: '100px' }}>
+                                                        <div className="font-mono whitespace-nowrap">{row.date}</div>
+                                                    </TableCell>
+                                                    <TableCell style={{ width: '100px' }}>
+                                                        <Select value={row.category} onValueChange={(v) => onUpdateTransaction(row.id, 'category', v, 'cash')} disabled={!user}>
+                                                            <SelectTrigger className="h-8 w-full"><SelectValue placeholder="類型" /></SelectTrigger>
+                                                            <SelectContent>{settings.availableCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                                                        </Select>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <EditableCell value={row.description} onUpdate={v => onUpdateTransaction(row.id, 'description', v, 'cash')} disabled={!user} />
+                                                    </TableCell>
+                                                    <TableCell style={{ width: '100px' }}>
+                                                        <EditableCell value={row.amount.toString()} onUpdate={v => onUpdateTransaction(row.id, 'amount', parseFloat(v) || 0, 'cash')} disabled={!user} />
+                                                    </TableCell>
+                                                    <TableCell style={{ minWidth: '120px' }}>
+                                                        <EditableCell value={row.notes || ''} onUpdate={v => onUpdateTransaction(row.id, 'notes', v, 'cash')} disabled={!user} />
+                                                    </TableCell>
+                                                    <TableCell className="text-center">
+                                                        <Button variant="ghost" size="icon" onClick={() => onDeleteTransaction(row.id, 'cash')} disabled={!user} className="h-8 w-8 text-destructive">
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+
+                                {/* Mobile View */}
+                                <div className="md:hidden pt-2">
+                                    <div className="text-[10px] text-muted-foreground mb-4 px-1">金額：支出為正，存入為負</div>
+                                    {sortedCashData.data.map((row) => (
+                                        <TransactionCard
+                                            key={row.id}
+                                            id={row.id}
+                                            date={row.date}
+                                            description={row.description}
+                                            amount={row.amount}
+                                            category={row.category}
+                                            type="cash"
+                                            extra={row.notes}
+                                            onUpdate={onUpdateTransaction}
+                                            onDelete={onDeleteTransaction}
+                                            categories={settings.availableCategories}
+                                            disabled={!user}
+                                        />
+                                    ))}
+                                </div>
                                 <PaginationControls currentPage={cashPage} totalPages={sortedCashData.totalPages} onPageChange={setCashPage} />
                             </TabsContent>
                             <TabsContent value="summary">
@@ -308,8 +643,52 @@ export function ResultsDisplay({
                                     {settings.quickFilters.map((filter, index) => <Button key={index} variant="outline" size="sm" onClick={() => setSummarySelectedCategories(filter.categories)}>{filter.name}</Button>)}
                                     <p className="text-sm text-muted-foreground hidden md:block ml-auto">點擊表格中的數字可查看該月份的交易明細。</p>
                                 </div>
-                                <div className="rounded-md border">
-                                    <Table><TableHeader><TableRow>{summaryReportData.headers.map(h => <TableHead key={h} className={h !== '日期（年月）' ? 'text-right' : ''}>{h}</TableHead>)}</TableRow></TableHeader><TableBody>{summaryReportData.rows.map((row, i) => (<TableRow key={i}>{summaryReportData.headers.map(header => { const value = row[header]; const isClickable = header !== '日期（年月）' && header !== '總計' && typeof value === 'number' && value !== 0; let textColor = ''; if (typeof value === 'number') { if (value < 0) textColor = 'text-green-600'; } return (<TableCell key={header} className={`font-mono ${header !== '日期（年月）' ? 'text-right' : ''} ${textColor}`}>{isClickable ? <button onClick={() => handleSummaryCellClick(row['日期（年月）'] as string, header)} className="hover:underline hover:text-blue-500">{value.toLocaleString()}</button> : (typeof value === 'number' ? value.toLocaleString() : value)}</TableCell>); })}</TableRow>))}</TableBody></Table>
+                                <div className="rounded-md border overflow-x-auto">
+                                    <Table className="min-w-full">
+                                        <TableHeader>
+                                            <TableRow>
+                                                {summaryReportData.headers.map(h => (
+                                                    <TableHead
+                                                        key={h}
+                                                        className={`whitespace-nowrap px-4 py-3 ${h === '日期（年月）' ? 'w-24' : 'text-right min-w-[80px]'}`}
+                                                    >
+                                                        {h}
+                                                    </TableHead>
+                                                ))}
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {summaryReportData.rows.map((row, i) => (
+                                                <TableRow key={i}>
+                                                    {summaryReportData.headers.map(header => {
+                                                        const value = row[header];
+                                                        const isClickable = header !== '日期（年月）' && header !== '總計' && typeof value === 'number' && value !== 0;
+                                                        let textColor = '';
+                                                        if (typeof value === 'number') {
+                                                            if (value < 0) textColor = 'text-green-600';
+                                                        }
+                                                        return (
+                                                            <TableCell
+                                                                key={header}
+                                                                className={`font-mono whitespace-nowrap px-4 py-2 ${header !== '日期（年月）' ? 'text-right' : ''} ${textColor}`}
+                                                            >
+                                                                {isClickable ? (
+                                                                    <button
+                                                                        onClick={() => handleSummaryCellClick(row['日期（年月）'] as string, header)}
+                                                                        className="hover:underline hover:text-blue-500"
+                                                                    >
+                                                                        {value.toLocaleString()}
+                                                                    </button>
+                                                                ) : (
+                                                                    typeof value === 'number' ? value.toLocaleString() : value
+                                                                )}
+                                                            </TableCell>
+                                                        );
+                                                    })}
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
                                 </div>
                             </TabsContent>
                         </Tabs>

@@ -148,7 +148,13 @@ export async function parseExcelData(data: any[][]): Promise<ParsedExcelData> {
 // This parser now only extracts raw data with a stable ID.
 // Categorization and rule application will be handled by the server action.
 export async function parseCreditCard(text: string): Promise<RawCreditData[]> {
-    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    // Pre-processing: Fix missing newlines where amount and next date are fused
+    // Example: "37812/28" -> "378\n12/28"
+    let processedText = text.replace(/(\d)(\d{2}\/\d{2})/g, '$1\n$2');
+    // Example: "正卡）12/23" -> "正卡）\n12/23" (Handle header fusion)
+    processedText = processedText.replace(/）\s*(\d{2}\/\d{2})/g, '）\n$1');
+
+    const lines = processedText.split('\n').map(l => l.trim()).filter(Boolean);
     const results: RawCreditData[] = [];
 
     const dateRegex = /^\d{1,2}\/\d{1,2}$/;
@@ -221,7 +227,7 @@ export async function parseCreditCard(text: string): Promise<RawCreditData[]> {
             postingDate,
             description,
             amount,
-            bankCode,
+            bankCode: bankCode || '', // Ensure no undefined values for Firestore
             initialCategory: '', // No initial category from this format
         });
     }

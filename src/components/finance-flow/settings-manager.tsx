@@ -17,9 +17,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { cn } from '@/lib/utils';
-import { AlertCircle, Trash2, ChevronsUpDown, ArrowDown, ArrowUp, Loader2, Settings, PlusCircle, RotateCcw, DatabaseZap, FileUp, Download as DownloadIcon } from 'lucide-react';
+import { AlertCircle, Trash2, ChevronsUpDown, ArrowDown, ArrowUp, Loader2, Settings, PlusCircle, RotateCcw, DatabaseZap, FileUp, Download as DownloadIcon, Search, ListFilter, Wallet, ArrowRightLeft, ShieldAlert } from 'lucide-react';
 
 const replacementRuleSchema = z.object({
   find: z.string().min(1, { message: '請輸入要尋找的文字' }),
@@ -373,315 +374,352 @@ export function SettingsManager({
       <CardContent>
         <Form {...settingsForm}>
           <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
-            <Accordion type="single" collapsible className="w-full" defaultValue="replacement">
-              <AccordionItem value="replacement">
-                <AccordionTrigger>取代規則</AccordionTrigger>
-                <AccordionContent>
-                  <CardDescription className="mb-4">設定自動取代或刪除規則。勾選「刪除整筆資料」後，符合條件的資料將被整筆移除。</CardDescription>
-                  <div className="mb-4">
-                    <details className="group border border-dashed border-primary/30 rounded-lg bg-muted/50 overflow-hidden">
-                      <summary className="flex items-center gap-2 p-3 font-semibold text-primary cursor-pointer hover:bg-primary/5 transition-colors list-none">
-                        <DatabaseZap className="h-4 w-4" /> 💡 需要幫忙？點此查看「如何自動提取案號/序號」
-                      </summary>
-                      <div className="px-3 pb-3 text-sm text-muted-foreground border-t border-primary/10 pt-2">
-                        <ul className="list-disc list-inside space-y-1 ml-1">
-                          <li>使用 <code>(\d+)</code> 抓取變動數字（如：案號、序號、帳號後幾碼）。</li>
-                          <li>使用 <code>(.*)</code> 抓取任何剩餘文字。</li>
-                          <li><strong>範例</strong>：尋找 <code>代繳健保費 (\d+)</code> 取代為 <code>代繳健保費</code>，系統會自動將案號移至備註。</li>
-                        </ul>
-                      </div>
-                    </details>
-                  </div>
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader><TableRow><TableHead className="w-1/4">尋找文字</TableHead><TableHead className="w-1/4">取代為</TableHead><TableHead className="w-1/4">備註</TableHead><TableHead className="w-1/6 text-center">刪除整筆資料</TableHead><TableHead className="w-[50px]">操作</TableHead></TableRow></TableHeader>
-                      <TableBody>
-                        {replacementFields.map((field, index) => (
-                          <TableRow key={field.id}>
-                            <TableCell className="p-1">
-                              <FormField control={settingsForm.control} name={`replacementRules.${index}.find`} render={({ field }) => <FormItem><FormControl><Input placeholder="要被取代的文字" {...field} className="h-9" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl><FormMessage className="text-xs px-2" /></FormItem>} />
-                            </TableCell>
-                            <TableCell className="p-1">
-                              <FormField control={settingsForm.control} name={`replacementRules.${index}.replace`} render={({ field }) => <FormItem><FormControl><Input placeholder="新的文字 (留空為刪除)" {...field} className="h-9" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl><FormMessage className="text-xs px-2" /></FormItem>} />
-                            </TableCell>
-                            <TableCell className="p-1">
-                              <FormField control={settingsForm.control} name={`replacementRules.${index}.notes`} render={({ field }) => <FormItem><FormControl><Input placeholder="新增備註說明" {...field} className="h-9" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl><FormMessage className="text-xs px-2" /></FormItem>} />
-                            </TableCell>
-                            <TableCell className="p-1 text-center">
-                              <FormField control={settingsForm.control} name={`replacementRules.${index}.deleteRow`} render={({ field }) => <FormItem className="flex justify-center items-center h-full"><FormControl><Checkbox checked={field.value} onCheckedChange={(value) => { field.onChange(value); handleSaveSettings(); }} /></FormControl></FormItem>} />
-                            </TableCell>
-                            <TableCell className="p-1"><Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeReplacement(index)}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                  <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => appendReplacement({ find: '', replace: '', deleteRow: false, notes: '' })}><PlusCircle className="mr-2 h-4 w-4" />新增取代規則</Button>
-                </AccordionContent>
-              </AccordionItem>
-              <AccordionItem value="category">
-                <AccordionTrigger>分類規則</AccordionTrigger>
-                <AccordionContent>
-                  <div className="space-y-4 mb-4">
-                    <div className="flex justify-between items-center">
-                      <CardDescription className="pr-4">設定交易項目關鍵字與對應的類型。處理報表時，將會自動帶入符合的第一個類型。</CardDescription>
-                      <Button type="button" variant="outline" size="sm" onClick={() => {
-                        appendCategory({ keyword: '', category: '' });
-                        setRuleSearch('');
-                        setSelectedFilterCategory(null);
-                      }}><PlusCircle className="mr-2 h-4 w-4" />新增規則</Button>
-                    </div>
+            <Tabs defaultValue="category" className="w-full">
+              <div className="overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0">
+                <TabsList className="w-full justify-start md:justify-center md:grid md:grid-cols-5 h-auto p-1">
+                  <TabsTrigger value="basic" className="text-xs px-2 py-2">基礎規則</TabsTrigger>
+                  <TabsTrigger value="category" className="text-xs px-2 py-2">自動分類</TabsTrigger>
+                  <TabsTrigger value="advanced" className="text-xs px-2 py-2">進階設定</TabsTrigger>
+                  <TabsTrigger value="balance" className="text-xs px-2 py-2">專款管理</TabsTrigger>
+                  <TabsTrigger value="system" className="text-xs px-2 py-2">系統維護</TabsTrigger>
+                </TabsList>
+              </div>
 
-                    <div className="flex flex-col md:flex-row gap-3">
-                      <div className="relative flex-1">
-                        <Loader2 className={cn("absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground animate-spin", !isProcessing && "hidden")} />
-                        <Settings className={cn("absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground", isProcessing && "hidden")} />
-                        <Input
-                          placeholder="搜尋關鍵字或類型..."
-                          className="pl-9 h-9"
-                          value={ruleSearch}
-                          onChange={(e) => setRuleSearch(e.target.value)}
-                        />
+              {/* Tab 1: Basic Rules */}
+              <TabsContent value="basic" className="space-y-4">
+                <Accordion type="single" collapsible className="w-full" defaultValue="replacement">
+                  <AccordionItem value="replacement">
+                    <AccordionTrigger className="text-base font-semibold">文字取代規則</AccordionTrigger>
+                    <AccordionContent>
+                      <CardDescription className="mb-4">設定自動取代或刪除規則。勾選「刪除整筆資料」後，符合條件的資料將被整筆移除。</CardDescription>
+                      <div className="mb-4">
+                        <details className="group border border-dashed border-primary/30 rounded-lg bg-muted/50 overflow-hidden">
+                          <summary className="flex items-center gap-2 p-3 font-semibold text-primary cursor-pointer hover:bg-primary/5 transition-colors list-none">
+                            <DatabaseZap className="h-4 w-4" /> 💡 技巧：如何自動提取案號/序號
+                          </summary>
+                          <div className="px-3 pb-3 text-sm text-muted-foreground border-t border-primary/10 pt-2">
+                            <ul className="list-disc list-inside space-y-1 ml-1">
+                              <li>使用 <code>(\d+)</code> 抓取變動數字（如：案號、序號）。</li>
+                              <li>使用 <code>(.*)</code> 抓取任何剩餘文字。</li>
+                              <li><strong>範例</strong>：尋找 <code>代繳健保費 (\d+)</code> 取代為 <code>代繳健保費</code>，系統會自動將案號移至備註。</li>
+                            </ul>
+                          </div>
+                        </details>
                       </div>
-                      <div className="flex flex-wrap gap-1.5 items-center">
-                        <Button
-                          type="button"
-                          variant={selectedFilterCategory === null ? "default" : "outline"}
-                          size="sm"
-                          className="h-8 px-2.5 py-0 text-xs"
-                          onClick={() => setSelectedFilterCategory(null)}
-                        >
-                          全部
-                        </Button>
-                        {settings.availableCategories.map(cat => (
-                          <Button
-                            key={cat}
-                            type="button"
-                            variant={selectedFilterCategory === cat ? "default" : "outline"}
-                            size="sm"
-                            className="h-8 px-2.5 py-0 text-xs"
-                            onClick={() => setSelectedFilterCategory(selectedFilterCategory === cat ? null : cat)}
-                          >
-                            {cat}
-                          </Button>
+
+                      {/* Desktop Table View */}
+                      <div className="hidden md:block rounded-md border">
+                        <Table>
+                          <TableHeader><TableRow><TableHead className="w-1/4">尋找文字</TableHead><TableHead className="w-1/4">取代為</TableHead><TableHead className="w-1/4">備註</TableHead><TableHead className="w-1/6 text-center">刪除整筆資料</TableHead><TableHead className="w-[50px]">操作</TableHead></TableRow></TableHeader>
+                          <TableBody>
+                            {replacementFields.map((field, index) => (
+                              <TableRow key={field.id}>
+                                <TableCell className="p-1"><FormField control={settingsForm.control} name={`replacementRules.${index}.find`} render={({ field }) => <FormItem><FormControl><Input placeholder="要被取代的文字" {...field} className="h-9" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl><FormMessage className="text-xs px-2" /></FormItem>} /></TableCell>
+                                <TableCell className="p-1"><FormField control={settingsForm.control} name={`replacementRules.${index}.replace`} render={({ field }) => <FormItem><FormControl><Input placeholder="新的文字 (留空為刪除)" {...field} className="h-9" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl><FormMessage className="text-xs px-2" /></FormItem>} /></TableCell>
+                                <TableCell className="p-1"><FormField control={settingsForm.control} name={`replacementRules.${index}.notes`} render={({ field }) => <FormItem><FormControl><Input placeholder="新增備註說明" {...field} className="h-9" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl><FormMessage className="text-xs px-2" /></FormItem>} /></TableCell>
+                                <TableCell className="p-1 text-center"><FormField control={settingsForm.control} name={`replacementRules.${index}.deleteRow`} render={({ field }) => <FormItem className="flex justify-center items-center h-full"><FormControl><Checkbox checked={field.value} onCheckedChange={(value) => { field.onChange(value); handleSaveSettings(); }} /></FormControl></FormItem>} /></TableCell>
+                                <TableCell className="p-1"><Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeReplacement(index)}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+
+                      {/* Mobile Card View */}
+                      <div className="md:hidden space-y-4">
+                        {replacementFields.map((field, index) => (
+                          <Card key={field.id} className="relative overflow-hidden border-primary/10 shadow-sm">
+                            <CardHeader className="py-2 px-3 bg-muted/30 flex flex-row items-center justify-between">
+                              <span className="text-[10px] font-bold text-muted-foreground uppercase">規則 #{index + 1}</span>
+                              <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeReplacement(index)}><Trash2 className="h-4 w-4" /></Button>
+                            </CardHeader>
+                            <CardContent className="p-3 space-y-3">
+                              <div className="grid grid-cols-2 gap-2 text-xs">
+                                <div className="space-y-1"><label className="font-semibold text-muted-foreground">尋找文字</label><FormField control={settingsForm.control} name={`replacementRules.${index}.find`} render={({ field }) => <FormItem><FormControl><Input placeholder="要被取代的文字" {...field} className="h-8 text-xs" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl></FormItem>} /></div>
+                                <div className="space-y-1"><label className="font-semibold text-muted-foreground">取代為</label><FormField control={settingsForm.control} name={`replacementRules.${index}.replace`} render={({ field }) => <FormItem><FormControl><Input placeholder="留空為刪除" {...field} className="h-8 text-xs" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl></FormItem>} /></div>
+                              </div>
+                              <div className="space-y-1"><label className="text-xs font-semibold text-muted-foreground">備註</label><FormField control={settingsForm.control} name={`replacementRules.${index}.notes`} render={({ field }) => <FormItem><FormControl><Input placeholder="備註說明" {...field} className="h-8 text-xs" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl></FormItem>} /></div>
+                              <div className="flex items-center justify-between pt-1 border-t border-dashed"><span className="text-xs font-semibold text-muted-foreground">刪除整筆資料</span><FormField control={settingsForm.control} name={`replacementRules.${index}.deleteRow`} render={({ field }) => <FormItem><FormControl><Checkbox checked={field.value} onCheckedChange={(value) => { field.onChange(value); handleSaveSettings(); }} /></FormControl></FormItem>} /></div>
+                            </CardContent>
+                          </Card>
                         ))}
                       </div>
+                      <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => appendReplacement({ find: '', replace: '', deleteRow: false, notes: '' })}><PlusCircle className="mr-2 h-4 w-4" />新增取代規則</Button>
+                    </AccordionContent>
+                  </AccordionItem>
+                  <AccordionItem value="manage-categories">
+                    <AccordionTrigger className="text-base font-semibold">管理分類選項</AccordionTrigger>
+                    <AccordionContent>
+                      <CardDescription className="mb-4">設定分類規則時可選用的類別。</CardDescription>
+                      <div className="space-y-4">
+                        <div className="flex gap-2"><Input placeholder="輸入新的類型名称" value={newCategory} onChange={(e) => setNewCategory(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddCategory(); } }} /><Button type="button" onClick={handleAddCategory}>新增類型</Button></div>
+                        <div className="space-y-2 max-h-60 overflow-y-auto pr-2 rounded-md border p-2">
+                          {settings.availableCategories.length > 0 ? ([...settings.availableCategories].sort((a, b) => a.localeCompare(b, 'zh-Hant')).map(cat => (
+                            <div key={cat} className="flex items-center justify-between p-2 bg-background/50 rounded-md">
+                              <span className="text-sm">{cat}</span>
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleRemoveCategory(cat)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                            </div>
+                          ))) : <p className="text-sm text-muted-foreground text-center p-4">尚未新增任何類型。</p>}
+                        </div>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+              </TabsContent>
+
+              {/* Tab 2: Category Rules */}
+              <TabsContent value="category">
+                <div className="space-y-4 mb-4">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <CardDescription className="flex-1">關鍵字 → 自動分類。系統會自動抓取符合的第一個類型。</CardDescription>
+                    <Button type="button" variant="default" size="sm" onClick={() => {
+                      appendCategory({ keyword: '', category: '' });
+                      setRuleSearch('');
+                      setSelectedFilterCategory(null);
+                    }}><PlusCircle className="mr-2 h-4 w-4" />新增分類規則</Button>
+                  </div>
+
+                  <div className="flex flex-col md:flex-row gap-3">
+                    <div className="relative flex-1">
+                      <Loader2 className={cn("absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground animate-spin", !isProcessing && "hidden")} />
+                      <Search className={cn("absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground", isProcessing && "hidden")} />
+                      <Input placeholder="搜尋關鍵字或類型..." className="pl-9 h-10 w-full" value={ruleSearch} onChange={(e) => setRuleSearch(e.target.value)} />
                     </div>
                   </div>
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader><TableRow>
-                        <TableHead><Button variant="ghost" onClick={() => handleSort('keyword')} className="px-2 py-1 h-auto -ml-2">關鍵字{sortKey === 'keyword' ? (sortDirection === 'asc' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />) : <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />}</Button></TableHead>
-                        <TableHead><Button variant="ghost" onClick={() => handleSort('category')} className="px-2 py-1 h-auto -ml-2">類型{sortKey === 'category' ? (sortDirection === 'asc' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />) : <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />}</Button></TableHead>
-                        <TableHead className="w-[50px] text-right">操作</TableHead>
-                      </TableRow></TableHeader>
-                      <TableBody>
-                        {renderSortedCategoryFields.map((field) => {
-                          const originalIndex = categoryFields.findIndex(f => f.id === field.id);
-                          if (originalIndex === -1) return null;
-                          return (
-                            <TableRow key={field.id}>
-                              <TableCell className="p-1 w-1/2"><FormField control={settingsForm.control} name={`categoryRules.${originalIndex}.keyword`} render={({ field }) => <FormItem><FormControl><Input placeholder="交易項目中的文字" {...field} className="h-9" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl><FormMessage className="text-xs px-2" /></FormItem>} /></TableCell>
-                              <TableCell className="p-1 w-1/2"><FormField control={settingsForm.control} name={`categoryRules.${originalIndex}.category`} render={({ field }) => <FormItem><Select onValueChange={(value) => { field.onChange(value); setIsDirty(true); handleSaveSettings(); }} value={field.value}><FormControl><SelectTrigger className="h-9"><SelectValue placeholder="選擇一個類型" /></SelectTrigger></FormControl><SelectContent>{settings.availableCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select><FormMessage className="text-xs px-2" /></FormItem>} /></TableCell>
-                              <TableCell className="p-1 text-right"><Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => { removeCategory(originalIndex); handleSaveSettings(); }}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>
-                            </TableRow>
-                          )
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-              <AccordionItem value="item-grouping">
-                <AccordionTrigger>項目群組規則</AccordionTrigger>
-                <AccordionContent>
-                  <CardDescription className="mb-4">為「固定項目分析」建立可收合的群組。例如：群組名稱「汽車」，關鍵字「汽車,中油,加油站」。</CardDescription>
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-1/3">群組名稱</TableHead>
-                          <TableHead className="w-2/3">關鍵字 (用逗號 , 分隔)</TableHead>
-                          <TableHead className="w-[50px]">操作</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {groupingRuleFields.map((field, index) => (
-                          <TableRow key={field.id}>
-                            <TableCell className="p-1">
-                              <FormField control={settingsForm.control} name={`descriptionGroupingRules.${index}.groupName`} render={({ field }) => <FormItem><FormControl><Input placeholder="例如：汽車" {...field} className="h-9" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl><FormMessage className="text-xs px-2" /></FormItem>} />
-                            </TableCell>
-                            <TableCell className="p-1">
-                              <FormField control={settingsForm.control} name={`descriptionGroupingRules.${index}.keywords`} render={({ field }) => <FormItem><FormControl><Input placeholder="例如：汽車,中油,加油站" {...field} className="h-9" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl><FormMessage className="text-xs px-2" /></FormItem>} />
-                            </TableCell>
-                            <TableCell className="p-1">
-                              <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => { removeGroupingRule(index); handleSaveSettings(); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                  <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => { appendGroupingRule({ groupName: '', keywords: '' }); setIsDirty(true); }}><PlusCircle className="mr-2 h-4 w-4" />新增群組規則</Button>
-                </AccordionContent>
-              </AccordionItem>
-              <AccordionItem value="balance-accounts">
-                <AccordionTrigger>餘額帳戶設定</AccordionTrigger>
-                <AccordionContent>
-                  <CardDescription className="mb-4">設定需要自動追蹤餘額的「專款帳戶」。只有屬於該類別且描述包含「關鍵字」的交易會被計算入內。例如：類別為「弟」，關鍵字為「停車費」。</CardDescription>
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-1/4">帳戶名稱</TableHead>
-                          <TableHead className="w-1/4">監控類別</TableHead>
-                          <TableHead className="w-1/2">關鍵字 (逗號分隔)</TableHead>
-                          <TableHead className="w-[50px]">操作</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {balanceAccountFields.map((field, index) => (
-                          <TableRow key={field.id}>
-                            <TableCell className="p-1">
-                              <FormField control={settingsForm.control} name={`balanceAccounts.${index}.name`} render={({ field }) => <FormItem><FormControl><Input placeholder="例如：弟的停車費" {...field} className="h-9" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl><FormMessage className="text-xs px-2" /></FormItem>} />
-                            </TableCell>
-                            <TableCell className="p-1">
-                              <FormField control={settingsForm.control} name={`balanceAccounts.${index}.category`} render={({ field }) => (
-                                <FormItem>
-                                  <Select onValueChange={(value) => { field.onChange(value); handleSaveSettings(); }} value={field.value}>
-                                    <FormControl><SelectTrigger className="h-9"><SelectValue placeholder="選擇類別" /></SelectTrigger></FormControl>
-                                    <SelectContent>
-                                      {settings.availableCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                                    </SelectContent>
-                                  </Select>
-                                </FormItem>
-                              )} />
-                            </TableCell>
-                            <TableCell className="p-1">
-                              <FormField control={settingsForm.control} name={`balanceAccounts.${index}.keywords`} render={({ field }) => <FormItem><FormControl><Input placeholder="例如：停車費, 預付" {...field} className="h-9" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl><FormMessage className="text-xs px-2" /></FormItem>} />
-                            </TableCell>
-                            <TableCell className="p-1">
-                              <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => { removeBalanceAccount(index); handleSaveSettings(); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                  <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => { appendBalanceAccount({ name: '', category: '', keywords: '' }); setIsDirty(true); }}><PlusCircle className="mr-2 h-4 w-4" />新增餘額帳戶</Button>
-                </AccordionContent>
-              </AccordionItem>
-              <AccordionItem value="quick-filters">
-                <AccordionTrigger>快速篩選</AccordionTrigger>
-                <AccordionContent>
-                  <CardDescription className="mb-4">自訂彙總報表中的快速篩選按鈕，方便您一鍵切換常用的類別組合。</CardDescription>
-                  <div className="space-y-4">
-                    {quickFilterFields.map((field, index) => (
-                      <Card key={field.id} className="p-4 relative">
-                        <div className="space-y-4">
-                          <FormField control={settingsForm.control} name={`quickFilters.${index}.name`} render={({ field }) => <FormItem><FormLabel>按鈕名稱</FormLabel><FormControl><Input {...field} className="max-w-xs" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl><FormMessage /></FormItem>} />
-                          <FormField control={settingsForm.control} name={`quickFilters.${index}.categories`} render={() => (
-                            <FormItem>
-                              <FormLabel>包含的類型</FormLabel>
-                              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 rounded-md border p-4">
-                                {settings.availableCategories.map((cat) => (
-                                  <FormField key={cat} control={settingsForm.control} name={`quickFilters.${index}.categories`} render={({ field }) => (
-                                    <FormItem key={cat} className="flex flex-row items-start space-x-2 space-y-0">
-                                      <FormControl><Checkbox checked={field.value?.includes(cat)} onCheckedChange={(c) => {
-                                        const newValue = c ? [...(field.value || []), cat] : (field.value || []).filter(v => v !== cat);
-                                        field.onChange(newValue);
-                                        handleSaveSettings();
-                                      }} /></FormControl>
-                                      <FormLabel className="font-normal">{cat}</FormLabel>
-                                    </FormItem>
-                                  )} />
-                                ))}
-                              </div><FormMessage />
-                            </FormItem>
-                          )} />
-                        </div>
-                        <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2 h-8 w-8" onClick={() => { removeQuickFilter(index); handleSaveSettings(); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                      </Card>
+                  <div className="flex flex-wrap gap-1.5 items-center pb-2 border-b">
+                    <Button type="button" variant={selectedFilterCategory === null ? "default" : "outline"} size="sm" className="h-7 px-3 text-xs rounded-full" onClick={() => setSelectedFilterCategory(null)}>全部</Button>
+                    {settings.availableCategories.map(cat => (
+                      <Button key={cat} type="button" variant={selectedFilterCategory === cat ? "default" : "outline"} size="sm" className="h-7 px-3 text-xs rounded-full" onClick={() => setSelectedFilterCategory(selectedFilterCategory === cat ? null : cat)}>{cat}</Button>
                     ))}
                   </div>
-                  <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => { appendQuickFilter({ name: `篩選 ${quickFilterFields.length + 1}`, categories: [] }); setIsDirty(true); }}><PlusCircle className="mr-2 h-4 w-4" />新增快速篩選</Button>
-                </AccordionContent>
-              </AccordionItem>
-              <AccordionItem value="manage-categories">
-                <AccordionTrigger>管理類型</AccordionTrigger>
-                <AccordionContent>
-                  <CardDescription className="mb-4">新增或刪除在「分類規則」下拉選單中看到的類型選項。</CardDescription>
-                  <div className="space-y-4">
-                    <div className="flex gap-2"><Input placeholder="輸入新的類型名称" value={newCategory} onChange={(e) => setNewCategory(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddCategory(); } }} /><Button type="button" onClick={handleAddCategory}>新增類型</Button></div>
-                    <div className="space-y-2 max-h-60 overflow-y-auto pr-2 rounded-md border p-2">
-                      {settings.availableCategories.length > 0 ? (settings.availableCategories.sort((a, b) => a.localeCompare(b, 'zh-Hant')).map(cat => (
-                        <div key={cat} className="flex items-center justify-between p-2 bg-background/50 rounded-md">
-                          <span className="text-sm">{cat}</span>
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleRemoveCategory(cat)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                </div>
+
+                {/* Desktop View */}
+                <div className="hidden md:block rounded-md border max-h-[600px] overflow-y-auto">
+                  <Table>
+                    <TableHeader className="sticky top-0 bg-background z-10"><TableRow>
+                      <TableHead><Button variant="ghost" onClick={() => handleSort('keyword')} className="px-2 py-1 h-auto -ml-2">關鍵字{sortKey === 'keyword' ? (sortDirection === 'asc' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />) : <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />}</Button></TableHead>
+                      <TableHead><Button variant="ghost" onClick={() => handleSort('category')} className="px-2 py-1 h-auto -ml-2">類型{sortKey === 'category' ? (sortDirection === 'asc' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />) : <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />}</Button></TableHead>
+                      <TableHead className="w-[50px] text-right">操作</TableHead>
+                    </TableRow></TableHeader>
+                    <TableBody>
+                      {renderSortedCategoryFields.map((field) => {
+                        const originalIndex = categoryFields.findIndex(f => f.id === field.id);
+                        if (originalIndex === -1) return null;
+                        return (
+                          <TableRow key={field.id}>
+                            <TableCell className="p-1 w-1/2 md:w-2/3"><FormField control={settingsForm.control} name={`categoryRules.${originalIndex}.keyword`} render={({ field }) => <FormItem><FormControl><Input placeholder="交易項目中的文字" {...field} className="h-9" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl><FormMessage className="text-xs px-2" /></FormItem>} /></TableCell>
+                            <TableCell className="p-1 w-1/2 md:w-1/4"><FormField control={settingsForm.control} name={`categoryRules.${originalIndex}.category`} render={({ field }) => <FormItem><Select onValueChange={(value) => { field.onChange(value); setIsDirty(true); handleSaveSettings(); }} value={field.value}><FormControl><SelectTrigger className="h-9"><SelectValue placeholder="選擇一個類型" /></SelectTrigger></FormControl><SelectContent>{settings.availableCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select><FormMessage className="text-xs px-2" /></FormItem>} /></TableCell>
+                            <TableCell className="p-1 text-right"><Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => { removeCategory(originalIndex); handleSaveSettings(); }}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Mobile View - Optimized List */}
+                <div className="md:hidden space-y-2">
+                  {renderSortedCategoryFields.map((field) => {
+                    const originalIndex = categoryFields.findIndex(f => f.id === field.id);
+                    if (originalIndex === -1) return null;
+                    return (
+                      <div key={field.id} className="flex items-center gap-2 p-3 border rounded-lg bg-card shadow-sm">
+                        <div className="flex-1 space-y-1">
+                          <FormField control={settingsForm.control} name={`categoryRules.${originalIndex}.keyword`} render={({ field }) => <FormItem><FormControl><Input placeholder="關鍵字" {...field} className="h-9 text-sm font-medium" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl></FormItem>} />
                         </div>
-                      ))) : <p className="text-sm text-muted-foreground text-center p-4">尚未新增任何類型。</p>}
-                    </div>
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-              <AccordionItem value="manage-cash-descriptions">
-                <AccordionTrigger>現金項目管理</AccordionTrigger>
-                <AccordionContent>
-                  <CardDescription className="mb-4">管理「新增現金交易」中「交易項目」的下拉選單選項。</CardDescription>
-                  <div className="space-y-4">
-                    <div className="flex gap-2"><Input placeholder="輸入新的項目名稱" value={newCashDescription} onChange={(e) => setNewCashDescription(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddCashDescription(); } }} /><Button type="button" onClick={handleAddCashDescription}>新增項目</Button></div>
-                    <div className="space-y-2 max-h-60 overflow-y-auto pr-2 rounded-md border p-2">
-                      {settings.cashTransactionDescriptions.length > 0 ? (settings.cashTransactionDescriptions.sort((a, b) => a.localeCompare(b, 'zh-Hant')).map(desc => (
-                        <div key={desc} className="flex items-center justify-between p-2 bg-background/50 rounded-md">
-                          <span className="text-sm">{desc}</span>
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleRemoveCashDescription(desc)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                        <ArrowRightLeft className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <div className="w-[100px] shrink-0">
+                          <FormField control={settingsForm.control} name={`categoryRules.${originalIndex}.category`} render={({ field }) => <FormItem><Select onValueChange={(value) => { field.onChange(value); setIsDirty(true); handleSaveSettings(); }} value={field.value}><FormControl><SelectTrigger className="h-9 text-xs"><SelectValue placeholder="類型" /></SelectTrigger></FormControl><SelectContent>{settings.availableCategories.map(c => <SelectItem key={c} value={c} className="text-xs">{c}</SelectItem>)}</SelectContent></Select></FormItem>} />
                         </div>
-                      ))) : <p className="text-sm text-muted-foreground text-center p-4">尚未新增任何項目。</p>}
+                        <Button type="button" variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive shrink-0" onClick={() => { removeCategory(originalIndex); handleSaveSettings(); }}><Trash2 className="h-4 w-4" /></Button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </TabsContent>
+
+              {/* Tab 3: Advanced */}
+              <TabsContent value="advanced" className="space-y-4">
+                <Accordion type="single" collapsible className="w-full" defaultValue="grouping">
+                  <AccordionItem value="grouping">
+                    <AccordionTrigger className="text-base font-semibold">項目群組規則</AccordionTrigger>
+                    <AccordionContent>
+                      <CardDescription className="mb-4">為「固定項目分析」建立可收合的群組（如：汽車、保險）。</CardDescription>
+                      <div className="hidden md:block rounded-md border">
+                        <Table>
+                          <TableHeader><TableRow><TableHead className="w-1/3">群組名稱</TableHead><TableHead className="w-2/3">關鍵字 (用逗號 , 分隔)</TableHead><TableHead className="w-[50px]">操作</TableHead></TableRow></TableHeader>
+                          <TableBody>
+                            {groupingRuleFields.map((field, index) => (
+                              <TableRow key={field.id}>
+                                <TableCell className="p-1"><FormField control={settingsForm.control} name={`descriptionGroupingRules.${index}.groupName`} render={({ field }) => <FormItem><FormControl><Input placeholder="例如：汽車" {...field} className="h-9" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl><FormMessage className="text-xs px-2" /></FormItem>} /></TableCell>
+                                <TableCell className="p-1"><FormField control={settingsForm.control} name={`descriptionGroupingRules.${index}.keywords`} render={({ field }) => <FormItem><FormControl><Input placeholder="例如：汽車,中油,加油站" {...field} className="h-9" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl><FormMessage className="text-xs px-2" /></FormItem>} /></TableCell>
+                                <TableCell className="p-1"><Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => { removeGroupingRule(index); handleSaveSettings(); }}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                      <div className="md:hidden space-y-3">
+                        {groupingRuleFields.map((field, index) => (
+                          <div key={field.id} className="p-3 border rounded-lg bg-card shadow-sm space-y-3">
+                            <div className="flex justify-between items-center bg-muted/20 -m-3 mb-1 px-3 py-1 text-[10px] font-bold text-muted-foreground uppercase border-b border-primary/5">
+                              <span>群組規則 #{index + 1}</span>
+                              <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => { removeGroupingRule(index); handleSaveSettings(); }}><Trash2 className="h-3 w-3" /></Button>
+                            </div>
+                            <div className="space-y-3 pt-1">
+                              <div className="space-y-1"><label className="text-[10px] font-semibold text-muted-foreground">群組名稱</label><FormField control={settingsForm.control} name={`descriptionGroupingRules.${index}.groupName`} render={({ field }) => <FormItem><FormControl><Input placeholder="例如：汽車" {...field} className="h-8 text-xs px-2" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl></FormItem>} /></div>
+                              <div className="space-y-1"><label className="text-[10px] font-semibold text-muted-foreground">關鍵字 (逗號分隔)</label><FormField control={settingsForm.control} name={`descriptionGroupingRules.${index}.keywords`} render={({ field }) => <FormItem><FormControl><Input placeholder="中油, 加油站..." {...field} className="h-8 text-xs px-2" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl></FormItem>} /></div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => { appendGroupingRule({ groupName: '', keywords: '' }); setIsDirty(true); }}><PlusCircle className="mr-2 h-4 w-4" />新增群組規則</Button>
+                    </AccordionContent>
+                  </AccordionItem>
+                  <AccordionItem value="quick-filters">
+                    <AccordionTrigger className="text-base font-semibold">快速篩選設定</AccordionTrigger>
+                    <AccordionContent>
+                      <CardDescription className="mb-4">自訂彙總報表中的快速篩選按鈕。</CardDescription>
+                      <div className="space-y-4">
+                        {quickFilterFields.map((field, index) => (
+                          <Card key={field.id} className="p-4 relative">
+                            <div className="space-y-4">
+                              <FormField control={settingsForm.control} name={`quickFilters.${index}.name`} render={({ field }) => <FormItem><FormLabel>按鈕名稱</FormLabel><FormControl><Input {...field} className="max-w-xs" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl><FormMessage /></FormItem>} />
+                              <FormField control={settingsForm.control} name={`quickFilters.${index}.categories`} render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>包含的類型</FormLabel>
+                                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 rounded-md border p-4">
+                                    {settings.availableCategories.map((cat) => (
+                                      <div key={cat} className="flex flex-row items-start space-x-2 space-y-0">
+                                        <Checkbox
+                                          checked={field.value?.includes(cat)}
+                                          onCheckedChange={(checked) => {
+                                            const newValue = checked
+                                              ? [...(field.value || []), cat]
+                                              : (field.value || []).filter(v => v !== cat);
+                                            field.onChange(newValue);
+                                            handleSaveSettings();
+                                          }}
+                                        />
+                                        <FormLabel className="font-normal">{cat}</FormLabel>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <FormMessage />
+                                </FormItem>
+                              )} />
+                            </div>
+                            <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2 h-8 w-8" onClick={() => { removeQuickFilter(index); handleSaveSettings(); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                          </Card>
+                        ))}
+                      </div>
+                      <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => { appendQuickFilter({ name: `篩選 ${quickFilterFields.length + 1}`, categories: [] }); setIsDirty(true); }}><PlusCircle className="mr-2 h-4 w-4" />新增快速篩選</Button>
+                    </AccordionContent>
+                  </AccordionItem>
+                  <AccordionItem value="manage-cash">
+                    <AccordionTrigger className="text-base font-semibold">現金項目管理</AccordionTrigger>
+                    <AccordionContent>
+                      <CardDescription className="mb-4">管理「新增現金交易」中「交易項目」的下拉選單選項。</CardDescription>
+                      <div className="space-y-4">
+                        <div className="flex gap-2"><Input placeholder="輸入新的項目名稱" value={newCashDescription} onChange={(e) => setNewCashDescription(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddCashDescription(); } }} /><Button type="button" onClick={handleAddCashDescription}>新增項目</Button></div>
+                        <div className="space-y-2 max-h-60 overflow-y-auto pr-2 rounded-md border p-2">
+                          {settings.cashTransactionDescriptions.length > 0 ? ([...settings.cashTransactionDescriptions].sort((a, b) => a.localeCompare(b, 'zh-Hant')).map(desc => (
+                            <div key={desc} className="flex items-center justify-between p-2 bg-background/50 rounded-md">
+                              <span className="text-sm">{desc}</span>
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleRemoveCashDescription(desc)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                            </div>
+                          ))) : <p className="text-sm text-muted-foreground text-center p-4">尚未新增任何項目。</p>}
+                        </div>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+              </TabsContent>
+
+              {/* Tab 4: Balance */}
+              <TabsContent value="balance" className="space-y-4">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
+                  <CardDescription className="flex-1">設定需要自動追蹤餘額的「專款帳戶」。只有屬於該類別且描述包含「關鍵字」的交易會被計算入內。</CardDescription>
+                  <Button type="button" variant="default" size="sm" onClick={() => { appendBalanceAccount({ name: '', category: '', keywords: '' }); setIsDirty(true); }}><PlusCircle className="mr-2 h-4 w-4" />新增餘額帳戶</Button>
+                </div>
+
+                <div className="hidden md:block rounded-md border">
+                  <Table>
+                    <TableHeader><TableRow><TableHead className="w-1/4">帳戶名稱</TableHead><TableHead className="w-1/4">監控類別</TableHead><TableHead className="w-1/2">關鍵字 (逗號分隔)</TableHead><TableHead className="w-[50px]">操作</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {balanceAccountFields.map((field, index) => (
+                        <TableRow key={field.id}>
+                          <TableCell className="p-1"><FormField control={settingsForm.control} name={`balanceAccounts.${index}.name`} render={({ field }) => <FormItem><FormControl><Input placeholder="例如：弟的停車費" {...field} className="h-9" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl><FormMessage className="text-xs px-2" /></FormItem>} /></TableCell>
+                          <TableCell className="p-1"><FormField control={settingsForm.control} name={`balanceAccounts.${index}.category`} render={({ field }) => (<FormItem><Select onValueChange={(value) => { field.onChange(value); handleSaveSettings(); }} value={field.value}><FormControl><SelectTrigger className="h-9"><SelectValue placeholder="選擇類別" /></SelectTrigger></FormControl><SelectContent>{settings.availableCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select></FormItem>)} /></TableCell>
+                          <TableCell className="p-1"><FormField control={settingsForm.control} name={`balanceAccounts.${index}.keywords`} render={({ field }) => <FormItem><FormControl><Input placeholder="例如：停車費, 預付" {...field} className="h-9" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl><FormMessage className="text-xs px-2" /></FormItem>} /></TableCell>
+                          <TableCell className="p-1"><Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => { removeBalanceAccount(index); handleSaveSettings(); }}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                <div className="md:hidden space-y-3">
+                  {balanceAccountFields.map((field, index) => (
+                    <div key={field.id} className="p-3 border rounded-lg bg-card shadow-sm space-y-3">
+                      <div className="flex justify-between items-center bg-muted/20 -m-3 mb-1 px-3 py-1 text-[10px] font-bold text-muted-foreground uppercase border-b border-primary/5">
+                        <span>帳戶設定 #{index + 1}</span>
+                        <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => { removeBalanceAccount(index); handleSaveSettings(); }}><Trash2 className="h-3 w-3" /></Button>
+                      </div>
+                      <div className="space-y-3 pt-1">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1"><label className="text-[10px] font-semibold text-muted-foreground">帳戶名稱</label><FormField control={settingsForm.control} name={`balanceAccounts.${index}.name`} render={({ field }) => <FormItem><FormControl><Input placeholder="帳戶名稱" {...field} className="h-8 text-xs px-2" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl></FormItem>} /></div>
+                          <div className="space-y-1"><label className="text-[10px] font-semibold text-muted-foreground">監控類別</label><FormField control={settingsForm.control} name={`balanceAccounts.${index}.category`} render={({ field }) => (<FormItem><Select onValueChange={(value) => { field.onChange(value); handleSaveSettings(); }} value={field.value}><FormControl><SelectTrigger className="h-8 text-xs px-2"><SelectValue placeholder="類別" /></SelectTrigger></FormControl><SelectContent>{settings.availableCategories.map(c => <SelectItem key={c} value={c} className="text-xs">{c}</SelectItem>)}</SelectContent></Select></FormItem>)} /></div>
+                        </div>
+                        <div className="space-y-1"><label className="text-[10px] font-semibold text-muted-foreground">關鍵字 (逗號分隔)</label><FormField control={settingsForm.control} name={`balanceAccounts.${index}.keywords`} render={({ field }) => <FormItem><FormControl><Input placeholder="停車費, 預付..." {...field} className="h-8 text-xs px-2" onChange={(e) => { field.onChange(e); setIsDirty(true); }} onBlur={handleSaveSettings} /></FormControl></FormItem>} /></div>
+                      </div>
                     </div>
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-              <AccordionItem value="data-management">
-                <AccordionTrigger>資料管理</AccordionTrigger>
-                <AccordionContent>
-                  <CardDescription className="mb-4">執行永久性的資料操作。請謹慎使用。</CardDescription>
-                  <div className="space-y-4">
-                    <Card>
-                      <CardHeader><CardTitle>匯入/匯出設定</CardTitle></CardHeader>
-                      <CardContent className="flex gap-4">
+                  ))}
+                </div>
+              </TabsContent>
+
+              {/* Tab 5: System */}
+              <TabsContent value="system" className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Card>
+                    <CardHeader className="pb-3"><CardTitle className="text-base">備份與還原</CardTitle></CardHeader>
+                    <CardContent className="flex flex-col gap-2">
+                      <CardDescription>將您的設定匯出為檔案，或從檔案還原。</CardDescription>
+                      <div className="flex gap-2 mt-2">
                         <input type="file" ref={fileInputRef} onChange={handleImportFileSelected} className="hidden" accept=".json" />
-                        <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}><FileUp className="mr-2 h-4 w-4" />匯入設定</Button>
-                        <Button type="button" variant="outline" onClick={handleExportSettings}><DownloadIcon className="mr-2 h-4 w-4" />匯出設定</Button>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>重置</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild><Button type="button" variant="outline"><RotateCcw className="mr-2 h-4 w-4" />全部重置為預設</Button></AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader><AlertDialogTitle>確定要重置所有設定嗎？</AlertDialogTitle><AlertDialogDescription>此操作將會清除您所有自訂的規則與類型，並恢復為系統預設值。此動作無法復原。</AlertDialogDescription></AlertDialogHeader>
-                            <AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction onClick={resetAllSettings}>確定重置</AlertDialogAction></AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </CardContent>
-                    </Card>
-                    <Card className="border-destructive">
-                      <CardHeader><CardTitle className="text-destructive">危險區域</CardTitle></CardHeader>
-                      <CardContent>
-                        <p className="text-sm mb-4">此操作將會永久刪除您帳戶中**所有**的交易紀錄，包含信用卡、活存帳戶與現金收支。此動作無法復原。</p>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild><Button type="button" variant="destructive" disabled={!user || isProcessing}><DatabaseZap className="mr-2 h-4 w-4" />刪除所有交易資料</Button></AlertDialogTrigger>
-                          <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>您確定嗎？</AlertDialogTitle><AlertDialogDescription>您即將永久刪除所有交易資料。此動作無法復原，所有已儲存的報表資料都將遺失。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction onClick={onDeleteAllData}>確定刪除</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
-                        </AlertDialog>
-                      </CardContent>
-                    </Card>
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
+                        <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="flex-1"><FileUp className="mr-2 h-4 w-4" />匯入</Button>
+                        <Button type="button" variant="outline" size="sm" onClick={handleExportSettings} className="flex-1"><DownloadIcon className="mr-2 h-4 w-4" />匯出</Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-3"><CardTitle className="text-base">系統重置</CardTitle></CardHeader>
+                    <CardContent className="flex flex-col gap-2">
+                      <CardDescription>將所有設定恢復為初始預設值。</CardDescription>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild><Button type="button" variant="outline" size="sm" className="mt-2 text-muted-foreground hover:text-foreground"><RotateCcw className="mr-2 h-4 w-4" />重置設定</Button></AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader><AlertDialogTitle>確定要重置所有設定嗎？</AlertDialogTitle><AlertDialogDescription>此操作將會清除您所有自訂的規則與類型，並恢復為系統預設值。此動作無法復原。</AlertDialogDescription></AlertDialogHeader>
+                          <AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction onClick={resetAllSettings}>確定重置</AlertDialogAction></AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <Card className="border-destructive/30 bg-destructive/5 mt-6">
+                  <CardHeader><CardTitle className="text-destructive flex items-center gap-2"><ShieldAlert className="h-5 w-5" /> 危險區域</CardTitle></CardHeader>
+                  <CardContent>
+                    <p className="text-sm mb-4 text-muted-foreground">此操作將會永久刪除您帳戶中**所有**的交易紀錄，包含信用卡、活存帳戶與現金收支。請謹慎操作。</p>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild><Button type="button" variant="destructive" disabled={!user || isProcessing}><DatabaseZap className="mr-2 h-4 w-4" />刪除所有交易資料</Button></AlertDialogTrigger>
+                      <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>您確定嗎？</AlertDialogTitle><AlertDialogDescription>您即將永久刪除所有交易資料。此動作無法復原，所有已儲存的報表資料都將遺失。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction onClick={onDeleteAllData}>確定刪除</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+                    </AlertDialog>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
             <div className="flex justify-end items-center mt-6 h-6">
               <p className="text-sm text-muted-foreground flex items-center gap-2">
                 {isSaving && <><Loader2 className="h-4 w-4 animate-spin" />儲存中...</>}

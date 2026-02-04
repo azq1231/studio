@@ -6,7 +6,7 @@
     "node": "20"
   },
   "scripts": {
-    "dev": "next dev --hostname 0.0.0.0 -p 9002",
+    "dev": "next dev --hostname 0.0.0.0 -p 3005",
     "build": "next build",
     "start": "npm run build && next start",
     "lint": "next lint",

@@ -128,14 +128,36 @@ export function FinanceFlowClient() {
     try {
       await setDoc(settingsDocRef, sanitizedSettings, { merge: true });
       setSettings(sanitizedSettings); // Optimistically update local state with sanitized data
-      if (!isInitial) {
-        // toast({ title: "設定已儲存", description: "您的變更已成功同步到雲端。" });
-      }
     } catch (e: any) {
       console.error("Failed to save settings:", e);
       if (!isInitial) toast({ variant: "destructive", title: "儲存失敗", description: e.message || "無法將設定儲存到資料庫。" });
     }
   }, [user, firestore, settingsDocRef, toast]);
+
+  const handleAutoAddCategoryRule = useCallback(async (keyword: string, category: string) => {
+    if (!keyword || !category || category === '未分類') return;
+
+    setSettings(prev => {
+      const existingRuleIndex = prev.categoryRules.findIndex(r => r.keyword === keyword);
+      let newRules = [...prev.categoryRules];
+
+      if (existingRuleIndex > -1) {
+        if (newRules[existingRuleIndex].category === category) return prev;
+        newRules[existingRuleIndex] = { ...newRules[existingRuleIndex], category };
+      } else {
+        newRules = [{ keyword, category }, ...newRules];
+      }
+
+      const newSettings = { ...prev, categoryRules: newRules };
+      handleSaveSettings(newSettings);
+      return newSettings;
+    });
+
+    toast({
+      title: "規則已更新",
+      description: `已自動將「${keyword}」加入「${category}」規則中。`,
+    });
+  }, [handleSaveSettings, toast]);
 
 
   const handleProcessAndSave = useCallback(async ({ text, excelData }: { text?: string; excelData?: any[][] }) => {
@@ -301,13 +323,20 @@ export function FinanceFlowClient() {
     const collectionNameMap = { credit: 'creditCardTransactions', deposit: 'depositAccountTransactions', cash: 'cashTransactions' };
     const setterMap = { credit: setCreditData, deposit: setDepositData, cash: setCashData };
 
-    (setterMap[type] as React.Dispatch<React.SetStateAction<any[]>>)(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
+    (setterMap[type] as React.Dispatch<React.SetStateAction<any[]>>)(prev => {
+      const transaction = prev.find(item => item.id === id);
+      if (field === 'category' && typeof value === 'string' && value !== '未分類' && transaction && transaction.category === '未分類') {
+        handleAutoAddCategoryRule(transaction.description, value);
+      }
+      return prev.map(item => item.id === id ? { ...item, [field]: value } : item);
+    });
+
     try {
       await updateDoc(doc(firestore, 'users', user.uid, collectionNameMap[type], id), { [field]: value });
     } catch (error) {
       toast({ variant: "destructive", title: "更新失敗", description: `無法將變更儲存到資料庫。` });
     }
-  }, [user, firestore, toast]);
+  }, [user, firestore, toast, handleAutoAddCategoryRule]);
 
   const handleDeleteTransaction = useCallback(async (id: string, type: 'credit' | 'deposit' | 'cash') => {
     if (!user || !firestore) return;
@@ -482,7 +511,7 @@ export function FinanceFlowClient() {
               <CardContent className="space-y-4"><Skeleton className="h-48 w-full rounded-md" /></CardContent></Card>
           </div>
         ) : (showResults && hasData) ? (
-          <BalanceTracker combinedData={combinedData} balanceAccounts={settings.balanceAccounts || []} />
+          <BalanceTracker transactions={combinedData} balanceAccounts={settings.balanceAccounts || []} />
         ) : (
           <Card>
             <CardContent className="pt-6">

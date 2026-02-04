@@ -13,6 +13,141 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { AlertCircle, ChevronDown, ChevronRight, BarChart2 } from 'lucide-react';
+
+const MONTHS = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
+
+function MobileAnalysisList({
+    data,
+    totalKey,
+    subKeys,
+    subLabels
+}: {
+    data: any[],
+    totalKey: string,
+    subKeys: (string | number)[],
+    subLabels: (string | number)[]
+}) {
+    const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
+
+    const toggleExpand = (id: string) => {
+        setExpandedItems(prev => ({ ...prev, [id]: !prev[id] }));
+    };
+
+    if (data.length === 0) {
+        return (
+            <div className="text-center py-10 border rounded-lg bg-muted/10 md:hidden">
+                <AlertCircle className="mx-auto h-10 w-10 text-muted-foreground opacity-20" />
+                <p className="mt-2 text-sm text-muted-foreground">無相關資料</p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-3 md:hidden">
+            {data.map((row, idx) => {
+                const uniqueId = `mobile-${row.description}-${idx}`;
+                const isExpanded = expandedItems[uniqueId];
+
+                // Render logic for grouping
+                if (row.isGroup) {
+                    return (
+                        <Card key={uniqueId} className="border-l-4 border-l-primary/50 overflow-hidden">
+                            <div
+                                className="p-3 flex items-center justify-between bg-muted/20 cursor-pointer"
+                                onClick={() => toggleExpand(uniqueId)}
+                            >
+                                <div className="font-bold flex items-center gap-2">
+                                    {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                    {row.description}
+                                    <span className="text-xs font-normal text-muted-foreground">({row.items.length} 項目)</span>
+                                </div>
+                                <div className="font-mono font-bold">{row[totalKey]?.toLocaleString()}</div>
+                            </div>
+                            {isExpanded && (
+                                <div className="p-2 space-y-2 bg-background/50">
+                                    {/* Monthly grid for group total? Or just list items?
+                                       Listing items inside group is better.
+                                    */}
+                                    {row.items.map((item: any, iIdx: number) => (
+                                        <SubItemCard
+                                            key={`${uniqueId}-item-${iIdx}`}
+                                            item={item}
+                                            totalKey={totalKey}
+                                            subKeys={subKeys}
+                                            subLabels={subLabels}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+                        </Card>
+                    );
+                }
+
+                return (
+                    <SubItemCard
+                        key={uniqueId}
+                        item={row}
+                        totalKey={totalKey}
+                        subKeys={subKeys}
+                        subLabels={subLabels}
+                    />
+                );
+            })}
+        </div>
+    );
+}
+
+function SubItemCard({
+    item,
+    totalKey,
+    subKeys,
+    subLabels
+}: {
+    item: any,
+    totalKey: string,
+    subKeys: (string | number)[],
+    subLabels: (string | number)[]
+}) {
+    const [expanded, setExpanded] = useState(false);
+
+    return (
+        <Card className="border shadow-sm">
+            <div
+                className="p-3 flex items-center justify-between cursor-pointer hover:bg-muted/10 transition-colors"
+                onClick={() => setExpanded(!expanded)}
+            >
+                <div className="flex flex-col overflow-hidden">
+                    <span className="font-medium truncate">{item.description}</span>
+                    <span className="text-xs text-muted-foreground">平均: {Math.round(item[totalKey] / subKeys.length).toLocaleString()} / 月</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <span className="font-mono font-bold text-lg">{item[totalKey]?.toLocaleString()}</span>
+                    {expanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                </div>
+            </div>
+
+            {expanded && (
+                <div className="px-3 pb-3 pt-0">
+                    <div className="h-px bg-border mb-3 w-full" />
+                    <div className="grid grid-cols-3 gap-2">
+                        {subKeys.map((key, idx) => {
+                            const val = item[key] || 0;
+                            return (
+                                <div key={String(key)} className="flex flex-col items-center justify-center p-1.5 rounded bg-muted/20">
+                                    <span className="text-[10px] text-muted-foreground mb-0.5">{subLabels[idx]}</span>
+                                    <span className={cn("text-xs font-mono font-medium", val === 0 ? "text-muted-foreground/40" : "")}>
+                                        {val !== 0 ? val.toLocaleString() : '-'}
+                                    </span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+        </Card>
+    );
+}
+
 export function FixedItemsSummary({ combinedData, settings }: { combinedData: CombinedData[], settings: AppSettings }) {
     const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
     const [selectedCategory, setSelectedCategory] = useState<'固定' | '收入'>('固定');
@@ -105,7 +240,7 @@ export function FixedItemsSummary({ combinedData, settings }: { combinedData: Co
                 ...ungroupedRows.sort((a: any, b: any) => a.description.localeCompare(b.description, 'zh-Hant'))
             ];
 
-            const colTotals = finalData.filter((r: any) => !r.isGroup).reduce((acc: number[], row: any) => {
+            const colTotals = finalData.reduce((acc: number[], row: any) => {
                 keys.forEach((k: string | number, idx: number) => { acc[idx] += (row[k] || 0); });
                 return acc;
             }, Array(keys.length).fill(0));
@@ -127,8 +262,6 @@ export function FixedItemsSummary({ combinedData, settings }: { combinedData: Co
     const toggleGroup = (groupName: string) => {
         setExpandedGroups(prev => ({ ...prev, [groupName]: !prev[groupName] }));
     };
-
-    const months = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
 
     // Auto-switch to a year with data if current selection is empty
     React.useEffect(() => {
@@ -200,58 +333,71 @@ export function FixedItemsSummary({ combinedData, settings }: { combinedData: Co
                                 <p className="mt-4 text-muted-foreground italic">該年份無「{selectedCategory}」相關資料</p>
                             </div>
                         ) : (
-                            <div className="rounded-md border overflow-x-auto">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow className="bg-muted/30">
-                                            <TableHead className="sticky left-0 bg-background z-10 w-[200px]">分析項目</TableHead>
-                                            {months.map(m => <TableHead key={m} className="text-right px-2">{m}</TableHead>)}
-                                            <TableHead className="text-right sticky right-0 bg-background z-10">總計</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {analysisData.monthly.finalData.map((row: any) => (
-                                            <React.Fragment key={row.description}>
-                                                <TableRow
-                                                    className={cn(row.isGroup && "bg-primary/5 font-bold hover:bg-primary/10 cursor-pointer", row.isGroup && expandedGroups[row.description] && "border-b-0")}
-                                                    onClick={() => row.isGroup && toggleGroup(row.description)}
-                                                >
-                                                    <TableCell className="sticky left-0 bg-inherit z-10">
-                                                        <div className="flex items-center gap-2">
-                                                            {row.isGroup ? (expandedGroups[row.description] ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />) : <div className="w-4" />}
-                                                            {row.description}
-                                                        </div>
-                                                    </TableCell>
-                                                    {Array.from({ length: 12 }).map((_, i) => (
-                                                        <TableCell key={i} className="text-right font-mono text-sm">
-                                                            {(row[i] || 0) !== 0 ? (row[i]).toLocaleString() : '-'}
+                            <>
+                                {/* Mobile View */}
+                                <MobileAnalysisList
+                                    data={analysisData.monthly.finalData}
+                                    totalKey="total"
+                                    subKeys={Array.from({ length: 12 }, (_, i) => i)}
+                                    subLabels={MONTHS}
+                                />
+
+                                {/* Desktop View */}
+                                <div className="hidden md:block rounded-md border overflow-x-auto">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow className="bg-muted/30">
+                                                <TableHead className="sticky left-0 bg-background z-20 min-w-[80px] whitespace-nowrap">分析項目</TableHead>
+                                                {MONTHS.map(m => <TableHead key={m} className="text-right px-1 min-w-[50px]">{m}</TableHead>)}
+                                                <TableHead className="text-right min-w-[80px]">總計</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {analysisData.monthly.finalData.map((row: any) => (
+                                                <React.Fragment key={row.description}>
+                                                    <TableRow
+                                                        className={cn(row.isGroup && "bg-primary/5 font-bold hover:bg-primary/10 cursor-pointer", row.isGroup && expandedGroups[row.description] && "border-b-0")}
+                                                        onClick={() => row.isGroup && toggleGroup(row.description)}
+                                                    >
+                                                        <TableCell className="sticky left-0 bg-inherit z-10 min-w-[80px] whitespace-nowrap">
+                                                            <div className="flex items-center gap-2">
+                                                                {row.isGroup ? (expandedGroups[row.description] ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />) : <div className="w-4 shrink-0" />}
+                                                                <span className="truncate">{row.description}</span>
+                                                            </div>
                                                         </TableCell>
-                                                    ))}
-                                                    <TableCell className="text-right font-mono font-bold sticky right-0 bg-inherit z-10">{row.total.toLocaleString()}</TableCell>
-                                                </TableRow>
-                                                {row.isGroup && expandedGroups[row.description] && row.items.map((item: any) => (
-                                                    <TableRow key={item.description} className="hover:bg-muted/30 text-muted-foreground">
-                                                        <TableCell className="pl-10 sticky left-0 bg-inherit z-10 text-xs">{item.description}</TableCell>
                                                         {Array.from({ length: 12 }).map((_, i) => (
-                                                            <TableCell key={i} className="text-right font-mono text-xs">
-                                                                {(item[i] || 0) !== 0 ? (item[i]).toLocaleString() : '-'}
+                                                            <TableCell key={i} className="text-right font-mono text-sm px-1">
+                                                                {(row[i] || 0) !== 0 ? (row[i]).toLocaleString() : '-'}
                                                             </TableCell>
                                                         ))}
-                                                        <TableCell className="text-right font-mono font-bold sticky right-0 bg-inherit z-10 text-xs">{item.total.toLocaleString()}</TableCell>
+                                                        <TableCell className="text-right font-mono font-bold">{row.total.toLocaleString()}</TableCell>
                                                     </TableRow>
-                                                ))}
-                                            </React.Fragment>
-                                        ))}
-                                        <TableRow className="bg-primary/10 font-bold border-t-2 border-primary">
-                                            <TableCell className="sticky left-0 bg-inherit z-10">每月匯總</TableCell>
-                                            {analysisData.monthly.colTotals.map((total: number, i: number) => (
-                                                <TableCell key={i} className="text-right font-mono">{total > 0 ? total.toLocaleString() : '-'}</TableCell>
+                                                    {row.isGroup && expandedGroups[row.description] && row.items.map((item: any) => (
+                                                        <TableRow key={item.description} className="hover:bg-muted/30 text-muted-foreground">
+                                                            <TableCell className="pl-10 sticky left-0 bg-inherit z-10 text-xs text-muted-foreground min-w-[80px] whitespace-nowrap">
+                                                                <span className="truncate">{item.description}</span>
+                                                            </TableCell>
+                                                            {Array.from({ length: 12 }).map((_, i) => (
+                                                                <TableCell key={i} className="text-right font-mono text-xs px-1">
+                                                                    {(item[i] || 0) !== 0 ? (item[i]).toLocaleString() : '-'}
+                                                                </TableCell>
+                                                            ))}
+                                                            <TableCell className="text-right font-mono font-bold text-xs">{item.total.toLocaleString()}</TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </React.Fragment>
                                             ))}
-                                            <TableCell className="text-right font-mono sticky right-0 bg-inherit z-10">{analysisData.monthly.grandTotal.toLocaleString()}</TableCell>
-                                        </TableRow>
-                                    </TableBody>
-                                </Table>
-                            </div>
+                                            <TableRow className="bg-primary/10 font-bold border-t-2 border-primary">
+                                                <TableCell className="sticky left-0 bg-inherit z-10">每月匯總</TableCell>
+                                                {analysisData.monthly.colTotals.map((total: number, i: number) => (
+                                                    <TableCell key={i} className="text-right font-mono px-1">{total > 0 ? total.toLocaleString() : '-'}</TableCell>
+                                                ))}
+                                                <TableCell className="text-right font-mono">{analysisData.monthly.grandTotal.toLocaleString()}</TableCell>
+                                            </TableRow>
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            </>
                         )}
                     </TabsContent>
 
@@ -262,58 +408,71 @@ export function FixedItemsSummary({ combinedData, settings }: { combinedData: Co
                                 <p className="mt-4 text-muted-foreground italic">查無跨年度相關資料</p>
                             </div>
                         ) : (
-                            <div className="rounded-md border overflow-x-auto">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow className="bg-muted/30">
-                                            <TableHead className="sticky left-0 bg-background z-10 w-[200px]">分析項目</TableHead>
-                                            {analysisData.years.map(year => <TableHead key={year} className="text-right px-2">{year} 年</TableHead>)}
-                                            <TableHead className="text-right sticky right-0 bg-background z-10">歷史總計</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {analysisData.yearly.finalData.map((row: any) => (
-                                            <React.Fragment key={row.description}>
-                                                <TableRow
-                                                    className={cn(row.isGroup && "bg-primary/5 font-bold hover:bg-primary/10 cursor-pointer", row.isGroup && expandedGroups[row.description] && "border-b-0")}
-                                                    onClick={() => row.isGroup && toggleGroup(row.description)}
-                                                >
-                                                    <TableCell className="sticky left-0 bg-inherit z-10">
-                                                        <div className="flex items-center gap-2">
-                                                            {row.isGroup ? (expandedGroups[row.description] ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />) : <div className="w-4" />}
-                                                            {row.description}
-                                                        </div>
-                                                    </TableCell>
-                                                    {analysisData.years.map((year: string) => (
-                                                        <TableCell key={year} className="text-right font-mono text-sm">
-                                                            {(row[year] || 0) !== 0 ? (row[year]).toLocaleString() : '-'}
+                            <>
+                                {/* Mobile View */}
+                                <MobileAnalysisList
+                                    data={analysisData.yearly.finalData}
+                                    totalKey="total"
+                                    subKeys={analysisData.years}
+                                    subLabels={analysisData.years.map(y => `${y}年`)}
+                                />
+
+                                {/* Desktop View */}
+                                <div className="hidden md:block rounded-md border overflow-x-auto">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow className="bg-muted/30">
+                                                <TableHead className="sticky left-0 bg-background z-20 min-w-[80px] whitespace-nowrap">分析項目</TableHead>
+                                                {analysisData.years.map(year => <TableHead key={year} className="text-right px-1 min-w-[50px]">{year} 年</TableHead>)}
+                                                <TableHead className="text-right min-w-[80px]">歷史總計</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {analysisData.yearly.finalData.map((row: any) => (
+                                                <React.Fragment key={row.description}>
+                                                    <TableRow
+                                                        className={cn(row.isGroup && "bg-primary/5 font-bold hover:bg-primary/10 cursor-pointer", row.isGroup && expandedGroups[row.description] && "border-b-0")}
+                                                        onClick={() => row.isGroup && toggleGroup(row.description)}
+                                                    >
+                                                        <TableCell className="sticky left-0 bg-inherit z-10 min-w-[80px] whitespace-nowrap">
+                                                            <div className="flex items-center gap-2">
+                                                                {row.isGroup ? (expandedGroups[row.description] ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />) : <div className="w-4 shrink-0" />}
+                                                                <span className="truncate">{row.description}</span>
+                                                            </div>
                                                         </TableCell>
-                                                    ))}
-                                                    <TableCell className="text-right font-mono font-bold sticky right-0 bg-inherit z-10">{row.total.toLocaleString()}</TableCell>
-                                                </TableRow>
-                                                {row.isGroup && expandedGroups[row.description] && row.items.map((item: any) => (
-                                                    <TableRow key={item.description} className="hover:bg-muted/30 text-muted-foreground">
-                                                        <TableCell className="pl-10 sticky left-0 bg-inherit z-10 text-xs">{item.description}</TableCell>
                                                         {analysisData.years.map((year: string) => (
-                                                            <TableCell key={year} className="text-right font-mono text-xs">
-                                                                {(item[year] || 0) !== 0 ? (item[year]).toLocaleString() : '-'}
+                                                            <TableCell key={year} className="text-right font-mono text-sm px-1">
+                                                                {(row[year] || 0) !== 0 ? (row[year]).toLocaleString() : '-'}
                                                             </TableCell>
                                                         ))}
-                                                        <TableCell className="text-right font-mono font-bold sticky right-0 bg-inherit z-10 text-xs">{item.total.toLocaleString()}</TableCell>
+                                                        <TableCell className="text-right font-mono font-bold">{row.total.toLocaleString()}</TableCell>
                                                     </TableRow>
-                                                ))}
-                                            </React.Fragment>
-                                        ))}
-                                        <TableRow className="bg-primary/10 font-bold border-t-2 border-primary">
-                                            <TableCell className="sticky left-0 bg-inherit z-10">年度匯總</TableCell>
-                                            {analysisData.yearly.colTotals.map((total: number, i: number) => (
-                                                <TableCell key={i} className="text-right font-mono">{total > 0 ? total.toLocaleString() : '-'}</TableCell>
+                                                    {row.isGroup && expandedGroups[row.description] && row.items.map((item: any) => (
+                                                        <TableRow key={item.description} className="hover:bg-muted/30 text-muted-foreground">
+                                                            <TableCell className="pl-10 sticky left-0 bg-inherit z-10 text-xs min-w-[80px] whitespace-nowrap">
+                                                                <span className="truncate">{item.description}</span>
+                                                            </TableCell>
+                                                            {analysisData.years.map((year: string) => (
+                                                                <TableCell key={year} className="text-right font-mono text-xs px-1">
+                                                                    {(item[year] || 0) !== 0 ? (item[year]).toLocaleString() : '-'}
+                                                                </TableCell>
+                                                            ))}
+                                                            <TableCell className="text-right font-mono font-bold text-xs">{item.total.toLocaleString()}</TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </React.Fragment>
                                             ))}
-                                            <TableCell className="text-right font-mono sticky right-0 bg-inherit z-10">{analysisData.yearly.grandTotal.toLocaleString()}</TableCell>
-                                        </TableRow>
-                                    </TableBody>
-                                </Table>
-                            </div>
+                                            <TableRow className="bg-primary/10 font-bold border-t-2 border-primary">
+                                                <TableCell className="sticky left-0 bg-inherit z-10">年度匯總</TableCell>
+                                                {analysisData.yearly.colTotals.map((total: number, i: number) => (
+                                                    <TableCell key={i} className="text-right font-mono px-1">{total > 0 ? total.toLocaleString() : '-'}</TableCell>
+                                                ))}
+                                                <TableCell className="text-right font-mono">{analysisData.yearly.grandTotal.toLocaleString()}</TableCell>
+                                            </TableRow>
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            </>
                         )}
                     </TabsContent>
                 </Tabs>

@@ -1,198 +1,156 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { CombinedData } from '@/components/finance-flow-client';
-import { BalanceAccount } from './settings-manager';
-import { Wallet, ArrowDownCircle, ArrowUpCircle, AlertCircle, Calendar, Eye, Search } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { addDays, differenceInDays, format, parseISO } from 'date-fns';
+import React, { useState, useMemo } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Eye, TrendingUp, TrendingDown, CircleDollarSign, AlertTriangle } from 'lucide-react';
+import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 
-export function BalanceTracker({ combinedData, balanceAccounts }: { combinedData: CombinedData[], balanceAccounts: BalanceAccount[] }) {
-    const [selectedAccount, setSelectedAccount] = useState<any>(null);
+import { formatCurrency, cn } from '@/lib/utils';
+import type { BalanceAccount } from './settings-manager';
 
+// Define a local interface compatible with CombinedData
+interface Transaction {
+    id: string;
+    date: string; // yyyy/MM/dd
+    description: string;
+    amount: number;
+    category: string;
+    bankCode?: string;
+    notes?: string;
+    // Allow for other properties if needed
+    [key: string]: any;
+}
+
+interface BalanceTrackerProps {
+    balanceAccounts: BalanceAccount[];
+    transactions: Transaction[];
+}
+
+export function BalanceTracker({ balanceAccounts, transactions }: BalanceTrackerProps) {
     const accountBalances = useMemo(() => {
-        if (!balanceAccounts || balanceAccounts.length === 0) return [];
-
         return balanceAccounts.map(account => {
-            const keywords = account.keywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean);
+            const accountTransactions = transactions.filter(t => {
+                const keywords = account.keywords.split(',').map(k => k.trim()).filter(k => k);
 
-            const transactions = combinedData.filter(t => {
-                const matchesCategory = t.category === account.category;
-                const matchesKeywords = keywords.length === 0 || keywords.some(k => t.description.toLowerCase().includes(k));
-                return matchesCategory && matchesKeywords;
-            }).sort((a, b) => b.dateObj.getTime() - a.dateObj.getTime());
+                const category = t.category || '';
+                const description = t.description || '';
+                const note = t.bankCode || t.notes || '';
 
-            let totalIn = 0;
-            let totalOut = 0;
+                const matchesCategory = category === account.category;
+                const matchesKeyword = keywords.some(k => description.includes(k) || note.includes(k));
 
-            transactions.forEach(t => {
-                if (t.amount < 0) {
-                    totalIn += Math.abs(t.amount);
-                } else {
-                    totalOut += t.amount;
-                }
+                // 篩選邏輯 (Strict Mode)：交易必須「同時」符合指定的分類 (Category) 與 關鍵字 (Keyword)
+                // 這是為了確保只有真正屬於該專款的項目被列入，避免誤判。
+                return matchesCategory && matchesKeyword;
             });
 
-            const balance = totalIn - totalOut;
-            const lastTransaction = transactions.length > 0 ? transactions[0] : null;
-
-            // Runway Calculation (Prediction)
-            let estimatedDaysLeft = null;
-            let estimatedEndDate = null;
-            let dailyRate = 0;
-
-            if (transactions.length > 1 && totalOut > 0) {
-                const oldestDate = transactions[transactions.length - 1].dateObj;
-                const newestDate = transactions[0].dateObj;
-                const daysDiff = Math.max(1, differenceInDays(newestDate, oldestDate));
-                dailyRate = totalOut / daysDiff;
-
-                if (balance > 0 && dailyRate > 0) {
-                    estimatedDaysLeft = Math.floor(balance / dailyRate);
-                    estimatedEndDate = addDays(new Date(), estimatedDaysLeft);
-                }
-            }
+            const totalBalance = accountTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
+            const totalIn = accountTransactions.filter(t => (t.amount || 0) > 0).reduce((sum, t) => sum + (t.amount || 0), 0);
+            const totalOut = accountTransactions.filter(t => (t.amount || 0) < 0).reduce((sum, t) => sum + (t.amount || 0), 0);
 
             return {
                 ...account,
+                balance: totalBalance,
                 totalIn,
                 totalOut,
-                balance,
-                count: transactions.length,
-                lastDate: lastTransaction?.date,
-                transactions,
-                dailyRate,
-                estimatedEndDate
+                transactions: accountTransactions.sort((a, b) => {
+                    const dateA = new Date(a.date).getTime();
+                    const dateB = new Date(b.date).getTime();
+                    return dateB - dateA;
+                })
             };
         });
-    }, [combinedData, balanceAccounts]);
+    }, [balanceAccounts, transactions]);
 
-    if (!balanceAccounts || balanceAccounts.length === 0) return null;
+    if (balanceAccounts.length === 0) {
+        return null;
+    }
 
     return (
-        <div className="space-y-6 mt-6">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="space-y-4">
+            <div className="flex items-center gap-2">
+                <CircleDollarSign className="h-5 w-5 text-primary" />
+                <h3 className="text-lg font-semibold">專款餘額追蹤</h3>
+                <span className="text-xs text-muted-foreground bg-secondary/50 px-2 py-1 rounded-md">
+                    (需同時符合分類與關鍵字)
+                </span>
+            </div>
+
+            <div className="grid gap-3 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
                 {accountBalances.map((acc) => (
                     <Card key={acc.name} className="overflow-hidden border-l-4 border-l-primary shadow-sm hover:shadow-md transition-shadow flex flex-col">
-                        <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0 text-primary">
-                            <div>
-                                <CardTitle className="text-lg font-bold">{acc.name}</CardTitle>
-                                <CardDescription>
-                                    分類: <Badge variant="secondary" className="ml-1 text-[10px] h-5">{acc.category}</Badge>
-                                </CardDescription>
-                            </div>
-                            <div className="p-2 bg-primary/10 rounded-full">
-                                <Wallet className="w-5 h-5" />
+                        <CardHeader className="py-3 px-4 bg-muted/20 pb-2">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <CardTitle className="text-sm font-medium text-muted-foreground">{acc.name}</CardTitle>
+                                    <div className={cn("text-2xl font-bold mt-1", acc.balance < 0 ? "text-destructive" : "text-primary")}>
+                                        {formatCurrency(acc.balance)}
+                                    </div>
+                                </div>
+                                <Badge variant="outline" className="text-xs font-normal bg-background/50">
+                                    {acc.category}
+                                </Badge>
                             </div>
                         </CardHeader>
-                        <CardContent className="flex-grow">
-                            <div className="flex flex-col space-y-3">
-                                <div className="flex items-baseline justify-between">
-                                    <span className="text-sm text-muted-foreground uppercase tracking-wider font-semibold">目前餘額</span>
-                                    <span className={cn(
-                                        "text-2xl font-black font-mono",
-                                        acc.balance >= 0 ? "text-emerald-600" : "text-destructive"
-                                    )}>
-                                        ${acc.balance.toLocaleString()}
-                                    </span>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4 pt-2 border-t border-muted">
-                                    <div className="flex flex-col">
-                                        <span className="text-[10px] text-muted-foreground flex items-center gap-1 uppercase">
-                                            <ArrowDownCircle className="w-3 h-3 text-emerald-500" /> 累計存入
-                                        </span>
-                                        <span className="text-sm font-bold font-mono text-emerald-600">
-                                            +{acc.totalIn.toLocaleString()}
-                                        </span>
-                                    </div>
-                                    <div className="flex flex-col">
-                                        <span className="text-[10px] text-muted-foreground flex items-center gap-1 uppercase">
-                                            <ArrowUpCircle className="w-3 h-3 text-orange-500" /> 累計支出
-                                        </span>
-                                        <span className="text-sm font-bold font-mono text-orange-600">
-                                            -{acc.totalOut.toLocaleString()}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-2 pt-2 border-t border-muted">
-                                    <div className="flex justify-between items-center text-[11px] text-muted-foreground italic">
-                                        <span className="flex items-center gap-1"><Search className="w-3 h-3" /> 共 {acc.count} 筆交易</span>
-                                        {acc.lastDate && <span>最後異動: {acc.lastDate}</span>}
-                                    </div>
-
-                                    {acc.estimatedEndDate && acc.balance > 0 ? (
-                                        <div className="p-2 bg-emerald-50 border border-emerald-100 rounded-md flex items-center justify-between">
-                                            <span className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
-                                                <Calendar className="w-3 h-3" /> 預計可用至
-                                            </span>
-                                            <span className="text-sm font-bold text-emerald-700">
-                                                {format(acc.estimatedEndDate, 'yyyy/MM/dd')}
-                                            </span>
-                                        </div>
-                                    ) : acc.balance > 0 ? (
-                                        <div className="p-2 bg-muted/50 rounded-md text-[10px] text-muted-foreground text-center">
-                                            數據不足，尚無法預估時長
-                                        </div>
-                                    ) : null}
-
-                                    {acc.balance < 0 && (
-                                        <div className="p-2 bg-destructive/10 text-destructive rounded-md flex items-center gap-2 text-xs font-semibold">
-                                            <AlertCircle className="w-3 h-3" />
-                                            <span>預付款已用盡 (超支 {Math.abs(acc.balance).toLocaleString()})</span>
-                                        </div>
-                                    )}
-                                </div>
+                        <CardContent className="px-4 py-2 flex-1">
+                            <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                                <span className="flex items-center gap-1"><TrendingUp className="h-3 w-3 text-emerald-500" /> 收入</span>
+                                <span className="text-emerald-600 font-medium">{formatCurrency(acc.totalIn)}</span>
+                            </div>
+                            <div className="flex justify-between text-xs text-muted-foreground">
+                                <span className="flex items-center gap-1"><TrendingDown className="h-3 w-3 text-rose-500" /> 支出</span>
+                                <span className="text-rose-600 font-medium">{formatCurrency(Math.abs(acc.totalOut))}</span>
                             </div>
                         </CardContent>
-                        <CardFooter className="pt-0 pb-3 h-10">
+                        <CardFooter className="pt-0 pb-2 px-2 h-10">
                             <Dialog>
                                 <DialogTrigger asChild>
                                     <Button variant="ghost" size="sm" className="w-full text-xs h-8 text-primary hover:bg-primary/5 hover:text-primary">
                                         <Eye className="w-3 h-3 mr-2" /> 檢視收支明細
                                     </Button>
                                 </DialogTrigger>
-                                <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
-                                    <DialogHeader>
-                                        <DialogTitle className="flex items-center justify-between pr-6">
-                                            <span>{acc.name} - 交易明細</span>
-                                            <span className={cn("text-lg", acc.balance >= 0 ? "text-emerald-600" : "text-destructive")}>
-                                                餘額: ${acc.balance.toLocaleString()}
-                                            </span>
-                                        </DialogTitle>
-                                        <DialogDescription>
-                                            顯示類別 「{acc.category}」 中包含關鍵字 「{acc.keywords}」 的所有歷史交易
-                                        </DialogDescription>
-                                    </DialogHeader>
-                                    <div className="overflow-y-auto mt-4 rounded-md border">
+                                <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col p-0 gap-0">
+                                    <div className="p-4 border-b">
+                                        <h2 className="text-lg font-semibold flex items-center gap-2">
+                                            {acc.name} - 明細
+                                            <Badge variant={acc.balance >= 0 ? "default" : "destructive"}>
+                                                餘額: {formatCurrency(acc.balance)}
+                                            </Badge>
+                                        </h2>
+                                    </div>
+                                    <div className="flex-1 overflow-auto p-0">
                                         <Table>
-                                            <TableHeader className="bg-muted/50 sticky top-0 z-10">
+                                            <TableHeader className="sticky top-0 bg-secondary/90 backdrop-blur-sm z-10 shadow-sm">
                                                 <TableRow>
                                                     <TableHead className="w-[100px]">日期</TableHead>
-                                                    <TableHead>交易項目</TableHead>
-                                                    <TableHead className="text-right">金額</TableHead>
-                                                    <TableHead>備註</TableHead>
+                                                    <TableHead className="min-w-[150px]">說明</TableHead>
+                                                    <TableHead className="text-right whitespace-nowrap">金額</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                                {acc.transactions.map((t: CombinedData, idx: number) => (
-                                                    <TableRow key={idx}>
-                                                        <TableCell className="text-xs font-mono">{t.date}</TableCell>
-                                                        <TableCell className="text-xs font-medium">{t.description}</TableCell>
-                                                        <TableCell className={cn(
-                                                            "text-xs font-bold font-mono text-right",
-                                                            t.amount < 0 ? "text-emerald-600" : "text-destructive"
-                                                        )}>
-                                                            {t.amount < 0 ? '+' : ''}{Math.abs(t.amount).toLocaleString()}
+                                                {acc.transactions.length > 0 ? (
+                                                    acc.transactions.map((t) => (
+                                                        <TableRow key={t.id} className="hover:bg-muted/50">
+                                                            <TableCell className="py-2 text-xs">{t.date}</TableCell>
+                                                            <TableCell className="py-2">
+                                                                <div className="text-sm font-medium truncate max-w-[180px] md:max-w-xs" title={t.description}>{t.description}</div>
+                                                                {(t.notes || t.bankCode) && <div className="text-xs text-muted-foreground truncate max-w-[180px] md:max-w-xs">{t.notes || t.bankCode}</div>}
+                                                            </TableCell>
+                                                            <TableCell className={cn("py-2 text-right font-medium text-sm whitespace-nowrap", t.amount > 0 ? "text-emerald-600" : "text-rose-600")}>
+                                                                {formatCurrency(t.amount)}
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))
+                                                ) : (
+                                                    <TableRow>
+                                                        <TableCell colSpan={3} className="h-24 text-center text-muted-foreground">
+                                                            無相關交易紀錄
                                                         </TableCell>
-                                                        <TableCell className="text-[10px] text-muted-foreground italic">{t.notes}</TableCell>
                                                     </TableRow>
-                                                ))}
+                                                )}
                                             </TableBody>
                                         </Table>
                                     </div>
@@ -202,29 +160,12 @@ export function BalanceTracker({ combinedData, balanceAccounts }: { combinedData
                     </Card>
                 ))}
             </div>
-        </div>
-    );
-}
-
-// Helper components that should have been imported but since this is a self-contained fix
-function Button({ className, variant, size, ...props }: any) {
-    const variants: any = {
-        ghost: "hover:bg-accent hover:text-accent-foreground",
-        outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
-    };
-    const sizes: any = {
-        sm: "h-9 rounded-md px-3",
-        xs: "h-7 rounded-md px-2",
-    };
-    return (
-        <button
-            className={cn(
-                "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
-                variants[variant || 'outline'],
-                sizes[size || 'sm'],
-                className
+            {accountBalances.some(a => a.balance < 0) && (
+                <div className="flex items-start gap-2 p-3 bg-amber-50 text-amber-800 rounded-md text-xs border border-amber-200">
+                    <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <p>注意：部分專款帳戶餘額為負，請確認是否透支或尚未提撥款項。</p>
+                </div>
             )}
-            {...props}
-        />
+        </div>
     );
 }

@@ -70,6 +70,25 @@ function applyCategoryRules(description: string, rules: CategoryRule[]): string 
     return '未分類';
 }
 
+// Helper to deduplicate IDs within a single batch
+function deduplicateBatchIds<T extends { id: string }>(items: T[]): T[] {
+    const idCounts = new Map<string, number>();
+    return items.map(item => {
+        const count = idCounts.get(item.id) || 0;
+        idCounts.set(item.id, count + 1);
+
+        if (count > 0) {
+            // If duplicate in batch, append suffix to make it unique
+            // e.g., "id123" -> "id123-dup-1"
+            return {
+                ...item,
+                id: `${item.id}-dup-${count}`
+            };
+        }
+        return item;
+    });
+}
+
 export async function processBankStatement(
     text: string,
     replacementRules: ReplacementRule[],
@@ -108,22 +127,27 @@ export async function processBankStatement(
         if (isExcelUpload && excelData) {
             const parsedDataFromExcel = await parseExcelData(excelData);
 
+            // 1. Batch Deduplication (Fix for duplicate rows in same file)
+            const uniqueBatchCredit = deduplicateBatchIds(parsedDataFromExcel.creditData);
+            const uniqueBatchDeposit = deduplicateBatchIds(parsedDataFromExcel.depositData);
+            const uniqueBatchCash = deduplicateBatchIds(parsedDataFromExcel.cashData);
+
             // 過濾掉已存在的資料
-            const newCreditData = parsedDataFromExcel.creditData.filter(d => {
+            const newCreditData = uniqueBatchCredit.filter(d => {
                 if (existingCreditIds.has(d.id)) {
                     skippedDuplicates.credit++;
                     return false;
                 }
                 return true;
             });
-            const newDepositData = parsedDataFromExcel.depositData.filter(d => {
+            const newDepositData = uniqueBatchDeposit.filter(d => {
                 if (existingDepositIds.has(d.id)) {
                     skippedDuplicates.deposit++;
                     return false;
                 }
                 return true;
             });
-            const newCashData = parsedDataFromExcel.cashData.filter(d => {
+            const newCashData = uniqueBatchCash.filter(d => {
                 if (existingCashIds.has(d.id)) {
                     skippedDuplicates.cash++;
                     return false;
@@ -140,8 +164,14 @@ export async function processBankStatement(
             const rawCreditParsed: RawCreditData[] = await parseCreditCard(text);
             const rawDepositParsed = await parseDepositAccount(text);
 
-            // 2. Process credit card entries
-            const processedCreditPromises = rawCreditParsed.map(async (rawEntry): Promise<CreditData | null> => {
+            // 2. Batch Deduplication (Fix for duplicate rows in same paste)
+            // Even locally identical rows will now get unique IDs (id, id-dup-1, id-dup-2...)
+            // BEFORE we check against the database.
+            const uniqueBatchCreditRaw = deduplicateBatchIds(rawCreditParsed);
+            const uniqueBatchDepositRaw = deduplicateBatchIds(rawDepositParsed);
+
+            // 3. Process credit card entries
+            const processedCreditPromises = uniqueBatchCreditRaw.map(async (rawEntry): Promise<CreditData | null> => {
                 // 檢查是否已存在
                 if (existingCreditIds.has(rawEntry.id)) {
                     skippedDuplicates.credit++;
@@ -188,8 +218,8 @@ export async function processBankStatement(
             const processedCreditData = (await Promise.all(processedCreditPromises)).filter((e): e is CreditData => e !== null);
             allCreditData = processedCreditData;
 
-            // 3. Process deposit account entries by applying rules
-            const processedDepositPromises = rawDepositParsed.map(async (entry): Promise<DepositData | null> => {
+            // 4. Process deposit account entries by applying rules
+            const processedDepositPromises = uniqueBatchDepositRaw.map(async (entry): Promise<DepositData | null> => {
                 // 檢查是否已存在
                 if (existingDepositIds.has(entry.id)) {
                     skippedDuplicates.deposit++;
