@@ -1,0 +1,19 @@
+{
+    "symbol": "2330.TW",
+    "period": "2025-11",
+    "price": 1435.22,
+    "ma240": 1116.76,
+    "bias": 28.52,
+    "rsi": 44.93,
+    "risk_score": 60,
+    "alerts": [
+        "年線乖離率過高 (28.5%)",
+        "股價位於千元大關上方"
+    ],
+    "last_update": "2025-11-28",
+    "comparison_2022": {
+        "peak_price": 688,
+        "peak_bias": 28.5,
+        "peak_rsi": 82.0
+    }
+}
