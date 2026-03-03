@@ -891,6 +891,14 @@ export function FinanceFlowClient() {
         {/* --- 模式 2: 台積電詳情 --- */}
         {radarView === 'tsmc' && tsmcData && (
           <div className="animate-in fade-in slide-in-from-right-2 duration-500 space-y-8">
+            {/* 來源與時間標注 */}
+            <div className="flex items-center gap-3">
+              <span className={`px-2.5 py-1 text-[10px] font-black rounded-full ${cloudTsmcData ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                {cloudTsmcData ? '☁️ 雲端即時' : '💾 本地快取'}
+              </span>
+              <span className="text-[10px] text-slate-400 font-bold">報價時間: {tsmcData?.last_update || '---'}</span>
+              <span className="text-[10px] text-slate-300">• 來源: {cloudTsmcData ? 'Firestore Realtime' : 'Local JSON'}</span>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="p-8 rounded-3xl border border-slate-200 bg-white shadow-sm flex flex-col md:flex-row items-center gap-10">
                 <div className="relative w-32 h-32 shrink-0">
@@ -918,7 +926,7 @@ export function FinanceFlowClient() {
                     }
                   </h3>
                   <p className="text-[10px] text-slate-500 leading-relaxed font-medium mt-4 pt-4 border-t border-slate-100 flex justify-between items-center">
-                    <span>* 數據採用 14:30 盤後定價結算價</span>
+                    <span>現價: ${tsmcData?.price ?? '--'} | 年線乖離率: {tsmcData?.bias ?? '--'}%</span>
                     <span className="bg-slate-50 px-2 py-0.5 rounded text-slate-400">
                       Sync: {tsmcData?.last_update || '---'}
                     </span>
@@ -949,6 +957,14 @@ export function FinanceFlowClient() {
         {/* --- 模式 3: 個人持倉詳情 --- */}
         {radarView === 'portfolio' && portfolioData && (
           <div className="animate-in fade-in slide-in-from-right-2 duration-500 space-y-8">
+            {/* 來源與時間標注 */}
+            <div className="flex items-center gap-3">
+              <span className={`px-2.5 py-1 text-[10px] font-black rounded-full ${cloudPortfolioData ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                {cloudPortfolioData ? '☁️ 雲端即時' : '💾 本地快取'}
+              </span>
+              <span className="text-[10px] text-slate-400 font-bold">更新時間: {portfolioData?.last_updated || '---'}</span>
+              <span className="text-[10px] text-slate-300">• 來源: {cloudPortfolioData ? 'Firestore Realtime' : 'Local JSON'}</span>
+            </div>
             {portfolioData.positions.map((pos: any, i: number) => (
               <div key={i} className="p-8 bg-white border border-slate-200 rounded-3xl shadow-sm space-y-8">
                 <div className="flex justify-between items-start">
