@@ -5,7 +5,21 @@
   "hosting": {
     "public": "out",
     "cleanUrls": true,
-    "trailingSlash": true,
+    "headers": [
+      {
+        "source": "/data/**",
+        "headers": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=300"
+          }
+        ]
+      }
+    ],
     "rewrites": [
       {
         "source": "**",
