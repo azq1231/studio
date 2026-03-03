@@ -84,7 +84,7 @@ export function FinanceFlowClient() {
   const tsmcDocRef = useMemoFirebase(() => firestore ? doc(firestore, 'marketRecords', 'tsmc') : null, [firestore]);
   const { data: cloudTsmcData, isLoading: isLoadingTsmc } = useDoc<any>(tsmcDocRef);
 
-  const portfolioDocRef = useMemoFirebase(() => (user && firestore) ? doc(firestore, 'users', user.uid, 'stockPositions', 'portfolio') : null, [user, firestore]);
+  const portfolioDocRef = useMemoFirebase(() => firestore ? doc(firestore, 'marketRecords', 'portfolio') : null, [firestore]);
   const { data: cloudPortfolioData, isLoading: isLoadingPortfolio } = useDoc<any>(portfolioDocRef);
 
   const tw50DocRef = useMemoFirebase(() => firestore ? doc(firestore, 'marketRecords', 'tw50') : null, [firestore]);
@@ -118,42 +118,7 @@ export function FinanceFlowClient() {
     fetchSafe("/data/tw50_full_scan.json", setTw50DataLocal, "TW50");
   }, []);
 
-  // 2. 雲端自動同步 (Migration logic)
-  useEffect(() => {
-    if (!user || !firestore) return;
-
-    const syncData = async () => {
-      try {
-        // 如果雲端沒有 TSMC 資料，且本地已經獲取成功，則自動同步上雲 (一次性)
-        if (tsmcDataLocal && !cloudTsmcData && tsmcDocRef) {
-          console.log("Auto-syncing TSMC data to Firestore...");
-          await setDoc(tsmcDocRef, tsmcDataLocal, { merge: true });
-        }
-      } catch (err) {
-        console.warn("Auto-sync TSMC failed (non-critical):", err);
-      }
-
-      try {
-        // 如果雲端沒有持倉資料，且本地已經獲取成功，則同步上雲
-        if (portfolioDataLocal && !cloudPortfolioData && portfolioDocRef) {
-          console.log("Auto-syncing Portfolio data to Firestore...");
-          await setDoc(portfolioDocRef, portfolioDataLocal, { merge: true });
-        }
-
-        // 如果雲端沒有 TW50 資料，且本地已經獲取成功，則同步上雲
-        if (tw50DataLocal && !cloudTw50Data && tw50DocRef) {
-          console.log("Auto-syncing TW50 scan data to Firestore...");
-          // 注意：tw50 可能是一個數組，這裡建議包裝成一個物件存入 Firestore
-          await setDoc(tw50DocRef, { stocks: tw50DataLocal, updatedAt: new Date().toISOString() }, { merge: true });
-        }
-      } catch (err) {
-        console.warn("Auto-sync Portfolio failed (non-critical):", err);
-      }
-    };
-
-    syncData();
-  }, [user, firestore, tsmcDataLocal, cloudTsmcData, tsmcDocRef, portfolioDataLocal, cloudPortfolioData, portfolioDocRef]);
-
+  // (Deprecated) Auto-sync migration removed to prevent permission errors
   // --- 手動同步邏輯 ---
   const [isSyncing, setIsSyncing] = useState(false);
   const handleManualSync = async () => {
