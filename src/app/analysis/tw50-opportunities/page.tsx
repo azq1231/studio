@@ -12,6 +12,8 @@ export default function Tw50OpportunitiesPage() {
     const { toast } = useToast();
     const [tw50Data, setTw50Data] = useState<any[]>([]);
     const [isSyncing, setIsSyncing] = useState(false);
+    const [dataSource, setDataSource] = useState<'cloud' | 'local' | 'none'>('none');
+    const [lastUpdate, setLastUpdate] = useState<string>("");
 
     // Firestore 引用
     const tw50DocRef = useMemoFirebase(() => firestore ? doc(firestore, 'marketRecords', 'tw50') : null, [firestore]);
@@ -21,12 +23,23 @@ export default function Tw50OpportunitiesPage() {
         // 優先使用雲端數據
         if (cloudTw50Data?.stocks) {
             setTw50Data(cloudTw50Data.stocks);
+            setDataSource('cloud');
+            setLastUpdate(cloudTw50Data.last_update || "實時連線中");
         } else {
             // 備援：讀取本地 JSON
             fetch("/data/tw50_full_scan.json")
                 .then(res => res.json())
-                .then(json => setTw50Data(json))
-                .catch(err => console.error("Failed to load TW50 local data:", err));
+                .then(json => {
+                    if (Array.isArray(json) && json.length > 0) {
+                        setTw50Data(json);
+                        setDataSource('local');
+                        setLastUpdate("系統定時更新檔");
+                    }
+                })
+                .catch(err => {
+                    console.error("Failed to load TW50 local data:", err);
+                    setDataSource('none');
+                });
         }
     }, [cloudTw50Data]);
 
@@ -54,6 +67,17 @@ export default function Tw50OpportunitiesPage() {
             setTimeout(() => setIsSyncing(false), 5000);
         }
     };
+
+    if (dataSource === 'none' && tw50Data.length === 0) {
+        return (
+            <div className="p-20 text-white bg-[#0f1115] min-h-screen text-center flex flex-col items-center justify-center gap-4">
+                <Activity className="w-12 h-12 text-rose-500 animate-pulse" />
+                <h2 className="text-2xl font-bold">無法載入掃描數據</h2>
+                <p className="text-slate-400">目前雲端無回應，且本地快取尚未生成。</p>
+                <Button onClick={() => window.location.reload()} variant="outline">重試</Button>
+            </div>
+        );
+    }
 
     const staticOpps = [
         {
@@ -107,8 +131,15 @@ export default function Tw50OpportunitiesPage() {
                         <div className="flex items-center gap-4">
                             <Wallet className="w-10 h-10 text-emerald-400" />
                             <div>
-                                <h1 className="text-4xl font-extrabold text-white">台灣五十：底部機會掃描</h1>
-                                <p className="text-slate-400 mt-1">針對 10 萬元預算的實戰配置與歷史紀律回顧</p>
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className={`px-2 py-0.5 text-[10px] font-bold rounded uppercase tracking-tighter ${dataSource === 'cloud' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                                        {dataSource === 'cloud' ? '雲端同步' : '本地模式'}
+                                    </span>
+                                    <h1 className="text-4xl font-extrabold text-white">台灣五十：底部機會掃描</h1>
+                                </div>
+                                <p className="text-slate-400 mt-1 flex items-center gap-2">
+                                    <Clock className="w-4 h-4" /> 數據更新: {lastUpdate}
+                                </p>
                             </div>
                         </div>
                     </div>

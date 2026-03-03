@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Activity, History, Calendar, Target, Wallet, UserCheck, RefreshCw } from "lucide-react";
+import { AlertTriangle, Activity, History, Calendar, Target, Wallet, UserCheck, RefreshCw, Clock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -26,6 +26,7 @@ interface RiskData {
         peak_bias: number;
         peak_rsi: number;
     };
+    _source?: 'cloud' | 'local';
 }
 
 export default function TsmcRiskClient() {
@@ -42,14 +43,14 @@ export default function TsmcRiskClient() {
 
     useEffect(() => {
         if (cloudData) {
-            setData(cloudData as RiskData);
+            setData({ ...cloudData, _source: 'cloud' } as RiskData & { _source: string });
             setLoading(false);
         } else {
             // 備援：讀取本地 JSON
             fetch("/data/tsmc_risk.json")
                 .then((res) => res.json())
                 .then((json) => {
-                    setData(json);
+                    setData({ ...json, _source: 'local' });
                     setLoading(false);
                 })
                 .catch((err) => {
@@ -92,7 +93,14 @@ export default function TsmcRiskClient() {
         );
     }
 
-    if (!data) return <div className="p-20 text-white bg-[#0f1115] min-h-screen text-center">正在等待數據生成...</div>;
+    if (!data) return (
+        <div className="p-20 text-white bg-[#0f1115] min-h-screen text-center flex flex-col items-center justify-center gap-4">
+            <AlertTriangle className="w-12 h-12 text-rose-500" />
+            <h2 className="text-2xl font-bold">無法讀取市場數據</h2>
+            <p className="text-slate-400">雲端與本地備援均失效，請確認網路連接或稍後再試。</p>
+            <Button onClick={() => window.location.reload()} variant="outline">重新整理</Button>
+        </div>
+    );
 
     const getRiskColor = (score: number) => {
         if (score < 30) return "text-emerald-400";
@@ -116,14 +124,19 @@ export default function TsmcRiskClient() {
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                     <div>
                         <div className="flex items-center gap-3 mb-2">
-                            <span className="px-3 py-1 bg-red-500/20 text-red-400 text-xs font-black rounded uppercase tracking-wider">
-                                系統實時監測
+                            <span className={`px-3 py-1 text-xs font-black rounded uppercase tracking-wider ${data._source === 'cloud' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                                {data._source === 'cloud' ? '雲端即時連線' : '本地緩存模式'}
                             </span>
                             <h1 className="text-3xl md:text-4xl font-extrabold text-white">台積電 (2330) 實戰風險雷達</h1>
                         </div>
-                        <p className="text-slate-500 flex items-center gap-2 font-mono text-sm mt-3">
-                            <Activity className="w-4 h-4" /> 數據更新: {data.last_update}
-                        </p>
+                        <div className="flex flex-col gap-1 mt-3">
+                            <p className="text-slate-500 flex items-center gap-2 font-mono text-sm">
+                                <Activity className="w-4 h-4" /> 報價時間: {data.last_update}
+                            </p>
+                            <p className="text-[10px] text-slate-600 flex items-center gap-1">
+                                <Clock className="w-3 h-3" /> 資料來源: {data._source === 'cloud' ? 'Firestore (Realtime)' : 'Local Static JSON (Fallover)'}
+                            </p>
+                        </div>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-3">
