@@ -56,6 +56,20 @@ export function FinanceFlowClient() {
   const [isLoading, setIsLoading] = useState(false);
   const [hasProcessed, setHasProcessed] = useState(false);
 
+  // --- 安全時間格式化：防止 Firebase Timestamp 物件直接渲染導致 React 崩潰 ---
+  const safeTimeStr = (val: any): string => {
+    if (!val) return '---';
+    if (typeof val === 'string') return val;
+    if (typeof val?.toDate === 'function') {
+      try { return val.toDate().toLocaleString(); } catch { return '---'; }
+    }
+    if (val instanceof Date) return val.toLocaleString();
+    if (typeof val?.seconds === 'number') {
+      try { return new Date(val.seconds * 1000).toLocaleString(); } catch { return '---'; }
+    }
+    return '---';
+  };
+
   // --- 股市雷達狀態 ---
   const [radarView, setRadarView] = useState<'overview' | 'tsmc' | 'portfolio' | 'tw50' | 'research'>('overview');
   const [isWarningExpanded, setIsWarningExpanded] = useState(false);
@@ -816,7 +830,7 @@ export function FinanceFlowClient() {
                       <Target className="w-3 h-3 text-indigo-500" />
                     </div>
                     <div className="text-[8px] text-slate-300 font-bold uppercase tracking-tighter">
-                      Updated: {portfolioData?.last_updated || '---'}
+                      Updated: {safeTimeStr(portfolioData?.last_updated)}
                     </div>
                   </div>
                 </CardHeader>
@@ -861,7 +875,7 @@ export function FinanceFlowClient() {
               <span className={`px-2.5 py-1 text-[10px] font-black rounded-full ${cloudTsmcData ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
                 {cloudTsmcData ? '☁️ 雲端即時' : '💾 本地快取'}
               </span>
-              <span className="text-[10px] text-slate-400 font-bold">報價時間: {tsmcData?.last_update || '---'}</span>
+              <span className="text-[10px] text-slate-400 font-bold">報價時間: {safeTimeStr(tsmcData?.last_update)}</span>
               <span className="text-[10px] text-slate-300">• 來源: {cloudTsmcData ? 'Firestore Realtime' : 'Local JSON'}</span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -893,7 +907,7 @@ export function FinanceFlowClient() {
                   <p className="text-[10px] text-slate-500 leading-relaxed font-medium mt-4 pt-4 border-t border-slate-100 flex justify-between items-center">
                     <span>現價: ${tsmcData?.price ?? '--'} | 年線乖離率: {tsmcData?.bias ?? '--'}%</span>
                     <span className="bg-slate-50 px-2 py-0.5 rounded text-slate-400">
-                      Sync: {tsmcData?.last_update || '---'}
+                      Sync: {safeTimeStr(tsmcData?.last_update)}
                     </span>
                   </p>
                 </div>
@@ -927,7 +941,7 @@ export function FinanceFlowClient() {
               <span className={`px-2.5 py-1 text-[10px] font-black rounded-full ${cloudPortfolioData ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
                 {cloudPortfolioData ? '☁️ 雲端即時' : '💾 本地快取'}
               </span>
-              <span className="text-[10px] text-slate-400 font-bold">更新時間: {portfolioData?.last_updated || '---'}</span>
+              <span className="text-[10px] text-slate-400 font-bold">更新時間: {safeTimeStr(portfolioData?.last_updated)}</span>
               <span className="text-[10px] text-slate-300">• 來源: {cloudPortfolioData ? 'Firestore Realtime' : 'Local JSON'}</span>
             </div>
             {portfolioData.positions.map((pos: any, i: number) => (
@@ -995,7 +1009,7 @@ export function FinanceFlowClient() {
                 {cloudTw50Data ? '☁️ 雲端即時' : '💾 本地快取'}
               </span>
               <span className="text-[10px] text-slate-400 font-bold">
-                更新時間: {cloudTw50Data?.last_updated ? (typeof cloudTw50Data.last_updated === 'string' ? cloudTw50Data.last_updated : (cloudTw50Data.last_updated.toDate ? cloudTw50Data.last_updated.toDate().toLocaleString() : '')) : (cloudTw50Data?.updatedAt || '---')}
+                更新時間: {safeTimeStr(cloudTw50Data?.last_updated || cloudTw50Data?.updatedAt)}
               </span>
               <span className="text-[10px] text-slate-300">• 來源: {cloudTw50Data ? 'Firestore Realtime' : 'Local JSON / Fallback'}</span>
             </div>
