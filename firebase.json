@@ -1,6 +1,11 @@
 {
+  "firestore": {
+    "rules": "firestore.rules"
+  },
   "hosting": {
     "public": "out",
+    "cleanUrls": true,
+    "trailingSlash": true,
     "rewrites": [
       {
         "source": "**",

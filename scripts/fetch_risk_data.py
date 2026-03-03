@@ -1,7 +1,29 @@
 import yfinance as yf
 import pandas as pd
 import json
+import os
 from datetime import datetime, timedelta
+import firebase_admin
+from firebase_admin import credentials, firestore
+
+# 初始化 Firebase Admin (本地測試需填寫金鑰路徑，雲端部署則使用環境變數)
+def init_firebase():
+    if not firebase_admin._apps:
+        # 優先從環境變數讀取 (GitHub Secrets) 
+        service_account_info = os.environ.get('FIREBASE_SERVICE_ACCOUNT')
+        if service_account_info:
+            cred_dict = json.loads(service_account_info)
+            cred = credentials.Certificate(cred_dict)
+        else:
+            # 本域測試：嘗試讀取本地金鑰檔案 (需自行放置 service-account.json)
+            key_path = "service-account.json"
+            if os.path.exists(key_path):
+                cred = credentials.Certificate(key_path)
+            else:
+                print("⚠️ 警告：未發現 Firebase 憑證，雲端同步功能將跳過。")
+                return None
+        firebase_admin.initialize_app(cred)
+    return firestore.client()
 
 def calculate_rsi(data, window=14):
     delta = data.diff()
@@ -33,11 +55,10 @@ def fetch_tsmc_risk():
     df['RSI'] = calculate_rsi(df['Close'])
     current_rsi = float(df['RSI'].iloc[-1])
 
-    # 3. 模擬法人動向 (yf 無法直接拿台股法人買賣超，這裡透過成交量異動模擬)
-    # 在實際應用中應對接 TWSE API
+    # 3. 模擬法人動向
     vol_change = float(df['Volume'].pct_change().iloc[-1] * 100)
     
-    # 風險評分邏輯 (初步)
+    # 風險評分邏輯 (優化版)
     risk_score = 0
     alerts = []
     
@@ -61,18 +82,23 @@ def fetch_tsmc_risk():
         "risk_score": min(risk_score, 100),
         "alerts": alerts,
         "last_update": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        "comparison_2022": {
-            "peak_price": 688,
-            "peak_bias": 28.5,
-            "peak_rsi": 82.0
-        }
+        "status": "雲端同步中 (Cloud Live)"
     }
 
+    # A. 寫入本地 JSON (備份)
     output_path = "public/data/tsmc_risk.json"
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=4, ensure_ascii=False)
     
-    print(f"風險數據已更新: {output_path}")
+    # B. 寫入雲端 Firestore (核心同步)
+    db = init_firebase()
+    if db:
+        print("正在同步數據至雲端 Firestore...")
+        db.collection('marketRecords').document('tsmc').set(result)
+        print("✅ 雲端同步成功！")
+    
+    print(f"數據更新完成。")
 
 if __name__ == "__main__":
     fetch_tsmc_risk()

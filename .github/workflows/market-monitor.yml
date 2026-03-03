@@ -1,0 +1,32 @@
+name: AI Market Monitor (Cloud Sync)
+
+on:
+  schedule:
+    # 每天台股開盤期間與收盤後運行 (UTC 時間)
+    # 01:00 UTC = 09:00 台北時間 (開盤)
+    # 06:00 UTC = 14:00 台北時間 (收盤校對)
+    - cron: '0 1,6 * * 1-5'
+  workflow_dispatch: # 允許手動從 GitHub 介面觸發
+
+jobs:
+  sync_market_data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install yfinance pandas firebase-admin
+
+      - name: Execute Sync Script
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          python scripts/fetch_risk_data.py

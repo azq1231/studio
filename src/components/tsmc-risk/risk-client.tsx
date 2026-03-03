@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Activity, History, Calendar, Target } from "lucide-react";
+import { AlertTriangle, Activity, History, Calendar, Target, Wallet, UserCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface RiskData {
@@ -90,6 +90,18 @@ export default function TsmcRiskClient() {
                             className="px-6 py-3 text-sm font-bold rounded-lg text-amber-400 hover:text-white hover:bg-amber-500/20 bg-amber-500/10 transition-all flex items-center gap-2"
                         >
                             <Target className="w-4 h-4" /> 點此對照歷年「進出紀錄表」
+                        </button>
+                        <button
+                            onClick={() => window.location.href = '/analysis/tw50-opportunities'}
+                            className="px-6 py-3 text-sm font-bold rounded-lg text-emerald-400 hover:text-white hover:bg-emerald-500/20 bg-emerald-500/10 transition-all flex items-center gap-2"
+                        >
+                            <Wallet className="w-4 h-4" /> 10萬資產配置：TW50 機會
+                        </button>
+                        <button
+                            onClick={() => window.location.href = '/analysis/portfolio'}
+                            className="px-6 py-3 text-sm font-bold rounded-lg text-cyan-400 hover:text-white hover:bg-cyan-500/20 bg-cyan-500/10 transition-all flex items-center gap-2"
+                        >
+                            <UserCheck className="w-4 h-4" /> 進入我的「實戰指揮中心」
                         </button>
                     </div>
                 </div>

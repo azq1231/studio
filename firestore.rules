@@ -120,5 +120,26 @@ service cloud.firestore {
         allow get, list, create, update: if isOwner(userId);
         allow delete: if false;
     }
+
+    // --------------------------------------------------------------------------------
+    // Market & Stock Radar Rules
+    // --------------------------------------------------------------------------------
+
+    /**
+     * @description Provides read access to public market data (e.g., TSMC risk scores).
+     *   Publicly readable, but write-protected.
+     */
+    match /marketRecords/{docId} {
+      allow get, list: if true;
+      allow write: if isSignedIn(); // For agent-based or admin updates
+    }
+
+    /**
+     * @description Secures a user's private stock positions and AI advice.
+     */
+    match /users/{userId}/stockPositions/{docId} {
+      allow get, list: if isOwner(userId);
+      allow create, update, delete: if isOwner(userId);
+    }
   }
 }
