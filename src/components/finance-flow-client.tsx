@@ -61,23 +61,39 @@ export function FinanceFlowClient() {
   const [isWarningExpanded, setIsWarningExpanded] = useState(false);
   const [tsmcDataLocal, setTsmcDataLocal] = useState<any>(null);
   const [portfolioDataLocal, setPortfolioDataLocal] = useState<any>(null);
-  const [tw50DataLocal, setTw50DataLocal] = useState<any[]>([]);
+
+  // 內聯備援資料，防止靜態 JSON 404
+  const TW50_FALLBACK = [
+    { "s": "2330.TW", "p": 1990.0, "b": 57.7, "j": 96.6, "bp": 0.91, "st": "SELL" },
+    { "s": "2317.TW", "p": 239.0, "b": 23.1, "j": 82.9, "bp": 0.89, "st": "HOLD" },
+    { "s": "2454.TW", "p": 1920.0, "b": 37.5, "j": 88.0, "bp": 0.84, "st": "SELL" },
+    { "s": "2308.TW", "p": 1435.0, "b": 101.3, "j": 101.3, "bp": 0.97, "st": "SELL" },
+    { "s": "2303.TW", "p": 65.0, "b": 37.7, "j": 63.5, "bp": 0.48, "st": "HOLD" },
+    { "s": "2603.TW", "p": 206.5, "b": 3.0, "j": 98.5, "bp": 1.34, "st": "SELL" },
+    { "s": "2609.TW", "p": 59.5, "b": -4.8, "j": 97.4, "bp": 1.17, "st": "SELL" },
+    { "s": "2615.TW", "p": 79.6, "b": -6.2, "j": 73.3, "bp": 1.26, "st": "HOLD" },
+    { "s": "5871.TW", "p": 103.0, "b": -8.7, "j": -7.0, "bp": 0.09, "st": "BUY" },
+    { "s": "2474.TW", "p": 190.0, "b": -6.4, "j": 10.1, "bp": 0.1, "st": "BUY" },
+    { "s": "2002.TW", "p": 20.2, "b": 1.8, "j": 19.9, "bp": 0.44, "st": "HOLD" },
+    { "s": "2881.TW", "p": 93.2, "b": 7.4, "j": 31.5, "bp": 0.52, "st": "HOLD" }
+  ];
+  const [tw50DataLocal, setTw50DataLocal] = useState<any[] | null>(null);
 
   // Firestore 實時引用 (Cloud Sync)
   // marketRecords 是公開讀取的，所以只需要 firestore 實例即可
   const tsmcDocRef = useMemoFirebase(() => firestore ? doc(firestore, 'marketRecords', 'tsmc') : null, [firestore]);
-  const { data: cloudTsmcData } = useDoc<any>(tsmcDocRef);
+  const { data: cloudTsmcData, isLoading: isLoadingTsmc } = useDoc<any>(tsmcDocRef);
 
   const portfolioDocRef = useMemoFirebase(() => (user && firestore) ? doc(firestore, 'users', user.uid, 'stockPositions', 'portfolio') : null, [user, firestore]);
-  const { data: cloudPortfolioData } = useDoc<any>(portfolioDocRef);
+  const { data: cloudPortfolioData, isLoading: isLoadingPortfolio } = useDoc<any>(portfolioDocRef);
 
   const tw50DocRef = useMemoFirebase(() => firestore ? doc(firestore, 'marketRecords', 'tw50') : null, [firestore]);
-  const { data: cloudTw50Data } = useDoc<any>(tw50DocRef);
+  const { data: cloudTw50Data, isLoading: isLoadingTw50 } = useDoc<any>(tw50DocRef);
 
   // 優先順序：雲端數據 > 本地 JSON 數據
   const tsmcData = cloudTsmcData || tsmcDataLocal;
   const portfolioData = cloudPortfolioData || portfolioDataLocal;
-  const tw50Data = cloudTw50Data || tw50DataLocal;
+  const tw50Data = (cloudTw50Data?.stocks || (Array.isArray(cloudTw50Data) ? cloudTw50Data : null)) || tw50DataLocal;
 
   // 1. 獲取本地 fallback 資料
   useEffect(() => {
@@ -92,9 +108,18 @@ export function FinanceFlowClient() {
       .catch(err => console.error("Portfolio data error:", err));
 
     fetch("/data/tw50_full_scan.json")
-      .then(res => res.json())
-      .then(json => setTw50DataLocal(json))
-      .catch(err => console.error("TW50 data error:", err));
+      .then(res => {
+        if (!res.ok) throw new Error("HTTP error " + res.status);
+        return res.json();
+      })
+      .then(json => {
+        console.log("TW50 fetched locally:", json?.length);
+        setTw50DataLocal(json);
+      })
+      .catch(err => {
+        console.warn("TW50 local fetch failed, using internal fallback:", err);
+        setTw50DataLocal(TW50_FALLBACK); // Use embedded data if network fails
+      });
   }, []);
 
   // 2. 雲端自動同步 (Migration logic)
@@ -1000,8 +1025,8 @@ export function FinanceFlowClient() {
             </header>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {(Array.isArray(tw50Data) ? tw50Data : (tw50Data?.stocks || []))?.length > 0 ? (
-                (Array.isArray(tw50Data) ? tw50Data : (tw50Data?.stocks || []))
+              {(tw50Data && tw50Data.length > 0) ? (
+                tw50Data
                   .filter((stock: any) => stock?.st === 'BUY' || stock?.s === '2330.TW' || stock?.s === '2603.TW')
                   .map((stock: any, idx: number) => {
                     if (!stock) return null;
@@ -1057,8 +1082,10 @@ export function FinanceFlowClient() {
                       </Card>
                     );
                   })
+              ) : (tw50DataLocal === null || (isLoadingTw50 && !tw50Data)) ? (
+                <div className="col-span-full py-20 text-center text-slate-400 font-bold">正在從雲端同步或載入本地數據...</div>
               ) : (
-                <div className="col-span-full py-20 text-center text-slate-400 font-bold">加載中...</div>
+                <div className="col-span-full py-20 text-center text-slate-400 font-bold">目前市場中性，無顯著掃描機會。</div>
               )}
             </div>
           </div>
@@ -1138,6 +1165,6 @@ export function FinanceFlowClient() {
           </div>
         )}
       </TabsContent>
-    </Tabs>
+    </Tabs >
   );
 }
