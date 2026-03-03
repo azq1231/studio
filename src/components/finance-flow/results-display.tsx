@@ -22,7 +22,7 @@ import { cn } from '@/lib/utils';
 import { Download, AlertCircle, Trash2, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2, FileText, Combine, Search, ChevronsLeft, ChevronsRight, ArrowRight, CreditCard, Landmark, Banknote, Calendar, Tag, MoreHorizontal } from 'lucide-react';
 import { AppSettings } from './settings-manager';
 import { CashTransactionForm } from './cash-transaction-form';
-import type { CombinedData } from '../finance-flow-client';
+import type { CombinedData } from '@/types/index';
 import { Badge } from '@/components/ui/badge';
 
 

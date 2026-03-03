@@ -1,15 +1,16 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import React, { useMemo, useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Eye, TrendingUp, TrendingDown, CircleDollarSign, AlertTriangle } from 'lucide-react';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-
+import { CombinedData } from '@/types/index';
+import { type BalanceAccount } from './settings-manager';
+import { Wallet, ArrowDownCircle, ArrowUpCircle, AlertCircle, Calendar, Eye, Search, TrendingUp, TrendingDown, CircleDollarSign, AlertTriangle } from 'lucide-react';
 import { formatCurrency, cn } from '@/lib/utils';
-import type { BalanceAccount } from './settings-manager';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { addDays, differenceInDays, format, parseISO } from 'date-fns';
 
 // Define a local interface compatible with CombinedData
 interface Transaction {

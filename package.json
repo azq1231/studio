@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0 -p 3005",
-    "build": "next build",
+    "build": "node scripts/build.js",
     "start": "npm run build && next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit"

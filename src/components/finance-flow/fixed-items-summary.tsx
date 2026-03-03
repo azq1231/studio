@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { getYear, getMonth } from 'date-fns';
 
 import { AppSettings } from './settings-manager';
-import { type CombinedData } from '../finance-flow-client';
+import { type CombinedData } from '@/types/index';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';

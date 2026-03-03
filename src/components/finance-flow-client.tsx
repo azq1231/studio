@@ -17,22 +17,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Text, Settings, ClipboardCopy, FileText, BarChart2, Wallet, TrendingUp, Target, Activity, History, Calendar, AlertTriangle, UserCheck, TrendingDown, Clock, ShieldCheck, ArrowLeft } from 'lucide-react';
+import { Text, Settings, ClipboardCopy, FileText, BarChart2, Wallet, TrendingUp, Target, Activity, History, Calendar, AlertTriangle, UserCheck, TrendingDown, Clock, ShieldCheck, ArrowLeft, ArrowDown } from 'lucide-react';
 import { parse } from 'date-fns';
 import { getCreditDisplayDate } from '@/lib/parser';
 
-// CombinedData is used by both ResultsDisplay and FixedItemsSummary
-export type CombinedData = {
-  id: string;
-  date: string;
-  dateObj: Date; // Crucial for date-based calculations
-  category: string;
-  description: string;
-  amount: number;
-  source: '信用卡' | '活存帳戶' | '現金';
-  notes?: string;
-  bankCode?: string;
-};
+import { type CombinedData } from '@/types/index';
 
 // =======================================================================
 // HELPER: sha1 (UNIVERSAL)
@@ -69,6 +58,7 @@ export function FinanceFlowClient() {
 
   // --- 股市雷達狀態 ---
   const [radarView, setRadarView] = useState<'overview' | 'tsmc' | 'portfolio' | 'tw50' | 'research'>('overview');
+  const [isWarningExpanded, setIsWarningExpanded] = useState(false);
   const [tsmcDataLocal, setTsmcDataLocal] = useState<any>(null);
   const [portfolioDataLocal, setPortfolioDataLocal] = useState<any>(null);
   const [tw50DataLocal, setTw50DataLocal] = useState<any[]>([]);
@@ -107,17 +97,29 @@ export function FinanceFlowClient() {
   useEffect(() => {
     if (!user || !firestore) return;
 
-    // 如果雲端沒有 TSMC 資料，且本地已經獲取成功，則自動同步上雲 (一次性)
-    if (tsmcDataLocal && !cloudTsmcData && tsmcDocRef) {
-      console.log("Auto-syncing TSMC data to Firestore...");
-      setDoc(tsmcDocRef, tsmcDataLocal, { merge: true });
-    }
+    const syncData = async () => {
+      try {
+        // 如果雲端沒有 TSMC 資料，且本地已經獲取成功，則自動同步上雲 (一次性)
+        if (tsmcDataLocal && !cloudTsmcData && tsmcDocRef) {
+          console.log("Auto-syncing TSMC data to Firestore...");
+          await setDoc(tsmcDocRef, tsmcDataLocal, { merge: true });
+        }
+      } catch (err) {
+        console.warn("Auto-sync TSMC failed (non-critical):", err);
+      }
 
-    // 如果雲端沒有持倉資料，且本地已經獲取成功，則同步上雲
-    if (portfolioDataLocal && !cloudPortfolioData && portfolioDocRef) {
-      console.log("Auto-syncing Portfolio data to Firestore...");
-      setDoc(portfolioDocRef, portfolioDataLocal, { merge: true });
-    }
+      try {
+        // 如果雲端沒有持倉資料，且本地已經獲取成功，則同步上雲
+        if (portfolioDataLocal && !cloudPortfolioData && portfolioDocRef) {
+          console.log("Auto-syncing Portfolio data to Firestore...");
+          await setDoc(portfolioDocRef, portfolioDataLocal, { merge: true });
+        }
+      } catch (err) {
+        console.warn("Auto-sync Portfolio failed (non-critical):", err);
+      }
+    };
+
+    syncData();
   }, [user, firestore, tsmcDataLocal, cloudTsmcData, tsmcDocRef, portfolioDataLocal, cloudPortfolioData, portfolioDocRef]);
 
   // --- 手動同步邏輯 ---
@@ -126,6 +128,7 @@ export function FinanceFlowClient() {
     if (!firestore || isSyncing) return;
     setIsSyncing(true);
     try {
+      console.log("Triggering manual sync...");
       const syncRef = doc(firestore, 'marketSync', 'trigger');
       await setDoc(syncRef, {
         last_requested_at: serverTimestamp(),
@@ -134,7 +137,7 @@ export function FinanceFlowClient() {
       });
       toast({
         title: "🔄 同步指令已發送",
-        description: "雲端守護進程正在啟動即時更新，請稍候約 30 秒後重新進入分頁。",
+        description: "雲端伺服器正在啟動更新，請稍候約 30 秒後重新整理。",
       });
     } catch (error) {
       console.error("Sync trigger error:", error);
@@ -564,30 +567,30 @@ export function FinanceFlowClient() {
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-      <TabsList className="flex flex-wrap h-auto w-full justify-start p-1 bg-muted rounded-xl gap-1 mb-4">
-        <TabsTrigger value="importer" className="flex-grow md:flex-initial flex items-center justify-center gap-2 px-3 py-2">
-          <ClipboardCopy className="h-4 w-4" />
-          <span>貼上報表</span>
+      <TabsList className="grid grid-cols-3 md:flex md:w-auto h-auto w-full p-0.5 bg-muted rounded-xl gap-0.5 mb-1.5 relative z-50 border border-slate-200">
+        <TabsTrigger value="importer" className="flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs md:text-sm">
+          <ClipboardCopy className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">貼上報表</span>
         </TabsTrigger>
-        <TabsTrigger value="settings" className="flex-grow md:flex-initial flex items-center justify-center gap-2 px-3 py-2">
-          <Settings className="h-4 w-4" />
-          <span>規則設定</span>
+        <TabsTrigger value="settings" className="flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs md:text-sm">
+          <Settings className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">規則設定</span>
         </TabsTrigger>
-        <TabsTrigger value="results" className="flex-grow md:flex-initial flex items-center justify-center gap-2 px-3 py-2">
-          <FileText className="h-4 w-4" />
-          <span>處理結果</span>
+        <TabsTrigger value="results" className="flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs md:text-sm">
+          <FileText className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">處理結果</span>
         </TabsTrigger>
-        <TabsTrigger value="analysis" className="flex-grow md:flex-initial flex items-center justify-center gap-2 px-3 py-2">
-          <BarChart2 className="h-4 w-4" />
-          <span>詳細分析</span>
+        <TabsTrigger value="analysis" disabled={!combinedData.some(d => d.category === '固定' || d.category === '收入')} className="flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs md:text-sm">
+          <BarChart2 className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">詳細分析</span>
         </TabsTrigger>
-        <TabsTrigger value="balances" className="flex-grow md:flex-initial flex items-center justify-center gap-2 px-3 py-2">
-          <Wallet className="h-4 w-4" />
-          <span>專款餘額</span>
+        <TabsTrigger value="balances" disabled={!hasData} className="flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs md:text-sm">
+          <Wallet className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">專款餘額</span>
         </TabsTrigger>
-        <TabsTrigger value="stock-radar" className="flex-grow md:flex-initial flex items-center justify-center gap-2 px-3 py-2 text-cyan-600 font-black data-[state=active]:text-cyan-700 data-[state=active]:bg-cyan-50">
-          <TrendingUp className="h-4 w-4" />
-          <span>股市雷達</span>
+        <TabsTrigger value="stock-radar" className="flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs md:text-sm text-cyan-600 font-bold data-[state=active]:text-cyan-700 data-[state=active]:bg-cyan-50">
+          <Activity className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">股市雷達</span>
         </TabsTrigger>
       </TabsList>
       <TabsContent value="importer" className="mt-4">
@@ -687,39 +690,39 @@ export function FinanceFlowClient() {
           </Card>
         )}
       </TabsContent>
-      <TabsContent value="stock-radar" className="mt-0 pt-6 outline-none">
+      <TabsContent value="stock-radar" className="mt-1 pt-0 outline-none overflow-hidden">
         {/* 子導航選單 */}
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
-          <div className="flex flex-wrap gap-2 bg-slate-100/50 p-1.5 rounded-2xl w-fit">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div className="flex flex-wrap gap-1 bg-slate-100/50 p-1 rounded-2xl w-fit">
             <button
               onClick={() => setRadarView('overview')}
-              className={`px-4 py-2 text-xs font-black rounded-xl transition-all ${radarView === 'overview' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              className={`px-3 py-1.5 text-[10px] md:text-xs font-black rounded-xl transition-all ${radarView === 'overview' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
             >
               戰略總覽
             </button>
             <button
               onClick={() => setRadarView('tsmc')}
-              className={`px-4 py-2 text-xs font-black rounded-xl transition-all ${radarView === 'tsmc' ? 'bg-white text-cyan-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              className={`px-3 py-1.5 text-[10px] md:text-xs font-black rounded-xl transition-all ${radarView === 'tsmc' ? 'bg-white text-cyan-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
             >
               台積電監控
             </button>
             <button
               onClick={() => setRadarView('portfolio')}
-              className={`px-4 py-2 text-xs font-black rounded-xl transition-all ${radarView === 'portfolio' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              className={`px-3 py-1.5 text-[10px] md:text-xs font-black rounded-xl transition-all ${radarView === 'portfolio' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
             >
-              我的實戰持倉
+              持倉實戰
             </button>
             <button
               onClick={() => setRadarView('tw50')}
-              className={`px-4 py-2 text-xs font-black rounded-xl transition-all ${radarView === 'tw50' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              className={`px-3 py-1.5 text-[10px] md:text-xs font-black rounded-xl transition-all ${radarView === 'tw50' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
             >
-              TW50 機會掃描
+              機會掃描
             </button>
             <button
               onClick={() => setRadarView('research')}
-              className={`px-4 py-2 text-xs font-black rounded-xl transition-all ${radarView === 'research' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              className={`px-3 py-1.5 text-[10px] md:text-xs font-black rounded-xl transition-all ${radarView === 'research' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
             >
-              歷史研究報告
+              歷史研究
             </button>
           </div>
 
@@ -735,28 +738,37 @@ export function FinanceFlowClient() {
           </Button>
         </div>
 
-        {/* 市場緊急情勢分析 (基於最新新聞) */}
-        <div className="mb-8 p-6 bg-rose-50 border border-rose-100 rounded-3xl animate-in fade-in slide-in-from-top-4 duration-1000">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 bg-rose-500 rounded-full animate-pulse">
-              <AlertTriangle className="h-4 w-4 text-white" />
+        <div className="mb-4 overflow-hidden bg-rose-50 border border-rose-100 rounded-2xl transition-all duration-300">
+          <button
+            onClick={() => setIsWarningExpanded(!isWarningExpanded)}
+            className="w-full flex items-center justify-between p-4 text-left group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="p-1.5 bg-rose-500 rounded-full">
+                <AlertTriangle className="h-3.5 w-3.5 text-white" />
+              </div>
+              <h4 className="font-bold text-rose-900 text-sm">市場警告：美伊衝突重挫 (點擊查看)</h4>
             </div>
-            <h4 className="font-black text-rose-900">市場情勢警告：中東衝突引發恐慌性回撤</h4>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="text-sm text-rose-800/80 leading-relaxed space-y-2">
-              <p><strong>🚨 事件：</strong> 美伊爆發軍事衝突，全球地緣政治風險急遽攀升。</p>
-              <p><strong>📉 影響：</strong> 電子權值股遭遇非理性拋售，台積電回測支撐，失守 2 萬點大關。</p>
-            </div>
-            <div className="bg-white/50 p-4 rounded-2xl border border-rose-200/50">
-              <div className="text-xs font-black text-rose-900 mb-2 uppercase tracking-wider">避險動態判斷</div>
-              <div className="flex flex-wrap gap-2">
-                <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-black rounded-full">航運股：逆勢抗跌 (長榮/陽明)</span>
-                <span className="px-3 py-1 bg-amber-100 text-amber-700 text-[10px] font-black rounded-full">電子股：超跌區域 (台積電/廣達)</span>
-                <span className="px-3 py-1 bg-slate-100 text-slate-700 text-[10px] font-black rounded-full">記憶體：集體回檔</span>
+            <ArrowDown className={`h-4 w-4 text-rose-400 transition-transform duration-300 ${isWarningExpanded ? 'rotate-180' : ''}`} />
+          </button>
+
+          {isWarningExpanded && (
+            <div className="px-4 pb-4 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-rose-200/50">
+                <div className="text-xs text-rose-800/80 leading-relaxed space-y-1.5">
+                  <p><strong>🚨 事件：</strong> 軍事衝突爆發，川普稱行動可能持續四周。</p>
+                  <p><strong>📉 影響：</strong> 台股跌逾 800 點，台積電（2330）報 1950 元失守支撐。</p>
+                </div>
+                <div className="bg-white/50 p-3 rounded-xl border border-rose-200/50">
+                  <div className="text-[10px] font-black text-rose-900 mb-2 uppercase tracking-wider">避險動態</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[9px] font-bold rounded-full">航運：抗跌</span>
+                    <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[9px] font-bold rounded-full">電子：拋售</span>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* --- 模式 1: 總覽 --- */}
@@ -977,10 +989,11 @@ export function FinanceFlowClient() {
             </header>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {tw50DataLocal.length > 0 ? (
+              {tw50DataLocal && tw50DataLocal.length > 0 ? (
                 tw50DataLocal
-                  .filter(stock => stock.st === 'BUY' || stock.s === '2330.TW' || stock.s === '2603.TW')
+                  .filter(stock => stock?.st === 'BUY' || stock?.s === '2330.TW' || stock?.s === '2603.TW')
                   .map((stock, idx) => {
+                    if (!stock) return null;
                     const isShipping = ['2603.TW', '2609.TW', '2615.TW'].includes(stock.s);
                     const isWeight = ['2330.TW', '2317.TW', '2454.TW'].includes(stock.s);
                     const nameMap: Record<string, string> = {
@@ -1001,7 +1014,7 @@ export function FinanceFlowClient() {
                             </p>
                           </div>
                           <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${stock.st === 'BUY' ? 'bg-emerald-50 text-emerald-600' :
-                              isShipping ? 'bg-cyan-50 text-cyan-600' : 'bg-slate-50 text-slate-400'
+                            isShipping ? 'bg-cyan-50 text-cyan-600' : 'bg-slate-50 text-slate-400'
                             }`}>
                             {stock.st === 'BUY' ? '機會凹洞區' : isShipping ? '資金避風港' : '暫時觀望'}
                           </span>
