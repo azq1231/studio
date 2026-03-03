@@ -1,0 +1,48 @@
+
+> nextn@0.1.0 build
+> node scripts/build.js
+
+  ??Next.js 14.2.35
+
+   Creating an optimized production build ...
+Browserslist: caniuse-lite is outdated. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+Browserslist: caniuse-lite is outdated. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ??Compiled successfully
+   Skipping validation of types
+   Skipping linting
+   Collecting page data ...
+   Generating static pages (0/15) ...
+   Generating static pages (3/15) 
+   Generating static pages (7/15) 
+   Generating static pages (11/15) 
+ ??Generating static pages (15/15)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                              Size     First Load JS
+????/                                    393 kB          631 kB
+????/_not-found                          873 B          88.3 kB
+????/analysis/portfolio                  4.31 kB        91.7 kB
+????/analysis/tsmc-research              4.92 kB        92.3 kB
+????/analysis/tsmc-research/divergence   4.21 kB        91.6 kB
+????/analysis/tsmc-risk                  139 B           100 kB
+????/analysis/tsmc-risk/[month]          138 B           100 kB
+??  ??/analysis/tsmc-risk/2025-10
+??  ??/analysis/tsmc-risk/2025-11
+??  ??/analysis/tsmc-risk/2025-12
+??  ??/analysis/tsmc-risk/2026-01
+????/analysis/tsmc-strategy              5.5 kB         92.9 kB
+????/analysis/tw50-opportunities         4.8 kB         92.2 kB
++ First Load JS shared by all            87.4 kB
+  ??chunks/117-ad6fd2381157bf5d.js       31.8 kB
+  ??chunks/fd9d1056-9d1930fde9276fd6.js  53.6 kB
+  ??other shared chunks (total)          1.96 kB
+
+
+?? (Static)  prerendered as static content
+?? (SSG)     prerendered as static HTML (uses getStaticProps)
+

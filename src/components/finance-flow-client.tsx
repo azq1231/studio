@@ -71,9 +71,13 @@ export function FinanceFlowClient() {
   const portfolioDocRef = useMemoFirebase(() => (user && firestore) ? doc(firestore, 'users', user.uid, 'stockPositions', 'portfolio') : null, [user, firestore]);
   const { data: cloudPortfolioData } = useDoc<any>(portfolioDocRef);
 
+  const tw50DocRef = useMemoFirebase(() => firestore ? doc(firestore, 'marketRecords', 'tw50') : null, [firestore]);
+  const { data: cloudTw50Data } = useDoc<any>(tw50DocRef);
+
   // 優先順序：雲端數據 > 本地 JSON 數據
   const tsmcData = cloudTsmcData || tsmcDataLocal;
   const portfolioData = cloudPortfolioData || portfolioDataLocal;
+  const tw50Data = cloudTw50Data || tw50DataLocal;
 
   // 1. 獲取本地 fallback 資料
   useEffect(() => {
@@ -113,6 +117,13 @@ export function FinanceFlowClient() {
         if (portfolioDataLocal && !cloudPortfolioData && portfolioDocRef) {
           console.log("Auto-syncing Portfolio data to Firestore...");
           await setDoc(portfolioDocRef, portfolioDataLocal, { merge: true });
+        }
+
+        // 如果雲端沒有 TW50 資料，且本地已經獲取成功，則同步上雲
+        if (tw50DataLocal && !cloudTw50Data && tw50DocRef) {
+          console.log("Auto-syncing TW50 scan data to Firestore...");
+          // 注意：tw50 可能是一個數組，這裡建議包裝成一個物件存入 Firestore
+          await setDoc(tw50DocRef, { stocks: tw50DataLocal, updatedAt: new Date().toISOString() }, { merge: true });
         }
       } catch (err) {
         console.warn("Auto-sync Portfolio failed (non-critical):", err);
@@ -989,10 +1000,10 @@ export function FinanceFlowClient() {
             </header>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {tw50DataLocal && tw50DataLocal.length > 0 ? (
-                tw50DataLocal
-                  .filter(stock => stock?.st === 'BUY' || stock?.s === '2330.TW' || stock?.s === '2603.TW')
-                  .map((stock, idx) => {
+              {(Array.isArray(tw50Data) ? tw50Data : (tw50Data?.stocks || []))?.length > 0 ? (
+                (Array.isArray(tw50Data) ? tw50Data : (tw50Data?.stocks || []))
+                  .filter((stock: any) => stock?.st === 'BUY' || stock?.s === '2330.TW' || stock?.s === '2603.TW')
+                  .map((stock: any, idx: number) => {
                     if (!stock) return null;
                     const isShipping = ['2603.TW', '2609.TW', '2615.TW'].includes(stock.s);
                     const isWeight = ['2330.TW', '2317.TW', '2454.TW'].includes(stock.s);
@@ -1036,10 +1047,10 @@ export function FinanceFlowClient() {
                           <div className="p-3 bg-slate-50 rounded-xl">
                             <p className="text-[10px] text-slate-500 leading-relaxed font-medium">
                               <span className="font-black text-slate-700">判斷：</span>
-                              {stock.s === '2330.TW' ? '受美伊新聞影響出現絕望性賣壓，J 值與 BP 顯示已進入長期價值區。' :
+                              {stock.analysis || (stock.s === '2330.TW' ? '受美伊新聞影響出現絕望性賣壓，J 值與 BP 顯示已進入長期價值區。' :
                                 isShipping ? '受惠戰爭預期運價上漲，目前走勢與大盤背離，展現強勁防禦力。' :
                                   stock.st === 'BUY' ? '技術指標顯示已處於極度超跌，建議分批佈局。' :
-                                    '股價處於中性整理，目前無顯著買入訊號，優先觀察電子權值動向。'}
+                                    '股價處於中性整理，目前無顯著買入訊號，優先觀察電子權值動向。')}
                             </p>
                           </div>
                         </div>
