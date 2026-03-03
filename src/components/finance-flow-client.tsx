@@ -529,29 +529,29 @@ export function FinanceFlowClient() {
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-      <TabsList className="grid w-full grid-cols-5">
+      <TabsList className="grid w-full grid-cols-3 md:grid-cols-6 h-auto">
         <TabsTrigger value="importer">
-          <ClipboardCopy className="mr-2" />
+          <ClipboardCopy className="mr-2 h-4 w-4" />
           貼上報表
         </TabsTrigger>
         <TabsTrigger value="settings">
-          <Settings className="mr-2" />
+          <Settings className="mr-2 h-4 w-4" />
           規則設定
         </TabsTrigger>
         <TabsTrigger value="results">
-          <FileText className="mr-2" />
+          <FileText className="mr-2 h-4 w-4" />
           處理結果
         </TabsTrigger>
         <TabsTrigger value="analysis">
-          <BarChart2 className="mr-2" />
+          <BarChart2 className="mr-2 h-4 w-4" />
           詳細分析
         </TabsTrigger>
         <TabsTrigger value="balances">
-          <Wallet className="mr-2" />
+          <Wallet className="mr-2 h-4 w-4" />
           專款餘額
         </TabsTrigger>
-        <TabsTrigger value="stock-radar" className="text-cyan-500 font-bold">
-          <TrendingUp className="mr-2" />
+        <TabsTrigger value="stock-radar" className="text-cyan-600 font-black data-[state=active]:text-cyan-700 data-[state=active]:bg-cyan-50">
+          <TrendingUp className="mr-2 h-4 w-4" />
           股市雷達
         </TabsTrigger>
       </TabsList>

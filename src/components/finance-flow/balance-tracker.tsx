@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Eye, TrendingUp, TrendingDown, CircleDollarSign, AlertTriangle } from 'lucide-react';
-import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 
@@ -113,14 +113,17 @@ export function BalanceTracker({ balanceAccounts, transactions }: BalanceTracker
                                     </Button>
                                 </DialogTrigger>
                                 <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col p-0 gap-0">
-                                    <div className="p-4 border-b">
-                                        <h2 className="text-lg font-semibold flex items-center gap-2">
+                                    <DialogHeader className="p-4 border-b">
+                                        <DialogTitle className="text-lg font-semibold flex items-center gap-2">
                                             {acc.name} - 明細
                                             <Badge variant={acc.balance >= 0 ? "default" : "destructive"}>
                                                 餘額: {formatCurrency(acc.balance)}
                                             </Badge>
-                                        </h2>
-                                    </div>
+                                        </DialogTitle>
+                                        <DialogDescription className="sr-only">
+                                            檢視 {acc.name} 的詳細收支紀錄
+                                        </DialogDescription>
+                                    </DialogHeader>
                                     <div className="flex-1 overflow-auto p-0">
                                         <Table>
                                             <TableHeader className="sticky top-0 bg-secondary/90 backdrop-blur-sm z-10 shadow-sm">

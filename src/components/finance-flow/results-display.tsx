@@ -17,7 +17,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from '@/lib/utils';
 import { Download, AlertCircle, Trash2, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2, FileText, Combine, Search, ChevronsLeft, ChevronsRight, ArrowRight, CreditCard, Landmark, Banknote, Calendar, Tag, MoreHorizontal } from 'lucide-react';
 import { AppSettings } from './settings-manager';
@@ -697,7 +697,50 @@ export function ResultsDisplay({
                     <div className="text-center py-10"><AlertCircle className="mx-auto h-12 w-12 text-muted-foreground" /><h3 className="mt-4 text-lg font-semibold">沒有找到資料</h3><p className="mt-2 text-sm text-muted-foreground">我們無法從您提供的內容中解析出任何報表資料。<br />請確認格式是否正確，或嘗試貼上其他內容。</p></div>
                 ))}
                 <Dialog open={isDetailViewOpen} onOpenChange={setIsDetailViewOpen}>
-                    <DialogContent className="max-w-4xl h-4/5 flex flex-col"><DialogHeader><DialogTitle>{detailViewTitle}</DialogTitle></DialogHeader><div className="flex-grow overflow-y-auto"><Table><TableHeader><TableRow><TableHead>日期</TableHead><TableHead>類型</TableHead><TableHead>交易項目</TableHead><TableHead>備註</TableHead><TableHead>來源</TableHead><TableHead className="text-right">金額</TableHead></TableRow></TableHeader><TableBody>{detailViewData.length > 0 ? (detailViewData.map(item => (<TableRow key={item.id}><TableCell>{(item as any).date || getCreditDisplayDate((item as any).transactionDate)}</TableCell><TableCell>{item.category}</TableCell><TableCell>{item.description}</TableCell><TableCell>{(item as any).bankCode || (item as any).notes || ''}</TableCell><TableCell>{(item as any).source || '信用卡'}</TableCell><TableCell className={`text-right ${item.amount < 0 ? 'text-green-600' : ''}`}>{item.amount.toLocaleString()}</TableCell></TableRow>))) : (<TableRow><TableCell colSpan={6} className="text-center">沒有找到相關交易紀錄。</TableCell></TableRow>)}</TableBody></Table></div></DialogContent>
+                    <DialogContent className="max-w-4xl h-4/5 flex flex-col">
+                        <DialogHeader>
+                            <DialogTitle>{detailViewTitle}</DialogTitle>
+                            <DialogDescription className="sr-only">
+                                顯示 {detailViewTitle} 的詳細交易清單表格
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="flex-grow overflow-y-auto">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>日期</TableHead>
+                                        <TableHead>類型</TableHead>
+                                        <TableHead>交易項目</TableHead>
+                                        <TableHead>備註</TableHead>
+                                        <TableHead>來源</TableHead>
+                                        <TableHead className="text-right">金額</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {detailViewData.length > 0 ? (
+                                        detailViewData.map(item => (
+                                            <TableRow key={item.id}>
+                                                <TableCell>{(item as any).date || getCreditDisplayDate((item as any).transactionDate)}</TableCell>
+                                                <TableCell>{item.category}</TableCell>
+                                                <TableCell>{item.description}</TableCell>
+                                                <TableCell>{(item as any).bankCode || (item as any).notes || ''}</TableCell>
+                                                <TableCell>{(item as any).source || '信用卡'}</TableCell>
+                                                <TableCell className={`text-right ${item.amount < 0 ? 'text-green-600' : ''}`}>
+                                                    {item.amount.toLocaleString()}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    ) : (
+                                        <TableRow>
+                                            <TableCell colSpan={6} className="text-center">
+                                                沒有找到相關交易紀錄。
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </DialogContent>
                 </Dialog>
             </CardContent>
         </Card>

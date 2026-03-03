@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { LogIn, LogOut } from 'lucide-react';
 import { signOut } from 'firebase/auth';
@@ -49,6 +49,9 @@ export function AuthButton() {
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>帳號</DialogTitle>
+            <DialogDescription className="sr-only">
+              登入或註冊您的帳號以同步數據
+            </DialogDescription>
           </DialogHeader>
           <AuthForm onAuthSuccess={() => setOpen(false)} />
         </DialogContent>
@@ -66,8 +69,8 @@ export function AuthButton() {
               {user.displayName
                 ? user.displayName.charAt(0)
                 : user.email
-                ? user.email.charAt(0).toUpperCase()
-                : '?'}
+                  ? user.email.charAt(0).toUpperCase()
+                  : '?'}
             </AvatarFallback>
           </Avatar>
         </Button>
