@@ -1,7 +1,11 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { ArrowLeft, Target, TrendingUp, TrendingDown, Wallet, Clock, History, AlertTriangle, ShieldCheck, UserCheck } from "lucide-react";
+import { ArrowLeft, Target, TrendingUp, TrendingDown, Wallet, Clock, History, AlertTriangle, ShieldCheck, UserCheck, Activity } from "lucide-react";
+import { useFirestore, useDoc, useMemoFirebase } from '@/firebase';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
 
 interface Position {
     symbol: string;
@@ -22,24 +26,66 @@ interface PortfolioData {
     last_updated: string;
     total_invested: number;
     positions: Position[];
+    _source?: 'cloud' | 'local';
 }
 
 export default function PortfolioPage() {
+    const firestore = useFirestore();
+    const { toast } = useToast();
     const [data, setData] = useState<PortfolioData | null>(null);
     const [loading, setLoading] = useState(true);
+    const [isSyncing, setIsSyncing] = useState(false);
+
+    // Firestore 引用
+    const portDocRef = useMemoFirebase(() => firestore ? doc(firestore, 'marketRecords', 'portfolio') : null, [firestore]);
+    const { data: cloudData } = useDoc<any>(portDocRef);
 
     useEffect(() => {
-        fetch("/data/portfolio_live.json")
-            .then(res => res.json())
-            .then(json => {
-                setData(json);
-                setLoading(false);
-            })
-            .catch(err => {
-                console.error("Failed to load portfolio:", err);
-                setLoading(false);
+        if (cloudData) {
+            setData({ ...cloudData, _source: 'cloud' } as PortfolioData);
+            setLoading(false);
+        } else {
+            // 備援：讀取本地 JSON
+            fetch("/data/portfolio_live.json")
+                .then(res => {
+                    if (!res.ok) throw new Error("File not found");
+                    return res.json();
+                })
+                .then(json => {
+                    setData({ ...json, _source: 'local' });
+                    setLoading(false);
+                })
+                .catch(err => {
+                    console.error("Failed to load portfolio:", err);
+                    setLoading(false);
+                });
+        }
+    }, [cloudData]);
+
+    const handleManualSync = async () => {
+        if (!firestore || isSyncing) return;
+        setIsSyncing(true);
+        try {
+            const syncRef = doc(firestore, 'marketSync', 'trigger');
+            await setDoc(syncRef, {
+                last_requested_at: serverTimestamp(),
+                status: 'pending',
+                type: 'PORTFOLIO'
             });
-    }, []);
+            toast({
+                title: "🔄 同步指令已發送",
+                description: "正在即時更新損益，約需 30 秒，請稍後刷新。",
+            });
+        } catch (error) {
+            toast({
+                title: "同步失敗",
+                description: "無法發送指令。",
+                variant: "destructive",
+            });
+        } finally {
+            setTimeout(() => setIsSyncing(false), 5000);
+        }
+    };
 
     if (loading) return (
         <div className="flex items-center justify-center min-h-screen bg-[#0a0a0c] text-white">
@@ -47,8 +93,17 @@ export default function PortfolioPage() {
         </div>
     );
 
-    const totalPNL = data?.positions.reduce((acc, p) => acc + p.pnl_value, 0) || 0;
-    const currentTotalValue = (data?.total_invested || 0) + totalPNL;
+    if (!data) return (
+        <div className="p-20 text-white bg-[#0a0a0c] min-h-screen text-center flex flex-col items-center justify-center gap-4">
+            <AlertTriangle className="w-12 h-12 text-rose-500" />
+            <h2 className="text-2xl font-bold">無法載入投資組合</h2>
+            <p className="text-slate-400">目前雲端無回應且本地無快取資料。</p>
+            <Button onClick={() => window.location.reload()} variant="outline" className="border-slate-700">重試</Button>
+        </div>
+    );
+
+    const totalPNL = data.positions.reduce((acc, p) => acc + p.pnl_value, 0);
+    const currentTotalValue = (data.total_invested || 0) + totalPNL;
 
     return (
         <div className="min-h-screen bg-[#0a0a0c] text-slate-200 p-4 md:p-8 font-sans antialiased overflow-x-hidden">
@@ -68,21 +123,35 @@ export default function PortfolioPage() {
                                 <Wallet className="w-8 h-8 text-cyan-400" />
                             </div>
                             <div>
-                                <h1 className="text-4xl font-black text-white tracking-tight">個人實戰管理中心</h1>
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className={`px-2 py-0.5 text-[10px] font-bold rounded uppercase tracking-tighter ${data._source === 'cloud' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                                        {data._source === 'cloud' ? '雲端同步' : '本地模式'}
+                                    </span>
+                                    <h1 className="text-4xl font-black text-white tracking-tight">個人實戰管理中心</h1>
+                                </div>
                                 <p className="text-slate-500 text-sm flex items-center gap-2 mt-1">
-                                    <Clock className="w-4 h-4" /> 數據最後同步: {data?.last_updated}
+                                    <Clock className="w-4 h-4" /> 數據更新時間: {data.last_updated}
                                 </p>
                             </div>
                         </div>
                     </div>
 
-                    {/* Summary Overview */}
-                    <div className="flex gap-4">
+                    <div className="flex items-center gap-4">
+                        <Button
+                            onClick={handleManualSync}
+                            disabled={isSyncing}
+                            className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20 px-6 py-6 rounded-3xl font-bold flex gap-2"
+                        >
+                            <Activity className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                            {isSyncing ? '同步中...' : '同步即時損益'}
+                        </Button>
+
+                        {/* Summary Overview */}
                         <div className="bg-slate-900/50 backdrop-blur-md border border-slate-800 p-6 rounded-3xl min-w-[200px] relative overflow-hidden group">
                             <div className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-1">總資產淨值</div>
                             <div className="text-3xl font-black text-white">${currentTotalValue.toLocaleString()}</div>
                             <div className={`text-xs mt-2 font-bold ${totalPNL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                {totalPNL >= 0 ? '+' : ''}{totalPNL.toLocaleString()} ({((totalPNL / (data?.total_invested || 1)) * 100).toFixed(2)}%)
+                                {totalPNL >= 0 ? '+' : ''}{totalPNL.toLocaleString()} ({((totalPNL / (data.total_invested || 1)) * 100).toFixed(2)}%)
                             </div>
                         </div>
                     </div>

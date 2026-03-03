@@ -97,29 +97,25 @@ export function FinanceFlowClient() {
 
   // 1. 獲取本地 fallback 資料
   useEffect(() => {
-    fetch("/data/tsmc_risk.json")
-      .then(res => res.json())
-      .then(json => setTsmcDataLocal(json))
-      .catch(err => console.error("TSMC data error:", err));
+    const fetchSafe = async (url: string, setter: (val: any) => void, label: string) => {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          throw new Error("Received non-JSON response (possibly HTML/404)");
+        }
+        const json = await res.json();
+        setter(json);
+      } catch (err) {
+        console.warn(`${label} fetch failed:`, err);
+        if (label === 'TW50') setter(TW50_FALLBACK);
+      }
+    };
 
-    fetch("/data/portfolio_live.json")
-      .then(res => res.json())
-      .then(json => setPortfolioDataLocal(json))
-      .catch(err => console.error("Portfolio data error:", err));
-
-    fetch("/data/tw50_full_scan.json")
-      .then(res => {
-        if (!res.ok) throw new Error("HTTP error " + res.status);
-        return res.json();
-      })
-      .then(json => {
-        console.log("TW50 fetched locally:", json?.length);
-        setTw50DataLocal(json);
-      })
-      .catch(err => {
-        console.warn("TW50 local fetch failed, using internal fallback:", err);
-        setTw50DataLocal(TW50_FALLBACK); // Use embedded data if network fails
-      });
+    fetchSafe("/data/tsmc_risk.json", setTsmcDataLocal, "TSMC");
+    fetchSafe("/data/portfolio_live.json", setPortfolioDataLocal, "Portfolio");
+    fetchSafe("/data/tw50_full_scan.json", setTw50DataLocal, "TW50");
   }, []);
 
   // 2. 雲端自動同步 (Migration logic)
@@ -817,9 +813,9 @@ export function FinanceFlowClient() {
                     <div className="flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
                       <span className="flex items-center gap-1.5">
                         TSMC 監測
-                        <span className="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/10 text-emerald-600 text-[8px] rounded-full border border-emerald-500/20">
-                          <span className="w-1 h-1 bg-emerald-500 rounded-full animate-pulse"></span>
-                          Cloud Live
+                        <span className={`flex items-center gap-1 px-1.5 py-0.5 text-[8px] rounded-full border ${cloudTsmcData ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' : 'bg-amber-500/10 text-amber-600 border-amber-500/20'}`}>
+                          <span className={`w-1 h-1 rounded-full ${cloudTsmcData ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
+                          {cloudTsmcData ? 'Cloud Live' : 'Local Cache'}
                         </span>
                       </span>
                       <Activity className="w-3 h-3 text-cyan-500 group-hover:animate-pulse" />
@@ -848,9 +844,8 @@ export function FinanceFlowClient() {
                     <div className="flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
                       <span className="flex items-center gap-1.5">
                         持倉動態 (5871)
-                        <span className="flex items-center gap-1 px-1.5 py-0.5 bg-cyan-500/10 text-cyan-600 text-[8px] rounded-full border border-cyan-500/20">
-                          <span className="w-1 h-1 bg-cyan-500 rounded-full animate-pulse"></span>
-                          Syncing
+                        <span className={`flex items-center gap-1 px-1.5 py-0.5 text-[8px] rounded-full border ${cloudPortfolioData ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' : 'bg-amber-500/20 text-amber-400 border-amber-500/20'}`}>
+                          {cloudPortfolioData ? 'Cloud live' : 'Local file'}
                         </span>
                       </span>
                       <Target className="w-3 h-3 text-indigo-500" />
