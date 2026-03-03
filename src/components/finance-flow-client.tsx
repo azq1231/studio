@@ -994,7 +994,10 @@ export function FinanceFlowClient() {
               <span className={`px-2.5 py-1 text-[10px] font-black rounded-full ${cloudTw50Data ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
                 {cloudTw50Data ? '☁️ 雲端即時' : '💾 本地快取'}
               </span>
-              <span className="text-[10px] text-slate-400 font-bold">數據來源: {cloudTw50Data ? 'Firestore Realtime' : 'Local JSON / Fallback'}</span>
+              <span className="text-[10px] text-slate-400 font-bold">
+                更新時間: {cloudTw50Data?.last_updated ? (typeof cloudTw50Data.last_updated === 'string' ? cloudTw50Data.last_updated : (cloudTw50Data.last_updated.toDate ? cloudTw50Data.last_updated.toDate().toLocaleString() : '')) : (cloudTw50Data?.updatedAt || '---')}
+              </span>
+              <span className="text-[10px] text-slate-300">• 來源: {cloudTw50Data ? 'Firestore Realtime' : 'Local JSON / Fallback'}</span>
             </div>
             <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
