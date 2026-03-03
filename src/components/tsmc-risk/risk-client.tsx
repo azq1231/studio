@@ -2,8 +2,12 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Activity, History, Calendar, Target, Wallet, UserCheck } from "lucide-react";
+import { AlertTriangle, Activity, History, Calendar, Target, Wallet, UserCheck, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useFirestore, useDoc, useMemoFirebase } from '@/firebase';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
 
 interface RiskData {
     symbol: string;
@@ -25,22 +29,60 @@ interface RiskData {
 }
 
 export default function TsmcRiskClient() {
+    const firestore = useFirestore();
+    const { toast } = useToast();
     const router = useRouter();
     const [data, setData] = useState<RiskData | null>(null);
     const [loading, setLoading] = useState(true);
+    const [isSyncing, setIsSyncing] = useState(false);
+
+    // Firestore 引用
+    const tsmcDocRef = useMemoFirebase(() => firestore ? doc(firestore, 'marketRecords', 'tsmc') : null, [firestore]);
+    const { data: cloudData } = useDoc<any>(tsmcDocRef);
 
     useEffect(() => {
-        fetch("/data/tsmc_risk.json")
-            .then((res) => res.json())
-            .then((json) => {
-                setData(json);
-                setLoading(false);
-            })
-            .catch((err) => {
-                console.error("Failed to load data:", err);
-                setLoading(false);
+        if (cloudData) {
+            setData(cloudData as RiskData);
+            setLoading(false);
+        } else {
+            // 備援：讀取本地 JSON
+            fetch("/data/tsmc_risk.json")
+                .then((res) => res.json())
+                .then((json) => {
+                    setData(json);
+                    setLoading(false);
+                })
+                .catch((err) => {
+                    console.error("Failed to load local data:", err);
+                    setLoading(false);
+                });
+        }
+    }, [cloudData]);
+
+    const handleManualSync = async () => {
+        if (!firestore || isSyncing) return;
+        setIsSyncing(true);
+        try {
+            const syncRef = doc(firestore, 'marketSync', 'trigger');
+            await setDoc(syncRef, {
+                last_requested_at: serverTimestamp(),
+                status: 'pending',
+                type: 'TSMC'
             });
-    }, []);
+            toast({
+                title: "🔄 同步指令已發送",
+                description: "雲端任務已啟動，約需 30 秒更新，完成後請重新整理。",
+            });
+        } catch (error) {
+            toast({
+                title: "同步失敗",
+                description: "無法發送同步指令。",
+                variant: "destructive",
+            });
+        } finally {
+            setTimeout(() => setIsSyncing(false), 5000);
+        }
+    };
 
     if (loading) {
         return (
@@ -50,7 +92,7 @@ export default function TsmcRiskClient() {
         );
     }
 
-    if (!data) return <div className="p-20 text-white bg-[#0f1115] min-h-screen">報告數據尚未生成或路徑錯誤。</div>;
+    if (!data) return <div className="p-20 text-white bg-[#0f1115] min-h-screen text-center">正在等待數據生成...</div>;
 
     const getRiskColor = (score: number) => {
         if (score < 30) return "text-emerald-400";
@@ -77,32 +119,43 @@ export default function TsmcRiskClient() {
                             <span className="px-3 py-1 bg-red-500/20 text-red-400 text-xs font-black rounded uppercase tracking-wider">
                                 系統實時監測
                             </span>
-                            <h1 className="text-4xl font-extrabold text-white">台積電 (2330) 實戰風險雷達</h1>
+                            <h1 className="text-3xl md:text-4xl font-extrabold text-white">台積電 (2330) 實戰風險雷達</h1>
                         </div>
                         <p className="text-slate-500 flex items-center gap-2 font-mono text-sm mt-3">
-                            <Activity className="w-4 h-4" /> 最新數據更新時間: {data.last_update}
+                            <Activity className="w-4 h-4" /> 數據更新: {data.last_update}
                         </p>
                     </div>
 
-                    <div className="bg-slate-900 border border-slate-700 p-1.5 rounded-xl flex shadow-xl">
-                        <button
-                            onClick={() => window.location.href = '/analysis/tsmc-research'}
-                            className="px-6 py-3 text-sm font-bold rounded-lg text-amber-400 hover:text-white hover:bg-amber-500/20 bg-amber-500/10 transition-all flex items-center gap-2"
+                    <div className="flex flex-wrap items-center gap-3">
+                        <Button
+                            onClick={handleManualSync}
+                            disabled={isSyncing}
+                            className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20 px-6 py-6 rounded-xl font-bold flex gap-2"
                         >
-                            <Target className="w-4 h-4" /> 點此對照歷年「進出紀錄表」
-                        </button>
-                        <button
-                            onClick={() => window.location.href = '/analysis/tw50-opportunities'}
-                            className="px-6 py-3 text-sm font-bold rounded-lg text-emerald-400 hover:text-white hover:bg-emerald-500/20 bg-emerald-500/10 transition-all flex items-center gap-2"
-                        >
-                            <Wallet className="w-4 h-4" /> 10萬資產配置：TW50 機會
-                        </button>
-                        <button
-                            onClick={() => window.location.href = '/analysis/portfolio'}
-                            className="px-6 py-3 text-sm font-bold rounded-lg text-cyan-400 hover:text-white hover:bg-cyan-500/20 bg-cyan-500/10 transition-all flex items-center gap-2"
-                        >
-                            <UserCheck className="w-4 h-4" /> 進入我的「實戰指揮中心」
-                        </button>
+                            {isSyncing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                            {isSyncing ? '同步中...' : '手動刷新'}
+                        </Button>
+
+                        <div className="bg-slate-900 border border-slate-700 p-1 rounded-xl flex shadow-xl overflow-hidden">
+                            <button
+                                onClick={() => router.push('/analysis/tsmc-research')}
+                                className="px-4 py-3 text-xs font-bold rounded-lg text-amber-400 hover:text-white hover:bg-amber-500/20 transition-all flex items-center gap-1.5"
+                            >
+                                <Target className="w-3.5 h-3.5" /> 歷史對照
+                            </button>
+                            <button
+                                onClick={() => router.push('/analysis/tw50-opportunities')}
+                                className="px-4 py-3 text-xs font-bold rounded-lg text-emerald-400 hover:text-white hover:bg-emerald-500/20 transition-all flex items-center gap-1.5"
+                            >
+                                <Wallet className="w-3.5 h-3.5" /> TW50 機會
+                            </button>
+                            <button
+                                onClick={() => router.push('/analysis/portfolio')}
+                                className="px-4 py-3 text-xs font-bold rounded-lg text-cyan-400 hover:text-white hover:bg-cyan-500/20 transition-all flex items-center gap-1.5"
+                            >
+                                <UserCheck className="w-3.5 h-3.5" /> 實戰指揮
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

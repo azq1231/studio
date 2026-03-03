@@ -1,0 +1,42 @@
+name: Market Data Daily Sync
+
+on:
+  schedule:
+    - cron: '30 1 * * *' # 每天早上 9:30 (台北時間)
+  workflow_dispatch: # 允許手動觸發
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          
+      - name: Install dependencies
+        run: |
+          pip install yfinance pandas numpy firebase-admin
+          
+      - name: Run Market Update Scripts
+        env:
+          # 需要在 GitHub Secret 設定 FIREBASE_SERVICE_ACCOUNT
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          python scripts/update_full_risk.py
+          python scripts/update_portfolio.py
+          python scripts/scan_tw50_opportunities.py
+          # 如果有 service account 則執行同步
+          if [ ! -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            python scripts/cloud_sync.py
+          fi
+          
+      - name: Commit and Push Results
+        run: |
+          git config --global user.name "Market Sync Bot"
+          git config --global user.email "bot@financeflow.ai"
+          git add public/data/*.json
+          git commit -m "chore: nightly market data update [skip ci]" || echo "No changes to commit"
+          git push
