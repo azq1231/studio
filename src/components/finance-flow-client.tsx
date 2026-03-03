@@ -114,15 +114,18 @@ export function FinanceFlowClient() {
     const fetchSafe = async (url: string, setter: (val: any) => void, label: string) => {
       try {
         const res = await fetch(url);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const contentType = res.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-          throw new Error("Received non-JSON response (possibly HTML/404)");
+        if (!res.ok) return; // Silent fallback
+        const text = await res.text();
+        // If Firebase returns index.html due to 404 rewrite, ignore it quietly
+        if (text.trim().startsWith('<')) {
+          if (label === 'TW50') setter(TW50_FALLBACK);
+          return;
         }
-        const json = await res.json();
+        const json = JSON.parse(text);
         setter(json);
       } catch (err) {
-        console.warn(`${label} fetch failed:`, err);
+        // Suppress console error to keep user console clean.
+        // Silently fallback if anything fails (like network error)
         if (label === 'TW50') setter(TW50_FALLBACK);
       }
     };
