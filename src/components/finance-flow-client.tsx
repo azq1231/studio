@@ -15,6 +15,7 @@ import { BalanceTracker } from '@/components/finance-flow/balance-tracker';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text, Settings, ClipboardCopy, FileText, BarChart2, Wallet, TrendingUp, Target, Activity, History, Calendar, AlertTriangle, UserCheck, TrendingDown, Clock, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { parse } from 'date-fns';
@@ -112,6 +113,34 @@ export function FinanceFlowClient() {
       setDoc(portfolioDocRef, portfolioDataLocal, { merge: true });
     }
   }, [user, firestore, tsmcDataLocal, cloudTsmcData, tsmcDocRef, portfolioDataLocal, cloudPortfolioData, portfolioDocRef]);
+
+  // --- 手動同步邏輯 ---
+  const [isSyncing, setIsSyncing] = useState(false);
+  const handleManualSync = async () => {
+    if (!firestore || isSyncing) return;
+    setIsSyncing(true);
+    try {
+      const syncRef = doc(firestore, 'marketSync', 'trigger');
+      await setDoc(syncRef, {
+        last_requested_at: serverTimestamp(),
+        status: 'pending',
+        requested_by: user?.uid || 'anonymous'
+      });
+      toast({
+        title: "🔄 同步指令已發送",
+        description: "雲端守護進程正在啟動即時更新，請稍候約 30 秒後重新進入分頁。",
+      });
+    } catch (error) {
+      console.error("Sync trigger error:", error);
+      toast({
+        title: "同步失敗",
+        description: "無法發送指令至雲端伺服器。",
+        variant: "destructive",
+      });
+    } finally {
+      setTimeout(() => setIsSyncing(false), 5000);
+    }
+  };
 
   const wavesAll = [
     {
@@ -529,30 +558,30 @@ export function FinanceFlowClient() {
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-      <TabsList className="grid w-full grid-cols-3 md:grid-cols-6 h-auto">
-        <TabsTrigger value="importer">
-          <ClipboardCopy className="mr-2 h-4 w-4" />
-          貼上報表
+      <TabsList className="flex flex-wrap h-auto w-full justify-start p-1 bg-muted rounded-xl gap-1 mb-4">
+        <TabsTrigger value="importer" className="flex-grow md:flex-initial flex items-center justify-center gap-2 px-3 py-2">
+          <ClipboardCopy className="h-4 w-4" />
+          <span>貼上報表</span>
         </TabsTrigger>
-        <TabsTrigger value="settings">
-          <Settings className="mr-2 h-4 w-4" />
-          規則設定
+        <TabsTrigger value="settings" className="flex-grow md:flex-initial flex items-center justify-center gap-2 px-3 py-2">
+          <Settings className="h-4 w-4" />
+          <span>規則設定</span>
         </TabsTrigger>
-        <TabsTrigger value="results">
-          <FileText className="mr-2 h-4 w-4" />
-          處理結果
+        <TabsTrigger value="results" className="flex-grow md:flex-initial flex items-center justify-center gap-2 px-3 py-2">
+          <FileText className="h-4 w-4" />
+          <span>處理結果</span>
         </TabsTrigger>
-        <TabsTrigger value="analysis">
-          <BarChart2 className="mr-2 h-4 w-4" />
-          詳細分析
+        <TabsTrigger value="analysis" className="flex-grow md:flex-initial flex items-center justify-center gap-2 px-3 py-2">
+          <BarChart2 className="h-4 w-4" />
+          <span>詳細分析</span>
         </TabsTrigger>
-        <TabsTrigger value="balances">
-          <Wallet className="mr-2 h-4 w-4" />
-          專款餘額
+        <TabsTrigger value="balances" className="flex-grow md:flex-initial flex items-center justify-center gap-2 px-3 py-2">
+          <Wallet className="h-4 w-4" />
+          <span>專款餘額</span>
         </TabsTrigger>
-        <TabsTrigger value="stock-radar" className="text-cyan-600 font-black data-[state=active]:text-cyan-700 data-[state=active]:bg-cyan-50">
-          <TrendingUp className="mr-2 h-4 w-4" />
-          股市雷達
+        <TabsTrigger value="stock-radar" className="flex-grow md:flex-initial flex items-center justify-center gap-2 px-3 py-2 text-cyan-600 font-black data-[state=active]:text-cyan-700 data-[state=active]:bg-cyan-50">
+          <TrendingUp className="h-4 w-4" />
+          <span>股市雷達</span>
         </TabsTrigger>
       </TabsList>
       <TabsContent value="importer" className="mt-4">
@@ -654,37 +683,50 @@ export function FinanceFlowClient() {
       </TabsContent>
       <TabsContent value="stock-radar" className="mt-0 pt-6 outline-none">
         {/* 子導航選單 */}
-        <div className="flex flex-wrap gap-2 mb-8 bg-slate-100/50 p-1.5 rounded-2xl w-fit">
-          <button
-            onClick={() => setRadarView('overview')}
-            className={`px-4 py-2 text-xs font-black rounded-xl transition-all ${radarView === 'overview' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+          <div className="flex flex-wrap gap-2 bg-slate-100/50 p-1.5 rounded-2xl w-fit">
+            <button
+              onClick={() => setRadarView('overview')}
+              className={`px-4 py-2 text-xs font-black rounded-xl transition-all ${radarView === 'overview' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              戰略總覽
+            </button>
+            <button
+              onClick={() => setRadarView('tsmc')}
+              className={`px-4 py-2 text-xs font-black rounded-xl transition-all ${radarView === 'tsmc' ? 'bg-white text-cyan-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              台積電監控
+            </button>
+            <button
+              onClick={() => setRadarView('portfolio')}
+              className={`px-4 py-2 text-xs font-black rounded-xl transition-all ${radarView === 'portfolio' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              我的實戰持倉
+            </button>
+            <button
+              onClick={() => setRadarView('tw50')}
+              className={`px-4 py-2 text-xs font-black rounded-xl transition-all ${radarView === 'tw50' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              TW50 機會掃描
+            </button>
+            <button
+              onClick={() => setRadarView('research')}
+              className={`px-4 py-2 text-xs font-black rounded-xl transition-all ${radarView === 'research' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              歷史研究報告
+            </button>
+          </div>
+
+          <Button
+            onClick={handleManualSync}
+            disabled={isSyncing}
+            variant="outline"
+            size="sm"
+            className="rounded-xl border-cyan-200 bg-cyan-50/30 text-cyan-700 hover:bg-cyan-100 font-bold transition-all shadow-sm"
           >
-            戰略總覽
-          </button>
-          <button
-            onClick={() => setRadarView('tsmc')}
-            className={`px-4 py-2 text-xs font-black rounded-xl transition-all ${radarView === 'tsmc' ? 'bg-white text-cyan-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            台積電監控
-          </button>
-          <button
-            onClick={() => setRadarView('portfolio')}
-            className={`px-4 py-2 text-xs font-black rounded-xl transition-all ${radarView === 'portfolio' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            我的實戰持倉
-          </button>
-          <button
-            onClick={() => setRadarView('tw50')}
-            className={`px-4 py-2 text-xs font-black rounded-xl transition-all ${radarView === 'tw50' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            TW50 機會掃描
-          </button>
-          <button
-            onClick={() => setRadarView('research')}
-            className={`px-4 py-2 text-xs font-black rounded-xl transition-all ${radarView === 'research' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            歷史研究報告
-          </button>
+            {isSyncing ? <Clock className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Activity className="mr-2 h-3.5 w-3.5" />}
+            {isSyncing ? '同步中...' : '立即同步市場數據'}
+          </Button>
         </div>
 
         {/* --- 模式 1: 總覽 --- */}
