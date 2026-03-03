@@ -71,6 +71,7 @@ export function FinanceFlowClient() {
   const [radarView, setRadarView] = useState<'overview' | 'tsmc' | 'portfolio' | 'tw50' | 'research'>('overview');
   const [tsmcDataLocal, setTsmcDataLocal] = useState<any>(null);
   const [portfolioDataLocal, setPortfolioDataLocal] = useState<any>(null);
+  const [tw50DataLocal, setTw50DataLocal] = useState<any[]>([]);
 
   // Firestore 實時引用 (Cloud Sync)
   // marketRecords 是公開讀取的，所以只需要 firestore 實例即可
@@ -95,6 +96,11 @@ export function FinanceFlowClient() {
       .then(res => res.json())
       .then(json => setPortfolioDataLocal(json))
       .catch(err => console.error("Portfolio data error:", err));
+
+    fetch("/data/tw50_full_scan.json")
+      .then(res => res.json())
+      .then(json => setTw50DataLocal(json))
+      .catch(err => console.error("TW50 data error:", err));
   }, []);
 
   // 2. 雲端自動同步 (Migration logic)
@@ -729,6 +735,30 @@ export function FinanceFlowClient() {
           </Button>
         </div>
 
+        {/* 市場緊急情勢分析 (基於最新新聞) */}
+        <div className="mb-8 p-6 bg-rose-50 border border-rose-100 rounded-3xl animate-in fade-in slide-in-from-top-4 duration-1000">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-rose-500 rounded-full animate-pulse">
+              <AlertTriangle className="h-4 w-4 text-white" />
+            </div>
+            <h4 className="font-black text-rose-900">市場情勢警告：中東衝突引發恐慌性回撤</h4>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="text-sm text-rose-800/80 leading-relaxed space-y-2">
+              <p><strong>🚨 事件：</strong> 美伊爆發軍事衝突，全球地緣政治風險急遽攀升。</p>
+              <p><strong>📉 影響：</strong> 電子權值股遭遇非理性拋售，台積電回測支撐，失守 2 萬點大關。</p>
+            </div>
+            <div className="bg-white/50 p-4 rounded-2xl border border-rose-200/50">
+              <div className="text-xs font-black text-rose-900 mb-2 uppercase tracking-wider">避險動態判斷</div>
+              <div className="flex flex-wrap gap-2">
+                <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-black rounded-full">航運股：逆勢抗跌 (長榮/陽明)</span>
+                <span className="px-3 py-1 bg-amber-100 text-amber-700 text-[10px] font-black rounded-full">電子股：超跌區域 (台積電/廣達)</span>
+                <span className="px-3 py-1 bg-slate-100 text-slate-700 text-[10px] font-black rounded-full">記憶體：集體回檔</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* --- 模式 1: 總覽 --- */}
         {radarView === 'overview' && (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-700">
@@ -935,44 +965,77 @@ export function FinanceFlowClient() {
         {/* --- 模式 4: TW50 機會掃描 --- */}
         {radarView === 'tw50' && (
           <div className="animate-in fade-in slide-in-from-right-2 duration-500 space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card className="p-8 border-slate-200">
-                <div className="flex justify-between items-start mb-6">
-                  <div>
-                    <h3 className="text-2xl font-black text-slate-800">可成 (2474)</h3>
-                    <p className="text-xs text-slate-500 font-medium">技術面超跌轉機股</p>
-                  </div>
-                  <span className="text-xs font-black bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full uppercase">強烈買進</span>
-                </div>
-                <div className="space-y-4">
-                  <div className="flex justify-between text-sm py-2 border-b border-slate-50">
-                    <span className="text-slate-500 font-bold">預估預算配置</span>
-                    <span className="text-slate-800 font-black">40,000 元 (分兩批)</span>
-                  </div>
-                  <p className="text-xs text-slate-400 leading-relaxed font-medium italic">
-                    * 理由：金屬機殼龍頭轉型醫療、半導體。帳上現金雄厚，目前 J 值鈍化已久，具備極強安全邊際。
-                  </p>
-                </div>
-              </Card>
+            <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-2xl font-black text-slate-800 mb-1">TW50 實戰機會監測</h3>
+                <p className="text-xs text-slate-500 font-medium">基於 J 值、布林帶位階 (BP) 與新聞情勢之綜合判斷</p>
+              </div>
+              <div className="flex gap-2">
+                <span className="px-3 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-black rounded-full border border-emerald-100">掃描完畢</span>
+                <span className="px-3 py-1 bg-slate-50 text-slate-400 text-[10px] font-black rounded-full">更新頻率: 系統自動</span>
+              </div>
+            </header>
 
-              <Card className="p-8 border-slate-200">
-                <div className="flex justify-between items-start mb-6">
-                  <div>
-                    <h3 className="text-2xl font-black text-slate-800">台達電 (2308)</h3>
-                    <p className="text-xs text-slate-500 font-medium">能源轉型核心龍頭</p>
-                  </div>
-                  <span className="text-xs font-black bg-slate-100 text-slate-400 px-3 py-1 rounded-full uppercase">觀望冷卻</span>
-                </div>
-                <div className="space-y-4">
-                  <div className="flex justify-between text-sm py-2 border-b border-slate-50">
-                    <span className="text-slate-500 font-bold">目前位階</span>
-                    <span className="text-slate-800 font-black">布林中軌盤整</span>
-                  </div>
-                  <p className="text-xs text-slate-400 leading-relaxed font-medium">
-                    目前股價處於不上不下的位階，無恐慌買點，亦無過熱賣點。建議先行略過，等待下一波 J 值冰點。
-                  </p>
-                </div>
-              </Card>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {tw50DataLocal.length > 0 ? (
+                tw50DataLocal
+                  .filter(stock => stock.st === 'BUY' || stock.s === '2330.TW' || stock.s === '2603.TW')
+                  .map((stock, idx) => {
+                    const isShipping = ['2603.TW', '2609.TW', '2615.TW'].includes(stock.s);
+                    const isWeight = ['2330.TW', '2317.TW', '2454.TW'].includes(stock.s);
+                    const nameMap: Record<string, string> = {
+                      '2330.TW': '台積電', '2317.TW': '鴻海', '2454.TW': '聯發科',
+                      '2603.TW': '長榮', '2609.TW': '陽明', '5871.TW': '中租', '2474.TW': '可成'
+                    };
+
+                    return (
+                      <Card key={idx} className={`p-6 border-slate-200 shadow-sm hover:shadow-md transition-all ${stock.st === 'BUY' ? 'border-l-4 border-l-emerald-500' : ''}`}>
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-xl font-black text-slate-800">{nameMap[stock.s] || stock.s}</h4>
+                              <span className="text-[10px] font-bold text-slate-400">({stock.s})</span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 font-bold mt-0.5">
+                              {isWeight ? '電子權值龍頭' : isShipping ? '避險/航運板塊' : '技術轉機股'}
+                            </p>
+                          </div>
+                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${stock.st === 'BUY' ? 'bg-emerald-50 text-emerald-600' :
+                              isShipping ? 'bg-cyan-50 text-cyan-600' : 'bg-slate-50 text-slate-400'
+                            }`}>
+                            {stock.st === 'BUY' ? '機會凹洞區' : isShipping ? '資金避風港' : '暫時觀望'}
+                          </span>
+                        </div>
+
+                        <div className="flex items-end justify-between mb-4">
+                          <div className="text-2xl font-black text-slate-800">${stock.p}</div>
+                          <div className="text-right">
+                            <div className="text-[8px] font-black text-slate-400 uppercase">J 指標</div>
+                            <div className={`text-sm font-black ${stock.j < 20 ? 'text-emerald-500 animate-pulse' : 'text-slate-600'}`}>{stock.j}</div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3 pt-4 border-t border-slate-50">
+                          <div className="flex justify-between items-center text-[10px]">
+                            <span className="text-slate-400 font-bold">布林位階 BP</span>
+                            <span className="text-slate-700 font-black">{stock.bp}</span>
+                          </div>
+                          <div className="p-3 bg-slate-50 rounded-xl">
+                            <p className="text-[10px] text-slate-500 leading-relaxed font-medium">
+                              <span className="font-black text-slate-700">判斷：</span>
+                              {stock.s === '2330.TW' ? '受美伊新聞影響出現絕望性賣壓，J 值與 BP 顯示已進入長期價值區。' :
+                                isShipping ? '受惠戰爭預期運價上漲，目前走勢與大盤背離，展現強勁防禦力。' :
+                                  stock.st === 'BUY' ? '技術指標顯示已處於極度超跌，建議分批佈局。' :
+                                    '股價處於中性整理，目前無顯著買入訊號，優先觀察電子權值動向。'}
+                            </p>
+                          </div>
+                        </div>
+                      </Card>
+                    );
+                  })
+              ) : (
+                <div className="col-span-full py-20 text-center text-slate-400 font-bold">加載中...</div>
+              )}
             </div>
           </div>
         )}
