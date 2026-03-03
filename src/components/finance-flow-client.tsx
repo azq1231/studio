@@ -1024,6 +1024,13 @@ export function FinanceFlowClient() {
         {/* --- 模式 4: TW50 機會掃描 --- */}
         {radarView === 'tw50' && (
           <div className="animate-in fade-in slide-in-from-right-2 duration-500 space-y-8">
+            {/* 來源與時間標注 */}
+            <div className="flex items-center gap-3">
+              <span className={`px-2.5 py-1 text-[10px] font-black rounded-full ${cloudTw50Data ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                {cloudTw50Data ? '☁️ 雲端即時' : '💾 本地快取'}
+              </span>
+              <span className="text-[10px] text-slate-400 font-bold">數據來源: {cloudTw50Data ? 'Firestore Realtime' : 'Local JSON / Fallback'}</span>
+            </div>
             <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <h3 className="text-2xl font-black text-slate-800 mb-1">TW50 實戰機會監測</h3>
@@ -1031,7 +1038,7 @@ export function FinanceFlowClient() {
               </div>
               <div className="flex gap-2">
                 <span className="px-3 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-black rounded-full border border-emerald-100">掃描完畢</span>
-                <span className="px-3 py-1 bg-slate-50 text-slate-400 text-[10px] font-black rounded-full">更新頻率: 系統自動</span>
+                <span className="px-3 py-1 bg-slate-50 text-slate-400 text-[10px] font-black rounded-full">共 {tw50Data?.length || 0} 檔</span>
               </div>
             </header>
 
