@@ -1,10 +1,10 @@
 import yfinance as yf
 import pandas as pd
-import numpy as np
 import json
 import os
+from datetime import datetime
 
-# 台灣 50 成份股代號與名稱映射
+# 定義 50 檔對照表，確保後端直接輸出中文
 TW50_MAPPING = {
     '2330.TW': '台積電', '2317.TW': '鴻海', '2454.TW': '聯發科', '2308.TW': '台達電', 
     '2303.TW': '聯電', '2382.TW': '廣達', '3711.TW': '日月光投控', '2412.TW': '中華電', 
@@ -21,60 +21,48 @@ TW50_MAPPING = {
     '5876.TW': '上海商銀', '9910.TW': '豐泰'
 }
 
-TW50_SYMBOLS = list(TW50_MAPPING.keys())
-
 def scan_opportunity():
     results = []
-    print(f"正在掃描台股五十成份股共 {len(TW50_SYMBOLS)} 檔...")
+    print("正在掃描台股五十成份股共 50 檔...")
     
-    for symbol in TW50_SYMBOLS:
+    for symbol, name in TW50_MAPPING.items():
         try:
-            # 增加數據長度以計算 MA240 (年線)
-            df = yf.Ticker(symbol).history(period='2y', interval='1d', auto_adjust=False)
-            if df.empty or len(df) < 240: continue
+            ticker = yf.Ticker(symbol)
+            df = ticker.history(period='3mo', auto_adjust=False)
+            if df.empty: continue
             
-            # 1. 最新價
-            close = df['Close'].iloc[-1]
+            prices = df['Close']
+            current_p = round(prices.iloc[-1], 2)
             
-            # 2. Bias (乖離率) - 使用 MA240
-            ma240 = df['Close'].rolling(window=240).mean().iloc[-1]
-            bias = round((close - ma240) / ma240 * 100, 1)
+            # MA20/Std
+            ma20 = prices.rolling(20).mean().iloc[-1]
+            ma20_std = prices.rolling(20).std().iloc[-1]
+            bp = round((current_p - (ma20 - 2*ma20_std)) / (4*ma20_std + 0.001), 2)
             
-            # 3. J Value
-            l9 = df['Low'].rolling(window=9).min()
-            h9 = df['High'].rolling(window=9).max()
-            rsv = (df['Close'] - l9) / (h9 - l9 + 0.001) * 100
+            # KDJ (J)
+            l9, h9 = df['Low'].rolling(9).min(), df['High'].rolling(9).max()
+            rsv = (prices - l9) / (h9 - l9 + 0.001) * 100
             K = rsv.ewm(com=2).mean()
             D = K.ewm(com=2).mean()
-            J = (3 * K - 2 * D).iloc[-1]
+            J = round((3*K - 2*D).iloc[-1], 2)
             
-            # 4. 布林帶位階 (BP)
-            ma20 = df['Close'].rolling(20).mean().iloc[-1]
-            std20 = df['Close'].rolling(20).std().iloc[-1]
-            lower = ma20 - (std20 * 2)
-            upper = ma20 + (std20 * 2)
-            bp = (close - lower) / (upper - lower + 0.001)
-            
-            # 5. 狀態判定
             status = "HOLD"
-            if J < 10 and bp < 0.1:
-                status = "BUY"
-            elif J > 90 or bp > 0.9:
-                status = "SELL"
+            if J < 20: status = "BUY"
+            elif J > 80: status = "SELL"
             
             results.append({
                 "s": symbol,
-                "n": TW50_MAPPING.get(symbol, symbol),
-                "p": round(close, 2),
-                "b": bias,
-                "j": round(J, 1),
-                "bp": round(bp, 2),
-                "st": status
+                "n": name, # 直接注入中文名稱，解決手機快取問題
+                "p": current_p,
+                "j": J,
+                "bp": bp,
+                "st": status,
+                "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             })
-            print(f"  - {symbol}: {round(close, 1)} (J:{round(J, 1)}) -> {status}")
+            print(f"  - {symbol} ({name}): {current_p} (J:{J}) -> {status}")
+            
         except Exception as e:
-            print(f"  {symbol} 錯誤: {e}")
-            continue
+            print(f"  Error {symbol}: {e}")
             
     # 使用相對路徑，相容 GitHub Actions (Ubuntu) 與本地 (Windows)
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -85,6 +73,7 @@ def scan_opportunity():
         json.dump(results, f, indent=2, ensure_ascii=False)
     
     print(f"\n掃描完成，已更新數據至 {os.path.abspath(output_path)}")
-    return pd.DataFrame(results)
+    return results
 
-scan_df = scan_opportunity()
+if __name__ == "__main__":
+    scan_opportunity()

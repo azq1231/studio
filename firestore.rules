@@ -135,6 +135,14 @@ service cloud.firestore {
     }
 
     /**
+     * @description 允許用戶發送同步請求指令。
+     */
+    match /marketSync/trigger {
+      allow get: if true;
+      allow create, update: if isSignedIn();
+    }
+
+    /**
      * @description Secures a user's private stock positions and AI advice.
      */
     match /users/{userId}/stockPositions/{docId} {

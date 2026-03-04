@@ -1,17 +1,18 @@
 {
     "symbol": "2330.TW",
+    "n": "台積電",
     "price": 1865.0,
     "ma240": 1269.51,
     "bias": 46.91,
     "rsi": 60.0,
     "bp": 0.53,
     "j_val": 21.33,
-    "vr": 1.94,
+    "vr": 1.6,
     "risk_score": 35,
     "alerts": [
         "年線乖離率偏高 (46.91%)"
     ],
-    "last_update": "2026-03-04 16:38",
+    "last_update": "2026-03-05 07:22",
     "comparison_2022": {
         "peak_price": 688,
         "peak_bias": 28.5,
