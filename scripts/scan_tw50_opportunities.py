@@ -73,7 +73,7 @@ def scan_opportunity():
             })
             print(f"  - {symbol}: {round(close, 1)} (J:{round(J, 1)}) -> {status}")
         except Exception as e:
-            print(f"  ❌ {symbol} 錯誤: {e}")
+            print(f"  {symbol} 錯誤: {e}")
             continue
             
     # 使用相對路徑，相容 GitHub Actions (Ubuntu) 與本地 (Windows)
@@ -82,9 +82,9 @@ def scan_opportunity():
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(results, f, indent=2, ensure_ascii=True)
+        json.dump(results, f, indent=2, ensure_ascii=False)
     
-    print(f"\n✅ 掃描完成，已更新數據至 {os.path.abspath(output_path)}")
+    print(f"\n掃描完成，已更新數據至 {os.path.abspath(output_path)}")
     return pd.DataFrame(results)
 
 scan_df = scan_opportunity()
