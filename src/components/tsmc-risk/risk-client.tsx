@@ -8,6 +8,7 @@ import { useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import { formatSafeDate } from "@/lib/utils";
 
 interface RiskData {
     symbol: string;
@@ -131,7 +132,7 @@ export default function TsmcRiskClient() {
                         </div>
                         <div className="flex flex-col gap-1 mt-3">
                             <p className="text-slate-500 flex items-center gap-2 font-mono text-sm">
-                                <Activity className="w-4 h-4" /> 報價時間: {data.last_update}
+                                <Activity className="w-4 h-4" /> 報價時間: {formatSafeDate(data.last_update)}
                             </p>
                             <p className="text-[10px] text-slate-600 flex items-center gap-1">
                                 <Clock className="w-3 h-3" /> 資料來源: {data._source === 'cloud' ? 'Firestore (Realtime)' : 'Local Static JSON (Fallover)'}

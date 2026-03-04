@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text, Settings, ClipboardCopy, FileText, BarChart2, Wallet, TrendingUp, Target, Activity, History, Calendar, AlertTriangle, UserCheck, TrendingDown, Clock, ShieldCheck, ArrowLeft, ArrowDown } from 'lucide-react';
 import { parse } from 'date-fns';
+import { formatCurrency, formatSafeDate } from "@/lib/utils";
 import { getCreditDisplayDate } from '@/lib/parser';
 
 import { type CombinedData } from '@/types/index';
@@ -57,18 +58,7 @@ export function FinanceFlowClient() {
   const [hasProcessed, setHasProcessed] = useState(false);
 
   // --- 安全時間格式化：防止 Firebase Timestamp 物件直接渲染導致 React 崩潰 ---
-  const safeTimeStr = (val: any): string => {
-    if (!val) return '---';
-    if (typeof val === 'string') return val;
-    if (typeof val?.toDate === 'function') {
-      try { return val.toDate().toLocaleString(); } catch { return '---'; }
-    }
-    if (val instanceof Date) return val.toLocaleString();
-    if (typeof val?.seconds === 'number') {
-      try { return new Date(val.seconds * 1000).toLocaleString(); } catch { return '---'; }
-    }
-    return '---';
-  };
+  const safeTimeStr = formatSafeDate;
 
   // --- 股市雷達狀態 ---
   const [radarView, setRadarView] = useState<'overview' | 'tsmc' | 'portfolio' | 'tw50' | 'research'>('overview');
