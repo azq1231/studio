@@ -1,0 +1,24 @@
+# Ignore list for Ag, Ripgrep, and other search tools
+node_modules/
+.next/
+.git/
+dist/
+build/
+archive/
+*.log
+*.csv
+vendor/
+.github/
+.vscode/
+.expo/
+.turbo/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+.env*
+*.map
+*.min.js
+*.exe
+*.dll
+*.pyc
+__pycache__/

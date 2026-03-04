@@ -62,6 +62,12 @@ export function FinanceFlowClient() {
 
   // --- 股市雷達狀態 ---
   const [radarView, setRadarView] = useState<'overview' | 'tsmc' | 'portfolio' | 'tw50' | 'research'>('overview');
+  const nameMap: Record<string, string> = {
+    '2330.TW': '台積電', '2317.TW': '鴻海', '2454.TW': '聯發科',
+    '2603.TW': '長榮', '2609.TW': '陽明', '2615.TW': '萬海',
+    '5871.TW': '中租', '2474.TW': '可成', '2881.TW': '富邦金',
+    '2882.TW': '國泰金', '2886.TW': '兆豐金', '2002.TW': '中鋼'
+  };
   const [isWarningExpanded, setIsWarningExpanded] = useState(false);
   const [tsmcDataLocal, setTsmcDataLocal] = useState<any>(null);
   const [portfolioDataLocal, setPortfolioDataLocal] = useState<any>(null);
@@ -841,8 +847,16 @@ export function FinanceFlowClient() {
                 <CardHeader className="pb-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">明日行情預測</CardHeader>
                 <CardContent>
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-700">中租 5871</span>
-                    <span className="text-[10px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full shadow-sm">超跌強彈觸發</span>
+                    <span className="text-xs font-bold text-slate-700">
+                      {tw50Data?.find((s: any) => s.st === 'BUY')?.s === '2603.TW' ? '航海王：長榮' :
+                        tw50Data?.find((s: any) => s.st === 'BUY')?.s === '5871.TW' ? '中租 5871' :
+                          tw50Data?.find((s: any) => s.st === 'BUY')?.s === '2609.TW' ? '陽明 2609' :
+                            tw50Data?.find((s: any) => s.st === 'BUY')?.s ? (nameMap[tw50Data.find((s: any) => s.st === 'BUY').s] || tw50Data.find((s: any) => s.st === 'BUY').s) :
+                              '市場中性'}
+                    </span>
+                    <span className={`text-[10px] font-black ${tw50Data?.some((s: any) => s.st === 'BUY') ? 'text-rose-600 bg-rose-50' : 'text-slate-400 bg-slate-50'} px-2 py-0.5 rounded-full shadow-sm`}>
+                      {tw50Data?.some((s: any) => s.st === 'BUY') ? '超跌強彈觸發' : '無顯著機會'}
+                    </span>
                   </div>
                 </CardContent>
               </Card>
@@ -1025,10 +1039,6 @@ export function FinanceFlowClient() {
                     if (!stock) return null;
                     const isShipping = ['2603.TW', '2609.TW', '2615.TW'].includes(stock.s);
                     const isWeight = ['2330.TW', '2317.TW', '2454.TW'].includes(stock.s);
-                    const nameMap: Record<string, string> = {
-                      '2330.TW': '台積電', '2317.TW': '鴻海', '2454.TW': '聯發科',
-                      '2603.TW': '長榮', '2609.TW': '陽明', '5871.TW': '中租', '2474.TW': '可成'
-                    };
 
                     return (
                       <Card key={idx} className={`p-6 border-slate-200 shadow-sm hover:shadow-md transition-all ${stock.st === 'BUY' ? 'border-l-4 border-l-emerald-500' : ''}`}>
