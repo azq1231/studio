@@ -2,7 +2,7 @@ name: Market Data Daily Sync
 
 on:
   schedule:
-    - cron: '30 1 * * *' # 每天早上 9:30 (台北時間)
+    - cron: '*/30 1-6 * * 1-5' # 每 30 分鐘執行一次 (台北時間 09:00 - 14:00, 週一至週五)
   workflow_dispatch: # 允許手動觸發
 
 jobs:
