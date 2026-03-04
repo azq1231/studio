@@ -63,10 +63,19 @@ export function FinanceFlowClient() {
   // --- 股市雷達狀態 ---
   const [radarView, setRadarView] = useState<'overview' | 'tsmc' | 'portfolio' | 'tw50' | 'research'>('overview');
   const nameMap: Record<string, string> = {
-    '2330.TW': '台積電', '2317.TW': '鴻海', '2454.TW': '聯發科',
-    '2603.TW': '長榮', '2609.TW': '陽明', '2615.TW': '萬海',
-    '5871.TW': '中租', '2474.TW': '可成', '2881.TW': '富邦金',
-    '2882.TW': '國泰金', '2886.TW': '兆豐金', '2002.TW': '中鋼'
+    '2330.TW': '台積電', '2317.TW': '鴻海', '2454.TW': '聯發科', '2308.TW': '台達電',
+    '2303.TW': '聯電', '2382.TW': '廣達', '3711.TW': '日月光投控', '2412.TW': '中華電',
+    '2881.TW': '富邦金', '2882.TW': '國泰金', '1301.TW': '台塑', '1303.TW': '南亞',
+    '2886.TW': '兆豐金', '2002.TW': '中鋼', '2891.TW': '中信金', '1216.TW': '統一',
+    '2357.TW': '華碩', '3231.TW': '緯創', '2884.TW': '玉山金', '2885.TW': '元大金',
+    '2327.TW': '國巨', '2207.TW': '和泰車', '1101.TW': '台泥', '2395.TW': '研華',
+    '2408.TW': '南亞科', '3034.TW': '聯詠', '2892.TW': '第一金', '2880.TW': '華南金',
+    '5880.TW': '合庫金', '2883.TW': '凱基金', '2890.TW': '永豐金', '3045.TW': '台灣大',
+    '2912.TW': '統一超', '4904.TW': '遠傳', '2603.TW': '長榮', '2609.TW': '陽明',
+    '2615.TW': '萬海', '2474.TW': '可成', '3008.TW': '大立光', '3661.TW': '世芯-KY',
+    '6669.TW': '緯穎', '2379.TW': '瑞昱', '1326.TW': '台化', '6505.TW': '台塑化',
+    '1503.TW': '士電', '2345.TW': '智邦', '2301.TW': '光寶科', '5871.TW': '中租-KY',
+    '5876.TW': '上海商銀', '9910.TW': '豐泰'
   };
   const [isWarningExpanded, setIsWarningExpanded] = useState(false);
   const [tsmcDataLocal, setTsmcDataLocal] = useState<any>(null);
@@ -821,7 +830,7 @@ export function FinanceFlowClient() {
                   <div className="flex flex-col gap-0.5">
                     <div className="flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
                       <span className="flex items-center gap-1.5">
-                        持倉動態 (5871)
+                        持倉動態 ({nameMap[portfolioData?.positions?.[0]?.symbol] || portfolioData?.positions?.[0]?.name || portfolioData?.positions?.[0]?.symbol || '--'})
                         <span className={`flex items-center gap-1 px-1.5 py-0.5 text-[8px] rounded-full border ${cloudPortfolioData ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' : 'bg-amber-500/20 text-amber-400 border-amber-500/20'}`}>
                           {cloudPortfolioData ? 'Cloud live' : 'Local file'}
                         </span>
@@ -851,7 +860,7 @@ export function FinanceFlowClient() {
                       {tw50Data?.find((s: any) => s.st === 'BUY')?.s === '2603.TW' ? '航海王：長榮' :
                         tw50Data?.find((s: any) => s.st === 'BUY')?.s === '5871.TW' ? '中租 5871' :
                           tw50Data?.find((s: any) => s.st === 'BUY')?.s === '2609.TW' ? '陽明 2609' :
-                            tw50Data?.find((s: any) => s.st === 'BUY')?.s ? (nameMap[tw50Data.find((s: any) => s.st === 'BUY').s] || tw50Data.find((s: any) => s.st === 'BUY').s) :
+                            tw50Data?.find((s: any) => s.st === 'BUY')?.s ? (tw50Data.find((s: any) => s.st === 'BUY').n || nameMap[tw50Data.find((s: any) => s.st === 'BUY').s] || tw50Data.find((s: any) => s.st === 'BUY').s) :
                               '市場中性'}
                     </span>
                     <span className={`text-[10px] font-black ${tw50Data?.some((s: any) => s.st === 'BUY') ? 'text-rose-600 bg-rose-50' : 'text-slate-400 bg-slate-50'} px-2 py-0.5 rounded-full shadow-sm`}>
@@ -1045,7 +1054,7 @@ export function FinanceFlowClient() {
                         <div className="flex justify-between items-start mb-4">
                           <div>
                             <div className="flex items-center gap-2">
-                              <h4 className="text-xl font-black text-slate-800">{nameMap[stock.s] || stock.s}</h4>
+                              <h4 className="text-xl font-black text-slate-800">{stock.n || nameMap[stock.s] || stock.s}</h4>
                               <span className="text-[10px] font-bold text-slate-400">({stock.s})</span>
                             </div>
                             <p className="text-[10px] text-slate-400 font-bold mt-0.5">
