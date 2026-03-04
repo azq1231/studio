@@ -1,6 +1,7 @@
 import yfinance as yf
 import pandas as pd
 import json
+import os
 from datetime import datetime
 
 def update_portfolio_data():
@@ -62,8 +63,14 @@ def update_portfolio_data():
         "positions": portfolio_status
     }
     
-    with open('d:/MyProjects/FinanceFlow/studio/public/data/portfolio_live.json', 'w', encoding='utf-8') as f:
+    # 使用相對路徑，相容 GitHub Actions (Ubuntu) 與本地 (Windows)
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    output_path = os.path.join(current_dir, '..', 'public', 'data', 'portfolio_live.json')
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
+    print(f"✅ 持倉資料已更新至: {os.path.abspath(output_path)}")
 
 if __name__ == "__main__":
     update_portfolio_data()

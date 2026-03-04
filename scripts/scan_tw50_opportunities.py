@@ -1,6 +1,8 @@
 import yfinance as yf
 import pandas as pd
 import numpy as np
+import json
+import os
 
 # 台灣 50 成份股代碼 (0050 指數主要權值股)
 TW50_SYMBOLS = [
@@ -65,13 +67,15 @@ def scan_opportunity():
             print(f"  ❌ {symbol} 錯誤: {e}")
             continue
             
-    # 儲存回 JSON
-    output_path = 'd:/MyProjects/FinanceFlow/studio/public/data/tw50_full_scan.json'
+    # 使用相對路徑，相容 GitHub Actions (Ubuntu) 與本地 (Windows)
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    output_path = os.path.join(current_dir, '..', 'public', 'data', 'tw50_full_scan.json')
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
     
-    print(f"\n✅ 掃描完成，已更新數據至 {output_path}")
+    print(f"\n✅ 掃描完成，已更新數據至 {os.path.abspath(output_path)}")
     return pd.DataFrame(results)
 
-import json
 scan_df = scan_opportunity()

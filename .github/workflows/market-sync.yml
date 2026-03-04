@@ -1,42 +1,45 @@
-name: Market Data Daily Sync
+name: Market Data Sync (Stock Radar)
 
 on:
   schedule:
-    - cron: '*/30 1-6 * * 1-5' # 每 30 分鐘執行一次 (台北時間 09:00 - 14:00, 週一至週五)
-  workflow_dispatch: # 允許手動觸發
+    # 台股交易時段 (台北時間 09:00-13:30) 對應 UTC 01:00-05:30
+    # 開盤後每 30 分鐘更新一次，收盤後 14:00 最後校對
+    - cron: '0,30 1-5 * * 1-5'
+    - cron: '0 6 * * 1-5'
+  workflow_dispatch: # 允許從 GitHub 介面手動觸發
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
       
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
           
-      - name: Install dependencies
+      - name: Install Dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install yfinance pandas numpy firebase-admin
           
-      - name: Run Market Update Scripts
+      - name: Fetch & Calculate Market Data
+        run: |
+          echo "=== 1/3 更新 TSMC 風險監控 ==="
+          python scripts/update_full_risk.py
+          echo ""
+          echo "=== 2/3 更新持倉資料 ==="
+          python scripts/update_portfolio.py
+          echo ""
+          echo "=== 3/3 掃描 TW50 機會 ==="
+          python scripts/scan_tw50_opportunities.py
+          
+      - name: Sync to Firestore (Cloud)
+        if: ${{ env.FIREBASE_SERVICE_ACCOUNT != '' }}
         env:
-          # 需要在 GitHub Secret 設定 FIREBASE_SERVICE_ACCOUNT
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
-          python scripts/update_full_risk.py
-          python scripts/update_portfolio.py
-          python scripts/scan_tw50_opportunities.py
-          # 如果有 service account 則執行同步
-          if [ ! -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
-            python scripts/cloud_sync.py
-          fi
-          
-      - name: Commit and Push Results
-        run: |
-          git config --global user.name "Market Sync Bot"
-          git config --global user.email "bot@financeflow.ai"
-          git add public/data/*.json
-          git commit -m "chore: nightly market data update [skip ci]" || echo "No changes to commit"
-          git push
+          echo "=== 推送至 Firestore ==="
+          python scripts/cloud_sync.py
