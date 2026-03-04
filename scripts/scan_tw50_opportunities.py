@@ -82,7 +82,7 @@ def scan_opportunity():
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(results, f, indent=2, ensure_ascii=False)
+        json.dump(results, f, indent=2, ensure_ascii=True)
     
     print(f"\n✅ 掃描完成，已更新數據至 {os.path.abspath(output_path)}")
     return pd.DataFrame(results)
