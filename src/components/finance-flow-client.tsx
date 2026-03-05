@@ -119,19 +119,31 @@ export function FinanceFlowClient() {
     if (!tw50Data || !Array.isArray(tw50Data)) return null;
     const buys = tw50Data.filter((s: any) => s.st === 'BUY');
     const sells = tw50Data.filter((s: any) => s.st === 'SELL');
+
+    // 計算波動率排名 (由高到低)
+    const hotPick = [...tw50Data]
+      .sort((a, b) => (b.vol || 0) - (a.vol || 0))
+      .slice(0, 3)
+      .map(s => ({
+        name: nameMap[s.s] || s.s.split('.')[0],
+        vol: s.vol || 0
+      }));
+
     return {
       buyCount: buys.length,
       sellCount: sells.length,
       topBuys: buys.slice(0, 5).map((s: any) => ({
         name: nameMap[s.s] || s.s.split('.')[0],
         price: s.p,
-        symbol: s.s
+        symbol: s.s,
+        vol: s.vol || 0
       })),
       topSells: sells.slice(0, 5).map((s: any) => ({
         name: nameMap[s.s] || s.s.split('.')[0],
         price: s.p,
         symbol: s.s
       })),
+      hotPicks: hotPick
     };
   }, [tw50Data]);
 
@@ -841,9 +853,10 @@ export function FinanceFlowClient() {
                           <div key={i} className="flex flex-col gap-1">
                             <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 text-[11px] font-black rounded-lg border border-emerald-200 transition-all hover:bg-emerald-200 flex items-center gap-2">
                               {item.name} <span className="text-emerald-600 opacity-70 font-mono">${item.price}</span>
+                              {item.vol > 35 && <span className="p-0.5 bg-rose-500 rounded-sm text-[8px] text-white leading-none">HIGH VOL</span>}
                             </span>
-                            <span className="text-[8px] text-slate-400 pl-1">
-                              {item.price > 100 ? '需零股/單張10w+' : '可買整股/10w有找'}
+                            <span className="text-[8px] text-slate-400 pl-1 flex justify-between">
+                              <span>{item.price > 100 ? '需零股/單張10w+' : '可買整股/10w有找'}</span>
                             </span>
                           </div>
                         ))
@@ -858,10 +871,10 @@ export function FinanceFlowClient() {
                     <div className="text-[10px] font-black text-rose-600 mb-2 uppercase tracking-widest flex items-center gap-1.5">
                       <div className="w-1 h-1 bg-rose-500 rounded-full"></div> 建議減碼標的 (指標過熱)
                     </div>
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex flex-wrap gap-1.5 text-[11px] font-black">
                       {marketSummary?.topSells && marketSummary.topSells.length > 0 ? (
                         marketSummary.topSells.map((item, i) => (
-                          <span key={i} className="px-2.5 py-1 bg-rose-100 text-rose-800 text-[11px] font-black rounded-lg border border-rose-200 transition-all hover:bg-rose-200 flex items-center gap-2">
+                          <span key={i} className="px-2.5 py-1 bg-rose-100 text-rose-800 rounded-lg border border-rose-200 transition-all hover:bg-rose-200 flex items-center gap-2">
                             {item.name} <span className="text-rose-600 opacity-70 font-mono">${item.price}</span>
                           </span>
                         ))
@@ -870,17 +883,32 @@ export function FinanceFlowClient() {
                       )}
                     </div>
                   </div>
+
+                  {/* 波動率排名區塊 */}
+                  <div className="p-3 bg-white/40 rounded-xl border border-indigo-100/50">
+                    <div className="text-[10px] font-bold text-slate-500 mb-2 flex items-center gap-1 uppercase tracking-widest">
+                      🏃‍♂️ 高動能標的 (今日活躍)
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {marketSummary?.hotPicks?.map((p, i) => (
+                        <div key={i} className="flex items-center gap-1.5 text-[10px] font-bold text-slate-700">
+                          <span>{p.name}</span>
+                          <span className="px-1 py-0.5 bg-slate-200 rounded text-[8px]">{p.vol}% 變動</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
 
               {/* 10 萬預算戰略提示 */}
               <div className="mt-4 p-3 bg-white/60 border border-indigo-100 rounded-xl">
                 <div className="text-[10px] font-black text-indigo-900 mb-1 flex items-center gap-1">
-                  💡 10萬預算小貼士
+                  💡 持倉深度診斷：為什麼中租不動？
                 </div>
                 <p className="text-[10px] text-slate-500 leading-relaxed">
-                  目前您的資金主要卡在 **中租-KY ($100.5)**。由於中租仍處於 **J值負值掃描區**，系統建議「先留在原地」。
-                  若想分散投資，台積電等高價股建議以「零股」分批參與。除非中租回升至 $110 以上，否則現階段換股的摩擦成本較高。
+                  **中租-KY** 屬於「低波動防禦股」，特性是跟漲不跟跌，在盤整期會顯得非常安靜。目前的 10 萬預算若要追求「心跳感」，應關注 **{marketSummary?.hotPicks?.[0]?.name}** 等高波動標的。
+                  但建議：中租正在築底，不要在沒波動時殺出，等它回到 $110 獲利結案後，再拿 10 萬去博弈高動能標的。
                 </p>
               </div>
 
