@@ -74,6 +74,7 @@ def update_risk_json(symbol):
 
     data = {
         'symbol': symbol,
+        'n': '台積電',
         'price': round(close, 2),
         'ma240': round(ma240, 2),
         'bias': bias,
