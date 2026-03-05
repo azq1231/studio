@@ -3,7 +3,7 @@ import os
 import sys
 import firebase_admin
 from firebase_admin import credentials, firestore
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 # 初始化 Firebase — 支援 GitHub Actions 環境變數與本地 service-account.json
 try:
@@ -47,8 +47,12 @@ except Exception as e:
 def sync_to_cloud(collection, doc_id, data):
     """將資料推送到 Firestore"""
     try:
-        # 強制加入 UTC 時區資訊，防止時區偏移
-        data['last_updated'] = datetime.now(timezone.utc).isoformat()
+        # 強制使用台北時間 (UTC+8) 確保雲端和前端渲染一致
+        tz_tpe = timezone(timedelta(hours=8))
+        now_str = datetime.now(tz_tpe).strftime('%Y-%m-%d %H:%M:%S')
+        data['last_updated'] = now_str
+        if 'last_update' in data:
+            data['last_update'] = now_str
         db.collection(collection).document(doc_id).set(data)
         print(f"  ✅ 雲端同步成功: {collection}/{doc_id}")
     except Exception as e:
