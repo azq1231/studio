@@ -62,19 +62,19 @@ export function FinanceFlowClient() {
 
   // --- 股市雷達狀態 ---
   const [radarView, setRadarView] = useState<'overview' | 'tsmc' | 'portfolio' | 'tw50' | 'research'>('overview');
-        const nameMap: Record<string, string> = {
-    '2330.TW': '台積電', '2317.TW': '鴻海', '2454.TW': '聯發科', '2308.TW': '台達電', 
-    '2303.TW': '聯電', '2382.TW': '廣達', '3711.TW': '日月光投控', '2412.TW': '中華電', 
-    '2881.TW': '富邦金', '2882.TW': '國泰金', '1301.TW': '台塑', '1303.TW': '南亞', 
-    '2886.TW': '兆豐金', '2002.TW': '中鋼', '2891.TW': '中信金', '1216.TW': '統一', 
-    '2357.TW': '華碩', '3231.TW': '緯創', '2884.TW': '玉山金', '2885.TW': '元大金', 
-    '2327.TW': '國巨', '2207.TW': '和泰車', '1101.TW': '台泥', '2395.TW': '研華', 
-    '2408.TW': '南亞科', '3034.TW': '聯詠', '2892.TW': '第一金', '2880.TW': '華南金', 
-    '5880.TW': '合庫金', '2883.TW': '凱基金', '2890.TW': '永豐金', '3045.TW': '台灣大', 
-    '2912.TW': '統一超', '4904.TW': '遠傳', '2603.TW': '長榮', '2609.TW': '陽明', 
-    '2615.TW': '萬海', '2474.TW': '可成', '3008.TW': '大立光', '3661.TW': '世芯-KY', 
-    '6669.TW': '緯穎', '2379.TW': '瑞昱', '1326.TW': '台化', '6505.TW': '台塑化', 
-    '1503.TW': '士電', '2345.TW': '智邦', '2301.TW': '光寶科', '5871.TW': '中租-KY', 
+  const nameMap: Record<string, string> = {
+    '2330.TW': '台積電', '2317.TW': '鴻海', '2454.TW': '聯發科', '2308.TW': '台達電',
+    '2303.TW': '聯電', '2382.TW': '廣達', '3711.TW': '日月光投控', '2412.TW': '中華電',
+    '2881.TW': '富邦金', '2882.TW': '國泰金', '1301.TW': '台塑', '1303.TW': '南亞',
+    '2886.TW': '兆豐金', '2002.TW': '中鋼', '2891.TW': '中信金', '1216.TW': '統一',
+    '2357.TW': '華碩', '3231.TW': '緯創', '2884.TW': '玉山金', '2885.TW': '元大金',
+    '2327.TW': '國巨', '2207.TW': '和泰車', '1101.TW': '台泥', '2395.TW': '研華',
+    '2408.TW': '南亞科', '3034.TW': '聯詠', '2892.TW': '第一金', '2880.TW': '華南金',
+    '5880.TW': '合庫金', '2883.TW': '凱基金', '2890.TW': '永豐金', '3045.TW': '台灣大',
+    '2912.TW': '統一超', '4904.TW': '遠傳', '2603.TW': '長榮', '2609.TW': '陽明',
+    '2615.TW': '萬海', '2474.TW': '可成', '3008.TW': '大立光', '3661.TW': '世芯-KY',
+    '6669.TW': '緯穎', '2379.TW': '瑞昱', '1326.TW': '台化', '6505.TW': '台塑化',
+    '1503.TW': '士電', '2345.TW': '智邦', '2301.TW': '光寶科', '5871.TW': '中租-KY',
     '5876.TW': '上海商銀', '9910.TW': '豐泰'
   };
   const [isWarningExpanded, setIsWarningExpanded] = useState(false);
@@ -114,6 +114,19 @@ export function FinanceFlowClient() {
   const portfolioData = cloudPortfolioData || portfolioDataLocal;
   const tw50Data = (cloudTw50Data?.stocks || (Array.isArray(cloudTw50Data) ? cloudTw50Data : null)) || tw50DataLocal;
 
+  // --- 自動生成市場買賣總結 (用於頂部 Banner) ---
+  const marketSummary = useMemo(() => {
+    if (!tw50Data || !Array.isArray(tw50Data)) return null;
+    const buys = tw50Data.filter((s: any) => s.st === 'BUY');
+    const sells = tw50Data.filter((s: any) => s.st === 'SELL');
+    return {
+      buyCount: buys.length,
+      sellCount: sells.length,
+      topBuys: buys.slice(0, 5).map((s: any) => nameMap[s.s] || s.s.split('.')[0]),
+      topSells: sells.slice(0, 5).map((s: any) => nameMap[s.s] || s.s.split('.')[0]),
+    };
+  }, [tw50Data]);
+
   // 1. 獲取本地 fallback 資料
   useEffect(() => {
     const fetchSafe = async (url: string, setter: (val: any) => void, label: string) => {
@@ -149,41 +162,41 @@ export function FinanceFlowClient() {
     try {
       console.log("Triggering manual sync...");
       const pat = process.env.NEXT_PUBLIC_GITHUB_PAT;
-      
-      if (pat) {
-          const response = await fetch("https://api.github.com/repos/azq1231/studio/actions/workflows/market-sync.yml/dispatches", {
-              method: "POST",
-              headers: {
-                  "Accept": "application/vnd.github.v3+json",
-                  "Authorization": `token ${pat}`,
-                  "Content-Type": "application/json",
-              },
-              body: JSON.stringify({ ref: "main" })
-          });
 
-          if (!response.ok) {
-              const errText = await response.text();
-              console.error("GitHub API failed:", errText);
-              throw new Error(`GitHub 發送失敗: HTTP ${response.status}`);
-          }
-          
-          toast({
-            title: "🚀 雲端自動化已喚醒",
-            description: "GitHub 伺服器正在進行計算更新，請耐心稍候約 1~2 分鐘後重新整理頁面。",
-          });
+      if (pat) {
+        const response = await fetch("https://api.github.com/repos/azq1231/studio/actions/workflows/market-sync.yml/dispatches", {
+          method: "POST",
+          headers: {
+            "Accept": "application/vnd.github.v3+json",
+            "Authorization": `token ${pat}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ ref: "main" })
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          console.error("GitHub API failed:", errText);
+          throw new Error(`GitHub 發送失敗: HTTP ${response.status}`);
+        }
+
+        toast({
+          title: "🚀 雲端自動化已喚醒",
+          description: "GitHub 伺服器正在進行計算更新，請耐心稍候約 1~2 分鐘後重新整理頁面。",
+        });
       } else {
-          if (!firestore) throw new Error("尚未載入 Firestore 或缺少 GitHub Token");
-          console.warn("未偵測到 NEXT_PUBLIC_GITHUB_PAT，將發送 Firebase 訊號。");
-          const syncRef = doc(firestore, 'marketSync', 'trigger');
-          await setDoc(syncRef, {
-            last_requested_at: serverTimestamp(),
-            status: 'pending',
-            requested_by: user?.uid || 'anonymous'
-          });
-          toast({
-            title: "🔄 同步訊號已發送",
-            description: "目前使用本地 Daemon 模式接管。",
-          });
+        if (!firestore) throw new Error("尚未載入 Firestore 或缺少 GitHub Token");
+        console.warn("未偵測到 NEXT_PUBLIC_GITHUB_PAT，將發送 Firebase 訊號。");
+        const syncRef = doc(firestore, 'marketSync', 'trigger');
+        await setDoc(syncRef, {
+          last_requested_at: serverTimestamp(),
+          status: 'pending',
+          requested_by: user?.uid || 'anonymous'
+        });
+        toast({
+          title: "🔄 同步訊號已發送",
+          description: "目前使用本地 Daemon 模式接管。",
+        });
       }
     } catch (error: any) {
       console.error("Sync trigger error:", error);
@@ -783,35 +796,72 @@ export function FinanceFlowClient() {
             {isSyncing ? '同步中...' : '立即同步市場數據'}
           </Button>
         </div>
-
-        <div className="mb-4 overflow-hidden bg-rose-50 border border-rose-100 rounded-2xl transition-all duration-300">
+        {/* --- 市場快訊：動態訊號雷達 (取代陳舊警告) --- */}
+        <div className="bg-indigo-50 border border-indigo-200/50 rounded-2xl overflow-hidden shadow-sm mb-8 transition-all hover:shadow-md">
           <button
             onClick={() => setIsWarningExpanded(!isWarningExpanded)}
             className="w-full flex items-center justify-between p-4 text-left group"
           >
             <div className="flex items-center gap-3">
-              <div className="p-1.5 bg-rose-500 rounded-full">
-                <AlertTriangle className="h-3.5 w-3.5 text-white" />
+              <div className="p-1.5 bg-indigo-600 rounded-full animate-pulse">
+                <TrendingUp className="h-3.5 w-3.5 text-white" />
               </div>
-              <h4 className="font-bold text-rose-900 text-sm">市場警告：美伊衝突重挫 (點擊查看)</h4>
+              <div>
+                <h4 className="font-black text-indigo-900 text-sm">市場快訊：台股 50 即時買賣訊號掃描</h4>
+                <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider mt-0.5">
+                  目前訊號：{marketSummary?.buyCount || 0} 家推薦佈局 | {marketSummary?.sellCount || 0} 家超漲警戒
+                </p>
+              </div>
             </div>
-            <ArrowDown className={`h-4 w-4 text-rose-400 transition-transform duration-300 ${isWarningExpanded ? 'rotate-180' : ''}`} />
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-black px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full border border-indigo-200">點擊查看建議</span>
+              <ArrowDown className={`h-4 w-4 text-indigo-400 transition-transform duration-300 ${isWarningExpanded ? 'rotate-180' : ''}`} />
+            </div>
           </button>
 
           {isWarningExpanded && (
             <div className="px-4 pb-4 animate-in fade-in slide-in-from-top-2 duration-300">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-rose-200/50">
-                <div className="text-xs text-rose-800/80 leading-relaxed space-y-1.5">
-                  <p><strong>🚨 事件：</strong> 軍事衝突爆發，川普稱行動可能持續四周。</p>
-                  <p><strong>📉 影響：</strong> 台股跌逾 800 點，台積電（2330）報 1950 元失守支撐。</p>
-                </div>
-                <div className="bg-white/50 p-3 rounded-xl border border-rose-200/50">
-                  <div className="text-[10px] font-black text-rose-900 mb-2 uppercase tracking-wider">避險動態</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[9px] font-bold rounded-full">航運：抗跌</span>
-                    <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[9px] font-bold rounded-full">電子：拋售</span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-indigo-100">
+                <div className="space-y-4">
+                  <div>
+                    <div className="text-[10px] font-black text-emerald-600 mb-2 uppercase tracking-widest flex items-center gap-1.5">
+                      <div className="w-1 h-1 bg-emerald-500 rounded-full"></div> 推薦進場標的 (大數據冰點)
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {marketSummary?.topBuys && marketSummary.topBuys.length > 0 ? (
+                        marketSummary.topBuys.map((name, i) => (
+                          <span key={i} className="px-2.5 py-1 bg-emerald-100 text-emerald-800 text-[11px] font-black rounded-lg border border-emerald-200 transition-all hover:bg-emerald-200">
+                            {name}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs text-slate-400 font-bold italic">目前無強烈買進訊號</span>
+                      )}
+                    </div>
                   </div>
                 </div>
+                <div className="space-y-4">
+                  <div>
+                    <div className="text-[10px] font-black text-rose-600 mb-2 uppercase tracking-widest flex items-center gap-1.5">
+                      <div className="w-1 h-1 bg-rose-500 rounded-full"></div> 建議減碼標的 (指標過熱)
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {marketSummary?.topSells && marketSummary.topSells.length > 0 ? (
+                        marketSummary.topSells.map((name, i) => (
+                          <span key={i} className="px-2.5 py-1 bg-rose-100 text-rose-800 text-[11px] font-black rounded-lg border border-rose-200 transition-all hover:bg-rose-200">
+                            {name}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs text-slate-400 font-bold italic">目前無強烈賣出訊號</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 pt-3 border-t border-indigo-100 flex justify-between items-center text-[9px] text-slate-400 font-medium italic">
+                <span>* 訊號依據 J 值冰點與布林通道位階自動生成</span>
+                <button onClick={() => setRadarView('tw50')} className="text-indigo-600 font-black hover:underline">查看完整機會掃描清單 →</button>
               </div>
             </div>
           )}
