@@ -23,6 +23,8 @@ jobs:
         run: npm ci
 
       - name: Build
+        env:
+          NEXT_PUBLIC_GITHUB_PAT: ${{ secrets.GH_PAT_FOR_SYNC }}
         run: npm run build
 
       - name: Install Firebase CLI

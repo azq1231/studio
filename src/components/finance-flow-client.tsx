@@ -144,25 +144,52 @@ export function FinanceFlowClient() {
   // --- 手動同步邏輯 ---
   const [isSyncing, setIsSyncing] = useState(false);
   const handleManualSync = async () => {
-    if (!firestore || isSyncing) return;
+    if (isSyncing) return;
     setIsSyncing(true);
     try {
       console.log("Triggering manual sync...");
-      const syncRef = doc(firestore, 'marketSync', 'trigger');
-      await setDoc(syncRef, {
-        last_requested_at: serverTimestamp(),
-        status: 'pending',
-        requested_by: user?.uid || 'anonymous'
-      });
-      toast({
-        title: "🔄 同步指令已發送",
-        description: "雲端伺服器正在啟動更新，請稍候約 30 秒後重新整理。",
-      });
-    } catch (error) {
+      const pat = process.env.NEXT_PUBLIC_GITHUB_PAT;
+      
+      if (pat) {
+          const response = await fetch("https://api.github.com/repos/azq1231/studio/actions/workflows/market-sync.yml/dispatches", {
+              method: "POST",
+              headers: {
+                  "Accept": "application/vnd.github.v3+json",
+                  "Authorization": `token ${pat}`,
+                  "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ ref: "main" })
+          });
+
+          if (!response.ok) {
+              const errText = await response.text();
+              console.error("GitHub API failed:", errText);
+              throw new Error(`GitHub 發送失敗: HTTP ${response.status}`);
+          }
+          
+          toast({
+            title: "🚀 雲端自動化已喚醒",
+            description: "GitHub 伺服器正在進行計算更新，請耐心稍候約 1~2 分鐘後重新整理頁面。",
+          });
+      } else {
+          if (!firestore) throw new Error("尚未載入 Firestore 或缺少 GitHub Token");
+          console.warn("未偵測到 NEXT_PUBLIC_GITHUB_PAT，將發送 Firebase 訊號。");
+          const syncRef = doc(firestore, 'marketSync', 'trigger');
+          await setDoc(syncRef, {
+            last_requested_at: serverTimestamp(),
+            status: 'pending',
+            requested_by: user?.uid || 'anonymous'
+          });
+          toast({
+            title: "🔄 同步訊號已發送",
+            description: "目前使用本地 Daemon 模式接管。",
+          });
+      }
+    } catch (error: any) {
       console.error("Sync trigger error:", error);
       toast({
-        title: "同步失敗",
-        description: "無法發送指令至雲端伺服器。",
+        title: "發送失敗",
+        description: error.message || "無法發送雲端觸發指令。",
         variant: "destructive",
       });
     } finally {
