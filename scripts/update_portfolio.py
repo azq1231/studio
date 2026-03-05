@@ -2,7 +2,11 @@ import yfinance as yf
 import pandas as pd
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+def get_taipei_time():
+    tz = timezone(timedelta(hours=8))
+    return datetime.now(tz).strftime('%Y-%m-%d %H:%M:%S')
 
 def update_portfolio_data():
     # 用戶目前的持倉
@@ -64,7 +68,7 @@ def update_portfolio_data():
             continue
 
     result = {
-        "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "last_updated": get_taipei_time(),
         "total_invested": sum(p['avg_price'] * p['shares'] for p in positions),
         "positions": portfolio_status
     }

@@ -2,7 +2,11 @@ import yfinance as yf
 import pandas as pd
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+def get_taipei_time():
+    tz = timezone(timedelta(hours=8))
+    return datetime.now(tz).strftime('%Y-%m-%d %H:%M')
 
 def update_risk_json(symbol):
     df = yf.Ticker(symbol).history(period='2y', auto_adjust=False)
@@ -70,7 +74,7 @@ def update_risk_json(symbol):
     if not alerts:
         alerts.append('目前技術面無重大異常')
 
-    now_str = datetime.now().strftime('%Y-%m-%d %H:%M')
+    now_str = get_taipei_time()
 
     data = {
         'symbol': symbol,
