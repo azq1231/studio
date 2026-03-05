@@ -17,7 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Text, Settings, ClipboardCopy, FileText, BarChart2, Wallet, TrendingUp, Target, Activity, History, Calendar, AlertTriangle, UserCheck, TrendingDown, Clock, ShieldCheck, ArrowLeft, ArrowDown } from 'lucide-react';
+import { Text, Settings, ClipboardCopy, FileText, BarChart2, Wallet, TrendingUp, Target, Activity, History, Calendar, AlertTriangle, UserCheck, TrendingDown, Clock, ShieldCheck, ArrowLeft, ArrowDown, ArrowRight } from 'lucide-react';
 import { parse } from 'date-fns';
 import { formatCurrency, formatSafeDate } from "@/lib/utils";
 import { getCreditDisplayDate } from '@/lib/parser';
@@ -1242,6 +1242,29 @@ export function FinanceFlowClient() {
                 這是一份剔除所有感性文字的極致理性紀錄表。所有價格均為當時「未經還原」的真實報價。
               </p>
             </header>
+
+            {/* 新增：2025 實戰回測入口 */}
+            <div
+              onClick={() => window.location.href = '/analysis/backtest'}
+              className="bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-3xl p-8 text-white relative overflow-hidden group cursor-pointer shadow-xl shadow-indigo-200 transition-all hover:scale-[1.01] active:scale-[0.98]"
+            >
+              <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 blur-3xl -z-10 group-hover:bg-white/20 transition-all"></div>
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5 text-indigo-200" />
+                    <span className="text-xs font-black text-indigo-200 uppercase tracking-widest">實戰模擬</span>
+                  </div>
+                  <h3 className="text-2xl font-black italic">2025 年度：士電、鴻海 10 萬回測報告</h3>
+                  <p className="text-indigo-100/70 text-sm font-medium max-w-sm">
+                    針對高動能標的，系統在 2025 年一整年的進出場績效統計。內含交易明細與損益曲線。
+                  </p>
+                </div>
+                <div className="px-6 py-3 bg-white text-indigo-700 font-black rounded-2xl shadow-lg flex items-center gap-2">
+                  立即檢視報告 <ArrowRight className="w-4 h-4" />
+                </div>
+              </div>
+            </div>
 
             <div className="space-y-12">
               {wavesAll.map((yearGroup, yIdx) => (
