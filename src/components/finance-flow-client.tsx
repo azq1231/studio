@@ -122,8 +122,16 @@ export function FinanceFlowClient() {
     return {
       buyCount: buys.length,
       sellCount: sells.length,
-      topBuys: buys.slice(0, 5).map((s: any) => nameMap[s.s] || s.s.split('.')[0]),
-      topSells: sells.slice(0, 5).map((s: any) => nameMap[s.s] || s.s.split('.')[0]),
+      topBuys: buys.slice(0, 5).map((s: any) => ({
+        name: nameMap[s.s] || s.s.split('.')[0],
+        price: s.p,
+        symbol: s.s
+      })),
+      topSells: sells.slice(0, 5).map((s: any) => ({
+        name: nameMap[s.s] || s.s.split('.')[0],
+        price: s.p,
+        symbol: s.s
+      })),
     };
   }, [tw50Data]);
 
@@ -829,10 +837,15 @@ export function FinanceFlowClient() {
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {marketSummary?.topBuys && marketSummary.topBuys.length > 0 ? (
-                        marketSummary.topBuys.map((name, i) => (
-                          <span key={i} className="px-2.5 py-1 bg-emerald-100 text-emerald-800 text-[11px] font-black rounded-lg border border-emerald-200 transition-all hover:bg-emerald-200">
-                            {name}
-                          </span>
+                        marketSummary.topBuys.map((item, i) => (
+                          <div key={i} className="flex flex-col gap-1">
+                            <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 text-[11px] font-black rounded-lg border border-emerald-200 transition-all hover:bg-emerald-200 flex items-center gap-2">
+                              {item.name} <span className="text-emerald-600 opacity-70 font-mono">${item.price}</span>
+                            </span>
+                            <span className="text-[8px] text-slate-400 pl-1">
+                              {item.price > 100 ? '需零股/單張10w+' : '可買整股/10w有找'}
+                            </span>
+                          </div>
                         ))
                       ) : (
                         <span className="text-xs text-slate-400 font-bold italic">目前無強烈買進訊號</span>
@@ -847,9 +860,9 @@ export function FinanceFlowClient() {
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {marketSummary?.topSells && marketSummary.topSells.length > 0 ? (
-                        marketSummary.topSells.map((name, i) => (
-                          <span key={i} className="px-2.5 py-1 bg-rose-100 text-rose-800 text-[11px] font-black rounded-lg border border-rose-200 transition-all hover:bg-rose-200">
-                            {name}
+                        marketSummary.topSells.map((item, i) => (
+                          <span key={i} className="px-2.5 py-1 bg-rose-100 text-rose-800 text-[11px] font-black rounded-lg border border-rose-200 transition-all hover:bg-rose-200 flex items-center gap-2">
+                            {item.name} <span className="text-rose-600 opacity-70 font-mono">${item.price}</span>
                           </span>
                         ))
                       ) : (
@@ -859,6 +872,18 @@ export function FinanceFlowClient() {
                   </div>
                 </div>
               </div>
+
+              {/* 10 萬預算戰略提示 */}
+              <div className="mt-4 p-3 bg-white/60 border border-indigo-100 rounded-xl">
+                <div className="text-[10px] font-black text-indigo-900 mb-1 flex items-center gap-1">
+                  💡 10萬預算小貼士
+                </div>
+                <p className="text-[10px] text-slate-500 leading-relaxed">
+                  目前您的資金主要卡在 **中租-KY ($100.5)**。由於中租仍處於 **J值負值掃描區**，系統建議「先留在原地」。
+                  若想分散投資，台積電等高價股建議以「零股」分批參與。除非中租回升至 $110 以上，否則現階段換股的摩擦成本較高。
+                </p>
+              </div>
+
               <div className="mt-4 pt-3 border-t border-indigo-100 flex justify-between items-center text-[9px] text-slate-400 font-medium italic">
                 <span>* 訊號依據 J 值冰點與布林通道位階自動生成</span>
                 <button onClick={() => setRadarView('tw50')} className="text-indigo-600 font-black hover:underline">查看完整機會掃描清單 →</button>
