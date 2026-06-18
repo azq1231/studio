@@ -31,6 +31,7 @@
 - 🚫 **靜態編譯時不存在的資料**：專案使用 Firebase Hosting，依賴靜態導出 (`next export`) 或 Fallback JSON。`fetch` 時必須實作完善的防呆，若回傳內容型態為 `text/html` (通常代表 404 被轉向 index.html)，絕對不能當作 JSON 處理，否則會引發 `SyntaxError: Unexpected token '<'` 崩潰。
 - 🚫 **GitHub Actions 腳本硬編碼路徑**：所有在 `scripts/` 下運行的 自動同步腳本（如 Python），**嚴禁使用 Windows 絕對路徑**（如 `d:/MyProjects/...`）。必須統一使用相對路徑解析（例：`os.path.join(os.path.dirname(__file__), '..', ...)`），以確保在 GitHub Actions 的 Linux 環境中能正確運行。
 - 🚫 **Firebase 雲端同步憑證**：雲端同步腳本必須正確讀取 `FIREBASE_SERVICE_ACCOUNT` 環境變數。本地測試時可使用 `service-account.json` 檔案。
+- 🚫 **Git 忽略數據檔案導致部署空洞**：專案中的 `studio/public/data/*.json` 檔案通常在 `.gitignore` 名單中。**嚴禁依賴 `git add -f` 來解決部署數據缺失**。正確方案是將數據透過 `cloud_sync.py` 推送到 Firestore 的 `marketRecords` 集合，並在前端使用 `useDoc` 即時監聽。這樣即使 JSON 檔案不存在於網站靜態資料夾中，雲端功能仍能正常運作。
 
 ---
 > 📝 *最後更新: 2026-03-04*

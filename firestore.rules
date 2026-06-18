@@ -143,6 +143,14 @@ service cloud.firestore {
     }
 
     /**
+     * @description 提供公開量化指標 (Alpha Signals) 的唯讀存取。
+     */
+    match /alphaSignals/{docId} {
+      allow get, list: if true;
+      allow write: if isSignedIn();
+    }
+
+    /**
      * @description Secures a user's private stock positions and AI advice.
      */
     match /users/{userId}/stockPositions/{docId} {

@@ -25,6 +25,20 @@ interface Transaction {
     [key: string]: any;
 }
 
+// 安全日期解析函數：相容 iOS Safari 且防止 NaN 導致排序崩潰
+const parseDateToTime = (dateStr: any): number => {
+    if (!dateStr) return 0;
+    try {
+        const str = String(dateStr);
+        // 將 yyyy-MM-dd 格式中的 - 轉換為 /，因為 iOS Safari 的 Date 解析對連字號與空格不相容
+        const normalized = str.replace(/-/g, '/');
+        const time = new Date(normalized).getTime();
+        return isNaN(time) ? 0 : time;
+    } catch {
+        return 0;
+    }
+};
+
 interface BalanceTrackerProps {
     balanceAccounts: BalanceAccount[];
     transactions: Transaction[];
@@ -58,8 +72,8 @@ export function BalanceTracker({ balanceAccounts, transactions }: BalanceTracker
                 totalIn,
                 totalOut,
                 transactions: accountTransactions.sort((a, b) => {
-                    const dateA = new Date(a.date).getTime();
-                    const dateB = new Date(b.date).getTime();
+                    const dateA = parseDateToTime(a.date);
+                    const dateB = parseDateToTime(b.date);
                     return dateB - dateA;
                 })
             };

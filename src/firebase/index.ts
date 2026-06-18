@@ -38,23 +38,58 @@ export function initializeFirebase() {
   return getSdks(firebaseApp);
 }
 
+function isIndexedDBSupported(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return !!window.indexedDB;
+  } catch {
+    return false;
+  }
+}
+
+function isIOS(): boolean {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+         (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
 export function getSdks(firebaseApp: FirebaseApp) {
-  // Initialize Firestore with persistent cache (new API for Firebase v10+)
   if (!firestoreInstance) {
-    try {
-      firestoreInstance = initializeFirestore(firebaseApp, {
-        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
-      });
-    } catch (e) {
-      // Firestore might already be initialized (e.g., during hot reload)
-      firestoreInstance = getFirestore(firebaseApp);
+    let initialized = false;
+
+    // 只在瀏覽器環境且 IndexedDB 可用時嘗試開啟本地持久化快取
+    if (isIndexedDBSupported()) {
+      try {
+        // iOS Safari 的多標籤管理器 (persistentMultipleTabManager) 依賴 Web Locks API 與 BroadcastChannel，
+        // 在舊版 iOS 或隱私無痕模式下極易拋出 SecurityError 崩潰。
+        // 對於 iOS 裝置，我們安全降級為「單分頁快取」(不傳 tabManager)，其餘平台保留多分頁快取。
+        const cacheConfig = isIOS()
+          ? persistentLocalCache()
+          : persistentLocalCache({ tabManager: persistentMultipleTabManager() });
+
+        firestoreInstance = initializeFirestore(firebaseApp, {
+          localCache: cacheConfig
+        });
+        initialized = true;
+      } catch (e) {
+        console.warn("[Firebase] 初始化持久化快取失敗，降級為記憶體快取模式:", e);
+      }
+    }
+
+    if (!initialized) {
+      try {
+        firestoreInstance = getFirestore(firebaseApp);
+      } catch (e) {
+        console.error("[Firebase] 取得 Firestore 實例失敗:", e);
+        throw e;
+      }
     }
   }
 
   return {
     firebaseApp,
     auth: getAuth(firebaseApp),
-    firestore: firestoreInstance
+    firestore: firestoreInstance!
   };
 }
 

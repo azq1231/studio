@@ -1,0 +1,43 @@
+name: Alpha Factory Quantitative Scanner
+
+on:
+  schedule:
+    # 台北時間每日 16:50 執行 (對應 UTC 08:50)
+    - cron: '50 8 * * 1-5'
+  workflow_dispatch: # 手動觸發
+
+jobs:
+  run-alpha-factory:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install yfinance pandas numpy sqlalchemy firebase-admin matplotlib
+          
+      - name: Alpha Factory Scanning & Sync
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          # 將 secrets 中的服務帳號寫入本地檔案，供腳本讀取
+          echo "$FIREBASE_SERVICE_ACCOUNT" > service-account.json
+          
+          echo "🚀 啟動 Alpha Factory 全市場掃描..."
+          # 1. 執行 ingest 更新數據
+          cd backend
+          python ingest.py
+          cd ..
+          
+          # 2. 執行同步腳本
+          python scripts/sync_alpha_cloud.py
+          
+          # 清除敏感資訊
+          rm service-account.json

@@ -3,6 +3,9 @@
 import React, { useEffect, useState } from "react";
 import { ArrowLeft, Target, TrendingUp, TrendingDown, Wallet, Clock, Activity, BarChart, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useFirestore, useDoc } from "@/firebase";
+import { doc } from 'firebase/firestore';
+import { useMemo } from "react";
 
 interface Trade {
     type: string;
@@ -26,23 +29,13 @@ interface BacktestResult {
 }
 
 export default function BacktestPage() {
-    const [results, setResults] = useState<BacktestResult[]>([]);
-    const [loading, setLoading] = useState(true);
+    const firestore = useFirestore();
+    const backtestDocRef = useMemo(() => firestore ? doc(firestore, 'marketRecords', 'backtest_2025') : null, [firestore]);
+    const { data: cloudData, isLoading } = useDoc<any>(backtestDocRef);
 
-    useEffect(() => {
-        fetch("/data/backtest_2025.json")
-            .then(res => res.json())
-            .then(json => {
-                setResults(json);
-                setLoading(false);
-            })
-            .catch(err => {
-                console.error("Failed to load backtest data:", err);
-                setLoading(false);
-            });
-    }, []);
+    const results: BacktestResult[] = cloudData?.results || [];
 
-    if (loading) return (
+    if (isLoading) return (
         <div className="flex items-center justify-center min-h-screen bg-[#0a0a0c] text-white">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-500"></div>
         </div>

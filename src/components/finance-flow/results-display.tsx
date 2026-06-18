@@ -330,9 +330,9 @@ export function ResultsDisplay({
     const defaultTab = hasData ? (creditData.length > 0 ? "credit" : (depositData.length > 0 ? "deposit" : "cash")) : "statement";
 
     return (
-        <Card>
+        <Card className="border-b-0 md:border-b">
             <CardHeader><h3 className="text-xl font-semibold font-headline">處理結果</h3></CardHeader>
-            <CardContent>
+            <CardContent className="pb-24 md:pb-6">
                 {hasData ? (
                     <>
                         <div className="flex justify-between items-center mb-4 gap-4">
@@ -340,7 +340,8 @@ export function ResultsDisplay({
                             <Button variant="outline" size="sm" onClick={handleDownload}><Download className="mr-2 h-4 w-4" />下載 Excel</Button>
                         </div>
                         <Tabs defaultValue={defaultTab} className="w-full">
-                            <TabsList className="flex flex-wrap h-auto bg-muted p-1">
+                            {/* Desktop TabsList */}
+                            <TabsList className="hidden md:flex flex-wrap h-auto bg-muted p-1">
                                 {combinedData.length > 0 && (
                                     <TabsTrigger value="combined" className="px-3 py-1.5 text-xs sm:text-sm">
                                         <Combine className="w-4 h-4 mr-1 sm:mr-2" />
@@ -363,6 +364,38 @@ export function ResultsDisplay({
                                 {hasData && (
                                     <TabsTrigger value="summary" className="px-3 py-1.5 text-xs sm:text-sm">
                                         <FileText className="w-4 h-4 mr-1 sm:mr-2" />
+                                        <span>彙總</span>
+                                    </TabsTrigger>
+                                )}
+                            </TabsList>
+
+                            {/* Mobile Bottom Navigation Bar */}
+                            <TabsList className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-border/60 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] flex justify-around items-center h-16 p-0 rounded-none pb-safe">
+                                {combinedData.length > 0 && (
+                                    <TabsTrigger value="combined" className="flex-1 flex flex-col items-center justify-center h-full py-1 text-[10px] sm:text-xs gap-1 data-[state=active]:bg-transparent data-[state=active]:text-primary rounded-none">
+                                        <Combine className="w-5 h-5" />
+                                        <span>合併</span>
+                                    </TabsTrigger>
+                                )}
+                                {creditData.length > 0 && (
+                                    <TabsTrigger value="credit" className="flex-1 flex flex-col items-center justify-center h-full py-1 text-[10px] sm:text-xs gap-1 data-[state=active]:bg-transparent data-[state=active]:text-primary rounded-none">
+                                        <CreditCard className="w-5 h-5" />
+                                        <span>信用卡</span>
+                                    </TabsTrigger>
+                                )}
+                                {depositData.length > 0 && (
+                                    <TabsTrigger value="deposit" className="flex-1 flex flex-col items-center justify-center h-full py-1 text-[10px] sm:text-xs gap-1 data-[state=active]:bg-transparent data-[state=active]:text-primary rounded-none">
+                                        <Landmark className="w-5 h-5" />
+                                        <span>活存</span>
+                                    </TabsTrigger>
+                                )}
+                                <TabsTrigger value="cash" className="flex-1 flex flex-col items-center justify-center h-full py-1 text-[10px] sm:text-xs gap-1 data-[state=active]:bg-transparent data-[state=active]:text-primary rounded-none">
+                                    <Banknote className="w-5 h-5" />
+                                    <span>現金</span>
+                                </TabsTrigger>
+                                {hasData && (
+                                    <TabsTrigger value="summary" className="flex-1 flex flex-col items-center justify-center h-full py-1 text-[10px] sm:text-xs gap-1 data-[state=active]:bg-transparent data-[state=active]:text-primary rounded-none">
+                                        <FileText className="w-5 h-5" />
                                         <span>彙總</span>
                                     </TabsTrigger>
                                 )}
@@ -643,7 +676,8 @@ export function ResultsDisplay({
                                     {settings.quickFilters.map((filter, index) => <Button key={index} variant="outline" size="sm" onClick={() => setSummarySelectedCategories(filter.categories)}>{filter.name}</Button>)}
                                     <p className="text-sm text-muted-foreground hidden md:block ml-auto">點擊表格中的數字可查看該月份的交易明細。</p>
                                 </div>
-                                <div className="rounded-md border overflow-x-auto">
+                                {/* Desktop View */}
+                                <div className="hidden md:block rounded-md border overflow-x-auto bg-card">
                                     <Table className="min-w-full">
                                         <TableHeader>
                                             <TableRow>
@@ -689,6 +723,45 @@ export function ResultsDisplay({
                                             ))}
                                         </TableBody>
                                     </Table>
+                                </div>
+
+                                {/* Mobile View (Accordion List) */}
+                                <div className="md:hidden space-y-3 pt-2">
+                                    {summaryReportData.rows.map((row, index) => {
+                                        const month = row['日期（年月）'] as string;
+                                        const total = row['總計'] as number;
+                                        return (
+                                            <Accordion key={index} type="single" collapsible className="w-full border rounded-xl bg-card shadow-sm px-4">
+                                                <AccordionItem value={`month-${index}`} className="border-b-0">
+                                                    <AccordionTrigger className="hover:no-underline py-3">
+                                                        <div className="flex justify-between items-center w-full pr-4">
+                                                            <span className="font-bold text-sm sm:text-base">{month}</span>
+                                                            <span className={cn("font-bold font-mono text-sm sm:text-base", total < 0 ? "text-green-600" : "text-foreground")}>
+                                                                {total.toLocaleString()}
+                                                            </span>
+                                                        </div>
+                                                    </AccordionTrigger>
+                                                    <AccordionContent className="pt-2 pb-4 border-t border-dashed space-y-2.5">
+                                                        {summaryReportData.headers.filter(h => h !== '日期（年月）' && h !== '總計').map(header => {
+                                                            const value = row[header] as number;
+                                                            if (value === 0) return null;
+                                                            return (
+                                                                <div key={header} className="flex justify-between items-center py-1.5 border-b border-muted/30 last:border-0">
+                                                                    <span className="text-xs sm:text-sm font-medium text-muted-foreground">{header}</span>
+                                                                    <button
+                                                                        onClick={() => handleSummaryCellClick(month, header)}
+                                                                        className={cn("text-xs sm:text-sm font-bold font-mono hover:underline text-blue-500", value < 0 ? "text-green-600 hover:text-blue-500" : "")}
+                                                                    >
+                                                                        {value.toLocaleString()}
+                                                                    </button>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </AccordionContent>
+                                                </AccordionItem>
+                                            </Accordion>
+                                        );
+                                    })}
                                 </div>
                             </TabsContent>
                         </Tabs>

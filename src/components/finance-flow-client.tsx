@@ -17,7 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Text, Settings, ClipboardCopy, FileText, BarChart2, Wallet, TrendingUp, Target, Activity, History, Calendar, AlertTriangle, UserCheck, TrendingDown, Clock, ShieldCheck, ArrowLeft, ArrowDown, ArrowRight } from 'lucide-react';
+import { Text, Settings, ClipboardCopy, FileText, BarChart2, Zap, ShoppingCart, Wallet, TrendingUp, Target, Activity, History, Calendar, AlertTriangle, UserCheck, TrendingDown, Clock, ShieldCheck, ArrowLeft, ArrowDown, ArrowRight } from 'lucide-react';
 import { parse } from 'date-fns';
 import { formatCurrency, formatSafeDate } from "@/lib/utils";
 import { getCreditDisplayDate } from '@/lib/parser';
@@ -61,7 +61,7 @@ export function FinanceFlowClient() {
   const safeTimeStr = formatSafeDate;
 
   // --- 股市雷達狀態 ---
-  const [radarView, setRadarView] = useState<'overview' | 'tsmc' | 'portfolio' | 'tw50' | 'research'>('overview');
+  const [radarView, setRadarView] = useState<'overview' | 'tsmc' | 'portfolio' | 'tw50' | 'research' | 'alpha'>('overview');
   const nameMap: Record<string, string> = {
     '2330.TW': '台積電', '2317.TW': '鴻海', '2454.TW': '聯發科', '2308.TW': '台達電',
     '2303.TW': '聯電', '2382.TW': '廣達', '3711.TW': '日月光投控', '2412.TW': '中華電',
@@ -75,7 +75,9 @@ export function FinanceFlowClient() {
     '2615.TW': '萬海', '2474.TW': '可成', '3008.TW': '大立光', '3661.TW': '世芯-KY',
     '6669.TW': '緯穎', '2379.TW': '瑞昱', '1326.TW': '台化', '6505.TW': '台塑化',
     '1503.TW': '士電', '2345.TW': '智邦', '2301.TW': '光寶科', '5871.TW': '中租-KY',
-    '5876.TW': '上海商銀', '9910.TW': '豐泰'
+    '5876.TW': '上海商銀', '9910.TW': '豐泰', '3017.TW': '奇鋐', '2376.TW': '技嘉',
+    '2353.TW': '宏碁', '2356.TW': '英業達', '1513.TW': '中興電', '1519.TW': '華城',
+    '1605.TW': '華新', '2618.TW': '長榮航', '2610.TW': '華航'
   };
   const [isWarningExpanded, setIsWarningExpanded] = useState(false);
   const [tsmcDataLocal, setTsmcDataLocal] = useState<any>(null);
@@ -108,6 +110,9 @@ export function FinanceFlowClient() {
 
   const tw50DocRef = useMemoFirebase(() => firestore ? doc(firestore, 'marketRecords', 'tw50') : null, [firestore]);
   const { data: cloudTw50Data, isLoading: isLoadingTw50 } = useDoc<any>(tw50DocRef);
+
+  const alphaDocRef = useMemoFirebase(() => firestore ? doc(firestore, 'alphaSignals', 'latest') : null, [firestore]);
+  const { data: alphaData, isLoading: isLoadingAlpha } = useDoc<any>(alphaDocRef);
 
   // 優先順序：雲端數據 > 本地 JSON 數據
   const tsmcData = cloudTsmcData || tsmcDataLocal;
@@ -798,6 +803,12 @@ export function FinanceFlowClient() {
               機會掃描
             </button>
             <button
+              onClick={() => setRadarView('alpha')}
+              className={`px-3 py-1.5 text-[10px] md:text-xs font-black rounded-xl transition-all ${radarView === 'alpha' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              Alpha 實驗室
+            </button>
+            <button
               onClick={() => setRadarView('research')}
               className={`px-3 py-1.5 text-[10px] md:text-xs font-black rounded-xl transition-all ${radarView === 'research' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
             >
@@ -923,7 +934,7 @@ export function FinanceFlowClient() {
         {/* --- 模式 1: 總覽 --- */}
         {radarView === 'overview' && (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-700">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <Card className="bg-white border-slate-200 shadow-sm hover:shadow-md transition-all cursor-pointer group" onClick={() => setRadarView('tsmc')}>
                 <CardHeader className="pb-2">
                   <div className="flex flex-col gap-0.5">
@@ -977,6 +988,23 @@ export function FinanceFlowClient() {
                     <span className="text-3xl font-black text-slate-800">${portfolioData?.positions?.[0]?.current_price || '--'}</span>
                     <span className={`text-[10px] font-black tracking-tighter animate-pulse ${portfolioData?.positions?.[0]?.pnl_value >= 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
                       {portfolioData?.positions?.[0]?.pnl_value >= 0 ? '獲利中 +' : '盤整中 '}{portfolioData?.positions?.[0]?.pnl_percent}%
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white border-slate-200 shadow-sm hover:shadow-md transition-all cursor-pointer group hover:bg-rose-50/10 border-rose-100" onClick={() => setRadarView('alpha')}>
+                <CardHeader className="pb-2">
+                  <div className="flex justify-between items-center text-[10px] font-black text-rose-500 uppercase tracking-widest">
+                    <span>Alpha Factory 量化掃描</span>
+                    <BarChart2 className="w-3 h-3" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-3xl font-black text-slate-800">{alphaData?.market_state || '--'}</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 bg-rose-50 text-rose-600 rounded-full animate-pulse border border-rose-100">
+                      今日觸發 {alphaData?.summary?.candidates_count || 0} 家
                     </span>
                   </div>
                 </CardContent>
@@ -1233,7 +1261,228 @@ export function FinanceFlowClient() {
           </div>
         )}
 
-        {/* --- 模式 5: 歷史研究報告 --- */}
+        {/* --- 模式 5: Alpha Factory 實驗室 --- */}
+        {radarView === 'alpha' && (
+          <div className="animate-in fade-in slide-in-from-right-2 duration-500 space-y-10 pb-10">
+            <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-3xl font-black text-slate-800">Alpha Factory</h2>
+                  <span className="px-2 py-0.5 bg-rose-500 text-white text-[10px] font-black rounded-md">CORE ENGINE V2</span>
+                </div>
+                <p className="text-slate-500 text-sm font-medium">基於波動壓縮 (Compression) 與 唐奇安突破 (Expansion) 的專業量化掃描器</p>
+              </div>
+              <div className="text-right">
+                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">最後掃描時間</div>
+                <div className="text-sm font-black text-slate-700">{safeTimeStr(alphaData?.updatedAt)}</div>
+              </div>
+            </header>
+
+            {/* 1. Market Climate (市場氣候) */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <Card className="lg:col-span-1 border-slate-200">
+                <CardHeader className="pb-4 border-b border-slate-50">
+                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                    <Activity className="w-3.5 h-3.5 text-rose-500" /> 市場氣候 (Market Climate)
+                  </h4>
+                </CardHeader>
+                <CardContent className="pt-6 space-y-5">
+                  <div className="flex justify-between items-end mb-1">
+                    <span className="text-xs font-black text-slate-700">全市場分佈 (Universe: {alphaData?.summary?.total_scanned})</span>
+                    <span className={`text-base font-black ${alphaData?.market_state === 'Bull' ? 'text-rose-500' : 'text-slate-500'}`}>大盤: {alphaData?.market_state}</span>
+                  </div>
+
+                  <div className="space-y-4">
+                    {['Bull', 'Bear', 'Sideways', 'High_Vol'].map((regime) => {
+                      const count = alphaData?.regime_distribution?.[regime] || 0;
+                      const total = alphaData?.summary?.total_scanned || 1;
+                      const percent = Math.round((count / total) * 100);
+                      const colorMap: any = { 'Bull': 'bg-rose-500', 'Bear': 'bg-emerald-500', 'Sideways': 'bg-slate-300', 'High_Vol': 'bg-amber-500' };
+
+                      return (
+                        <div key={regime} className="space-y-1.5">
+                          <div className="flex justify-between text-[10px] font-bold text-slate-500">
+                            <span>{regime}</span>
+                            <span>{percent}% ({count} 檔)</span>
+                          </div>
+                          <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                            <div className={`h-full ${colorMap[regime]} transition-all duration-1000`} style={{ width: `${percent}%` }}></div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 2. Alpha Signals (量化訊號) */}
+              <Card className="lg:col-span-2 border-slate-200">
+                <CardHeader className="pb-4 border-b border-slate-50 flex flex-row items-center justify-between space-y-0">
+                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                    <Zap className="w-3.5 h-3.5 text-amber-500" /> 今日強勢突破訊號 (Daily Signals)
+                  </h4>
+                  <span className="text-[10px] font-black px-2 py-0.5 bg-rose-50 text-rose-600 rounded-full border border-rose-100">
+                    過濾剩餘: {alphaData?.signals?.length || 0} 檔
+                  </span>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50/50 border-b border-slate-100">
+                          <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">標的名稱</th>
+                          <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">強度 (Score)</th>
+                          <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">建議佔比</th>
+                          <th className="px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">目前狀態</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {(!alphaData?.signals || alphaData.signals.length === 0) ? (
+                          <tr>
+                            <td colSpan={5} className="px-6 py-20 text-center text-slate-400 font-bold italic">
+                              {isLoadingAlpha ? '正在同步雲端量化回報...' : '今日暫無符合「強勢突破」之訊號 (Regime Gate 生效中)'}
+                            </td>
+                          </tr>
+                        ) : (
+                          alphaData.signals.map((sig: any, idx: number) => (
+                            <tr key={idx} className="hover:bg-slate-50/50 transition-colors group">
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-[10px] font-black text-slate-500 group-hover:bg-rose-100 group-hover:text-rose-600 transition-colors">
+                                    {sig.symbol.split('.')[0]}
+                                  </div>
+                                  <div>
+                                    <div className="text-sm font-black text-slate-800">{nameMap[sig.symbol] || sig.symbol}</div>
+                                    <div className="text-[10px] text-slate-400 font-bold">${sig.price_est}</div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className="text-xs font-black text-rose-600 bg-rose-50 px-2 py-1 rounded-md">
+                                  {sig.score.toFixed(2)}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 text-xs font-bold text-slate-700">
+                                {sig.pos_ratio}%
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-1.5 text-[10px] font-black text-emerald-600">
+                                  <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
+                                  READY TO ENTRY
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* 2.5 下單執行層 (Execution Layer) */}
+            {alphaData?.orders && alphaData.orders.length > 0 && (
+              <Card className="border-slate-800 bg-slate-900 shadow-xl overflow-hidden animate-in zoom-in-95 duration-500">
+                <CardHeader className="bg-slate-800/50 p-6 flex flex-row items-center justify-between border-b border-white/5">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-rose-500 rounded-lg shadow-lg shadow-rose-500/20">
+                      <ShoppingCart className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-white tracking-widest uppercase">執行層：明日開盤掛單指令 (Execution Layer)</h4>
+                      <p className="text-[10px] text-slate-400 font-bold">由 Portfolio Engine 自動生成，建議於 09:00 前預掛單</p>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="bg-white/5 border-b border-white/5">
+                          <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase">標的</th>
+                          <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase">方向</th>
+                          <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase">執行股數</th>
+                          <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase">執行類型</th>
+                          <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase">止損價格</th>
+                          <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase">策略基因 (Metadata)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {alphaData.orders.map((order: any, idx: number) => (
+                          <tr key={idx} className="hover:bg-white/5 transition-colors">
+                            <td className="px-6 py-5">
+                              <span className="text-sm font-black text-white">{nameMap[order.symbol] || order.symbol}</span>
+                            </td>
+                            <td className="px-6 py-5">
+                              <span className="px-2 py-1 bg-rose-500/20 text-rose-500 text-[10px] font-black rounded border border-rose-500/30">{order.side}</span>
+                            </td>
+                            <td className="px-6 py-5">
+                              <span className="text-lg font-black text-white">{order.shares?.toLocaleString()}</span>
+                              <span className="text-[10px] text-slate-500 ml-1 font-bold">SHARES</span>
+                            </td>
+                            <td className="px-6 py-5">
+                              <div className="flex flex-col">
+                                <span className="text-xs font-black text-slate-300">Next Day Open</span>
+                                <span className="text-[9px] text-slate-500 leading-tight">台股避免漲跌停滑價、最優流動性選擇</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-5">
+                              <span className="text-sm font-black text-emerald-400">${order.stop_price?.toFixed(1)}</span>
+                            </td>
+                            <td className="px-6 py-5">
+                              <div className="flex flex-wrap gap-2">
+                                <span className="px-1.5 py-0.5 bg-slate-800 text-slate-400 text-[9px] font-bold rounded border border-slate-700">SCORE: {order.journal_metadata?.score?.toFixed(1)}</span>
+                                <span className="px-1.5 py-0.5 bg-slate-800 text-slate-400 text-[9px] font-bold rounded border border-slate-700">ADX: {order.journal_metadata?.adx?.toFixed(1)}</span>
+                                <span className="px-1.5 py-0.5 bg-slate-800 text-slate-400 text-[9px] font-bold rounded border border-slate-700 uppercase">{order.journal_metadata?.regime}</span>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* 3. 戰略提示與風險摘要 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="p-6 bg-slate-900 rounded-3xl text-white space-y-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <ShieldCheck className="w-5 h-5 text-rose-500" />
+                  <h4 className="font-black text-sm uppercase tracking-widest">Portfolio Risk Engine</h4>
+                </div>
+                <div className="grid grid-cols-2 gap-6">
+                  <div>
+                    <div className="text-[10px] font-bold text-slate-500 uppercase">最大持倉上限</div>
+                    <div className="text-xl font-black">20.0% <span className="text-[10px] text-slate-400">/ POSITION</span></div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-bold text-slate-500 uppercase">風險承擔系數</div>
+                    <div className="text-xl font-black">1.0% <span className="text-[10px] text-emerald-400">FIXED</span></div>
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-400 leading-relaxed font-medium pt-2 border-t border-slate-800">
+                  系統採用 Volatility Targeting 技術，股數根據最近 14 日 ATR 動態調整。當市場處於 『Bear』 或 『Sideways』 時，引擎會自動熔斷以保護資本。
+                </p>
+              </div>
+
+              <div className="p-6 bg-amber-50 border border-amber-100 rounded-3xl space-y-3">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-amber-600" />
+                  <h4 className="font-black text-amber-900 text-sm uppercase tracking-widest">量化交易提示</h4>
+                </div>
+                <p className="text-xs text-amber-800 leading-relaxed font-medium">
+                  目前的 Alpha 指標顯示全市場多頭動能約為 {Math.round(((alphaData?.regime_distribution?.Bull || 0) / (alphaData?.summary?.total_scanned || 1)) * 100)}%。<br />
+                  <span className="font-black underline">操作紀律：</span> 若標的可選數量過多，請優先選擇強度 (Score) 指標最高的板塊，並確保單一板塊不超過 2 檔持倉。
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* --- 模式 6: 歷史研究報告 --- */}
         {radarView === 'research' && (
           <div className="animate-in fade-in slide-in-from-right-2 duration-500 space-y-10 pb-10">
             <header className="space-y-4 border-b border-slate-100 pb-8">

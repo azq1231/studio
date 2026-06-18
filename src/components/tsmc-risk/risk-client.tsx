@@ -30,7 +30,7 @@ interface RiskData {
     _source?: 'cloud' | 'local';
 }
 
-export default function TsmcRiskClient() {
+export default function TsmcRiskClient({ month }: { month?: string } = {}) {
     const firestore = useFirestore();
     const { toast } = useToast();
     const router = useRouter();
