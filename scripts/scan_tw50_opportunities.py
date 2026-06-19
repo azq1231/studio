@@ -1,10 +1,10 @@
 import yfinance as yf
 import pandas as pd
+import numpy as np
 import json
 import os
-from datetime import datetime
 
-# 定義 50 檔對照表，確保後端直接輸出中文
+# 台灣 50 成份股代號與名稱映射
 TW50_MAPPING = {
     '2330.TW': '台積電', '2317.TW': '鴻海', '2454.TW': '聯發科', '2308.TW': '台達電', 
     '2303.TW': '聯電', '2382.TW': '廣達', '3711.TW': '日月光投控', '2412.TW': '中華電', 
@@ -21,59 +21,80 @@ TW50_MAPPING = {
     '5876.TW': '上海商銀', '9910.TW': '豐泰'
 }
 
+TW50_SYMBOLS = list(TW50_MAPPING.keys())
+
 def scan_opportunity():
     results = []
-    print("正在掃描台股五十成份股共 50 檔...")
+    print(f"正在掃描台股五十成份股共 {len(TW50_SYMBOLS)} 檔...")
     
-    for symbol, name in TW50_MAPPING.items():
+    for symbol in TW50_SYMBOLS:
         try:
-            ticker = yf.Ticker(symbol)
-            df = ticker.history(period='3mo', auto_adjust=False)
-            if df.empty: continue
+            # 增加數據長度以計算 MA240 (年線)
+            df = yf.Ticker(symbol).history(period='2y', interval='1d', auto_adjust=False)
+            if df.empty or len(df) < 240: continue
             
-            prices = df['Close']
-            current_p = round(prices.iloc[-1], 2)
+            # 1. 最新價
+            close = df['Close'].iloc[-1]
             
-            # MA20/Std
-            ma20 = prices.rolling(20).mean().iloc[-1]
-            ma20_std = prices.rolling(20).std().iloc[-1]
-            bp = round((current_p - (ma20 - 2*ma20_std)) / (4*ma20_std + 0.001), 2)
+            # 2. Bias (乖離率) - 使用 MA240
+            ma240 = df['Close'].rolling(window=240).mean().iloc[-1]
+            bias = round((close - ma240) / ma240 * 100, 1)
             
-            # KDJ (J)
-            l9, h9 = df['Low'].rolling(9).min(), df['High'].rolling(9).max()
-            rsv = (prices - l9) / (h9 - l9 + 0.001) * 100
+            # 3. J Value
+            l9 = df['Low'].rolling(window=9).min()
+            h9 = df['High'].rolling(window=9).max()
+            rsv = (df['Close'] - l9) / (h9 - l9 + 0.001) * 100
             K = rsv.ewm(com=2).mean()
             D = K.ewm(com=2).mean()
-            J = round((3*K - 2*D).iloc[-1], 2)
+            J = (3 * K - 2 * D).iloc[-1]
             
+            # 4. 布林帶位階 (BP)
+            ma20 = df['Close'].rolling(20).mean().iloc[-1]
+            std20 = df['Close'].rolling(20).std().iloc[-1]
+            lower = ma20 - (std20 * 2)
+            upper = ma20 + (std20 * 2)
+            bp = (close - lower) / (upper - lower + 0.001)
+            
+            # 5. 波動率 (Volatility) - 近 60 天日變動標準差 (年化百分比)
+            returns = np.log(df['Close'] / df['Close'].shift(1))
+            vol = round(returns.tail(60).std() * np.sqrt(252) * 100, 1)
+            
+            # 6. 近 10 天平均振幅 (日最高/日最低)
+            daily_amp = (df['High'] - df['Low']) / df['Low'] * 100
+            avg_amp = round(daily_amp.tail(10).mean(), 1)
+            
+            # 7. 狀態判定
             status = "HOLD"
-            if J < 20: status = "BUY"
-            elif J > 80: status = "SELL"
+            if J < 15 and bp < 0.15:
+                status = "BUY"
+            elif J > 85 or bp > 0.85:
+                status = "SELL"
             
             results.append({
                 "s": symbol,
-                "n": name, # 直接注入中文名稱，解決手機快取問題
-                "p": current_p,
-                "j": J,
-                "bp": bp,
+                "n": TW50_MAPPING.get(symbol, symbol),
+                "p": round(close, 2),
+                "b": bias,
+                "j": round(J, 1),
+                "bp": round(bp, 2),
                 "st": status,
-                "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                "vol": vol,       # 波動率 (數值愈高，變動愈劇烈)
+                "amp": avg_amp    # 平均日振幅 %
             })
-            print(f"  - {symbol} ({name}): {current_p} (J:{J}) -> {status}")
-            
+            print(f"  - {symbol}: {round(close, 1)} (V:{vol}%, A:{avg_amp}%) -> {status}")
         except Exception as e:
-            print(f"  Error {symbol}: {e}")
+            print(f"  ❌ {symbol} 錯誤: {e}")
+            continue
             
     # 使用相對路徑，相容 GitHub Actions (Ubuntu) 與本地 (Windows)
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    output_path = os.path.join(current_dir, '..', 'public', 'data', 'tw50_full_scan.json')
+    output_path = os.path.join(current_dir, '..', 'studio', 'public', 'data', 'tw50_full_scan.json')
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
     
-    print(f"\n掃描完成，已更新數據至 {os.path.abspath(output_path)}")
-    return results
+    print(f"\n✅ 掃描完成，已更新數據至 {os.path.abspath(output_path)}")
+    return pd.DataFrame(results)
 
-if __name__ == "__main__":
-    scan_opportunity()
+scan_df = scan_opportunity()

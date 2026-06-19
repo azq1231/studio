@@ -98,7 +98,7 @@ def update_risk_json(symbol):
     
     # 使用相對路徑，相容 GitHub Actions (Ubuntu) 與本地 (Windows)
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    output_path = os.path.join(current_dir, '..', 'public', 'data', 'tsmc_risk.json')
+    output_path = os.path.join(current_dir, '..', 'studio', 'public', 'data', 'tsmc_risk.json')
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     
     with open(output_path, 'w', encoding='utf-8') as f:

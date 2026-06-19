@@ -1,0 +1,18 @@
+=== End-to-End Verification Log ===
+Executing: D:\MyProjects\FinanceFlow\scripts/update_full_risk.py
+[SUCCESS]: D:\MyProjects\FinanceFlow\scripts/update_full_risk.py
+Executing: D:\MyProjects\FinanceFlow\scripts/update_portfolio.py
+[SUCCESS]: D:\MyProjects\FinanceFlow\scripts/update_portfolio.py
+Executing: D:\MyProjects\FinanceFlow\scripts/scan_tw50_opportunities.py
+[SUCCESS]: D:\MyProjects\FinanceFlow\scripts/scan_tw50_opportunities.py
+Executing: D:\MyProjects\FinanceFlow\scripts/cloud_sync.py
+[SUCCESS]: D:\MyProjects\FinanceFlow\scripts/cloud_sync.py
+
+--- Firestore Data Check ---
+[OK] marketRecords/tsmc contains 'n' field
+[OK] marketRecords/tw50 contains 'n' field
+[OK] marketRecords/portfolio contains 'name' field
+
+--- Security Rules ---
+MarketSync rules added to firestore.rules.
+All tests passed.

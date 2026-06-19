@@ -63,7 +63,7 @@ def update_all_radar_to_cloud():
     
     # 使用相對路徑: scripts/ -> ../public/data/
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    base_path = os.path.join(current_dir, '..', 'public', 'data')
+    base_path = os.path.join(current_dir, '..', 'studio', 'public', 'data')
     
     print(f"  📂 資料讀取路徑: {os.path.abspath(base_path)}")
 
@@ -99,6 +99,17 @@ def update_all_radar_to_cloud():
              synced += 1
          else:
              print(f"  ⚠️ 跳過: {port_file} 不存在")
+
+         # 4. 同步 2025 回測報告 (Research Data)
+         backtest_file = os.path.join(base_path, 'backtest_2025.json')
+         if os.path.exists(backtest_file):
+             with open(backtest_file, 'r', encoding='utf-8') as f:
+                 backtest_list = json.load(f)
+             # Firestore document ID: backtest_2025
+             sync_to_cloud('marketRecords', 'backtest_2025', {"results": backtest_list})
+             synced += 1
+         else:
+             print(f"  ⚠️ 跳過: {backtest_file} 不存在")
 
     except Exception as e:
         print(f"❌ 數據推送至雲端時發生錯誤: {e}")

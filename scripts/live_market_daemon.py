@@ -13,22 +13,9 @@ SCRIPTS_DIR = BASE_DIR
 # 初始化 Firebase (若未啟動)
 def init_fb():
     if not firebase_admin._apps:
-        # 在 studio/scripts 下，service-account.json 應該在 ../../ (即根目錄)
-        # 或者在 ../ (即 studio 根目錄)
-        possible_paths = [
-            os.path.join(os.path.dirname(BASE_DIR), 'service-account.json'),
-            os.path.join(os.path.dirname(os.path.dirname(BASE_DIR)), 'service-account.json'),
-            'service-account.json'
-        ]
-        found = False
-        for path in possible_paths:
-            if os.path.exists(path):
-                cred = credentials.Certificate(path)
-                firebase_admin.initialize_app(cred)
-                found = True
-                break
-        if not found:
-            raise FileNotFoundError("Could not find service-account.json")
+        sa_path = os.path.join(os.path.dirname(BASE_DIR), 'service-account.json')
+        cred = credentials.Certificate(sa_path)
+        firebase_admin.initialize_app(cred)
     return firestore.client()
 
 def run_sync_scripts():

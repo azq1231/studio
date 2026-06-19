@@ -1,0 +1,91 @@
+{
+  "total": 50,
+  "filtered_count": 12,
+  "filtered_stocks": [
+    {
+      "symbol": "2330.TW",
+      "n_field": "台積電",
+      "status": "HOLD",
+      "j": 21.3,
+      "has_n": true
+    },
+    {
+      "symbol": "2881.TW",
+      "n_field": "富邦金",
+      "status": "BUY",
+      "j": -11.4,
+      "has_n": true
+    },
+    {
+      "symbol": "2882.TW",
+      "n_field": "國泰金",
+      "status": "BUY",
+      "j": 0.7,
+      "has_n": true
+    },
+    {
+      "symbol": "2002.TW",
+      "n_field": "中鋼",
+      "status": "BUY",
+      "j": -6.0,
+      "has_n": true
+    },
+    {
+      "symbol": "3231.TW",
+      "n_field": "緯創",
+      "status": "BUY",
+      "j": 6.8,
+      "has_n": true
+    },
+    {
+      "symbol": "2408.TW",
+      "n_field": "南亞科",
+      "status": "BUY",
+      "j": 0.1,
+      "has_n": true
+    },
+    {
+      "symbol": "2603.TW",
+      "n_field": "長榮",
+      "status": "SELL",
+      "j": 83.7,
+      "has_n": true
+    },
+    {
+      "symbol": "2379.TW",
+      "n_field": "瑞昱",
+      "status": "BUY",
+      "j": -1.3,
+      "has_n": true
+    },
+    {
+      "symbol": "1503.TW",
+      "n_field": "士電",
+      "status": "BUY",
+      "j": 8.6,
+      "has_n": true
+    },
+    {
+      "symbol": "2301.TW",
+      "n_field": "光寶科",
+      "status": "BUY",
+      "j": -18.3,
+      "has_n": true
+    },
+    {
+      "symbol": "5871.TW",
+      "n_field": "中租-KY",
+      "status": "BUY",
+      "j": -14.0,
+      "has_n": true
+    },
+    {
+      "symbol": "5876.TW",
+      "n_field": "上海商銀",
+      "status": "BUY",
+      "j": -20.7,
+      "has_n": true
+    }
+  ],
+  "missing_n_field": []
+}
