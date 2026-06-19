@@ -52,29 +52,29 @@ class AlphaFactory:
             
             print(f"✅ 市場環境良好 ({m_regime})，大盤處於均線上方的強勢區間。")
 
-        # 1. 使用 Matrix Engine 進行極速掃描 (V6 機構級)
-        results_v6 = self.matrix_engine.scan_v6(top_n=20)
+        # 1. 使用 Matrix Engine 進行極速掃描 (V12 機構級)
+        results_v12 = self.matrix_engine.scan_v12(top_n=20)
         
         all_candidates = []
-        for r in results_v6:
+        for r in results_v12:
             all_candidates.append({
                 "symbol": r['symbol'],
                 "score": r['score'],
-                "atr": r['atr'],
+                "atr": r['atr20'], # v12 中使用 atr20 欄位
                 "price": r['price'],
                 "regime": m_regime, 
                 "industry": r['industry'],
                 "journal_metadata": {
                     "rs_rank": r['rs_rank'],
-                    "ind_rs": r['ind_rs'],
+                    "ind_rs": r['rs_rank'], # v12 中無獨立的 ind_rs，使用 rs_rank 映射
                     "vdu": r['vdu'],
                     "atr_comp": r['atr_comp'],
                     "cnh": r['cnh'],
-                    "vol_expand": r['vol_expand']
+                    "vol_expand": r['liq_shock'] # v12 中使用 liq_shock 作為成交量衝擊/擴張代理
                 }
             })
         
-        regime_counts = {"Matrix_VCP_Filtered": len(results_v6)}
+        regime_counts = {"Matrix_VCP_Filtered": len(results_v12)}
 
         # --- D. Signal Ranking & Portfolio Selection ---
         print("\n" + "="*50)
@@ -82,7 +82,7 @@ class AlphaFactory:
         print(f"日期: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print("="*50)
         
-        print(f"🔍 [Market Pulse] 掃描 {len(self.matrix_engine.symbols)} 檔標的狀態：")
+        print(f"🔍 [Market Pulse] 掃描 {len(self.loader.get_all_symbols())} 檔標的狀態：")
         for r, count in regime_counts.items():
             print(f"   {r:<10}: {count} 檔")
         print("-" * 50)
@@ -102,7 +102,7 @@ class AlphaFactory:
             "market_state": m_regime if 'm_regime' in locals() else 'Unknown',
             "regime_distribution": regime_counts,
             "summary": {
-                "total_scanned": len(self.matrix_engine.symbols),
+                "total_scanned": len(self.loader.get_all_symbols()),
                 "candidates_count": len(all_candidates),
                 "filtered_count": len(filtered_top)
             },

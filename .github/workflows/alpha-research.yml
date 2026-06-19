@@ -21,7 +21,7 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install yfinance pandas numpy sqlalchemy firebase-admin matplotlib
+          pip install yfinance pandas numpy sqlalchemy firebase-admin matplotlib polars pyarrow
           
       - name: Alpha Factory Scanning & Sync
         env:
