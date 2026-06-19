@@ -41,13 +41,13 @@ export function CashTransactionForm({
 }) {
     const form = useForm<CashTransactionFormData>({
         resolver: zodResolver(cashTransactionSchema),
-        defaultValues: { description: '', category: '', notes: '' },
+        defaultValues: { date: new Date(), description: '', category: '', notes: '' },
     });
     const { formState: { isSubmitSuccessful } } = form;
     
     useEffect(() => {
         if (isSubmitSuccessful) {
-            form.reset({ description: '', category: '', notes: '', date: undefined, amount: undefined });
+            form.reset({ description: '', category: '', notes: '', date: new Date(), amount: undefined });
         }
     }, [isSubmitSuccessful, form]);
     

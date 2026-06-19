@@ -12,6 +12,8 @@ import { SettingsManager, DEFAULT_SETTINGS, type AppSettings } from '@/component
 import { ResultsDisplay } from '@/components/finance-flow/results-display';
 import { FixedItemsSummary } from '@/components/finance-flow/fixed-items-summary';
 import { BalanceTracker } from '@/components/finance-flow/balance-tracker';
+import { MaintenanceManager, type MaintenanceRecord } from '@/components/finance-flow/maintenance-manager';
+import { Wrench } from 'lucide-react';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -328,6 +330,10 @@ export function FinanceFlowClient() {
   const cashTransactionsQuery = useMemoFirebase(() => user && firestore ? collection(firestore, 'users', user.uid, 'cashTransactions') : null, [user, firestore]);
   const { data: savedCashTransactions, isLoading: isLoadingCash } = useCollection<CashData>(cashTransactionsQuery);
 
+  const maintenanceRecordsQuery = useMemoFirebase(() => user && firestore ? collection(firestore, 'users', user.uid, 'maintenanceRecords') : null, [user, firestore]);
+  const { data: savedMaintenanceRecords, isLoading: isLoadingMaintenance } = useCollection<MaintenanceRecord>(maintenanceRecordsQuery);
+  const [maintenanceRecords, setMaintenanceRecords] = useState<MaintenanceRecord[]>([]);
+
   const settingsDocRef = useMemoFirebase(() => user && firestore ? doc(firestore, 'users', user.uid, 'settings', 'user-settings') : null, [user, firestore]);
   const { data: savedSettings, isLoading: isLoadingSettings } = useDoc<AppSettings>(settingsDocRef);
 
@@ -335,6 +341,7 @@ export function FinanceFlowClient() {
   useEffect(() => { if (savedCreditTransactions) setCreditData(savedCreditTransactions); }, [savedCreditTransactions]);
   useEffect(() => { if (savedDepositTransactions) setDepositData(savedDepositTransactions); }, [savedDepositTransactions]);
   useEffect(() => { if (savedCashTransactions) setCashData(savedCashTransactions); }, [savedCashTransactions]);
+  useEffect(() => { if (savedMaintenanceRecords) setMaintenanceRecords(savedMaintenanceRecords); }, [savedMaintenanceRecords]);
 
   useEffect(() => {
     if (user && savedSettings) {
@@ -545,6 +552,49 @@ export function FinanceFlowClient() {
     }
   }, [user, firestore, toast]);
 
+  const handleAddMaintenanceRecord = useCallback(async (newRecordData: Omit<MaintenanceRecord, 'id'>) => {
+    if (!user || !firestore) { toast({ variant: 'destructive', title: '錯誤', description: '請先登入' }); return; }
+    const idString = `${newRecordData.date}-${newRecordData.location}-${newRecordData.item}-${newRecordData.amount}-${Date.now()}`;
+    const id = await sha1(idString);
+    const newRecord: MaintenanceRecord = { ...newRecordData, id };
+    try {
+      const maintenanceCollectionRef = collection(firestore, 'users', user.uid, 'maintenanceRecords');
+      // 移除值為 undefined 的欄位，防止 Firestore 寫入崩潰
+      const cleanRecord = Object.fromEntries(
+        Object.entries({ ...newRecord, createdAt: serverTimestamp() }).filter(([_, v]) => v !== undefined)
+      );
+      await setDoc(doc(maintenanceCollectionRef, newRecord.id), cleanRecord);
+      toast({ title: '成功', description: '維修紀錄已新增' });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "儲存失敗", description: e.message || "無法將資料儲存到資料庫。" });
+    }
+  }, [user, firestore, toast]);
+
+  const handleDeleteMaintenanceRecord = useCallback(async (id: string) => {
+    if (!user || !firestore) return;
+    setMaintenanceRecords(prev => prev.filter(item => item.id !== id));
+    try {
+      await deleteDoc(doc(firestore, 'users', user.uid, 'maintenanceRecords', id));
+      toast({ title: '成功', description: '維修紀錄已刪除' });
+    } catch (error) {
+      toast({ variant: "destructive", title: "刪除失敗", description: `無法從資料庫中刪除此筆紀錄。` });
+    }
+  }, [user, firestore, toast]);
+
+  const handleUpdateMaintenanceRecord = useCallback(async (id: string, updatedRecordData: Partial<Omit<MaintenanceRecord, 'id'>>) => {
+    if (!user || !firestore) return;
+    setMaintenanceRecords(prev => prev.map(item => item.id === id ? { ...item, ...updatedRecordData } : item));
+    try {
+      const cleanData = Object.fromEntries(
+        Object.entries(updatedRecordData).filter(([_, v]) => v !== undefined)
+      );
+      await updateDoc(doc(firestore, 'users', user.uid, 'maintenanceRecords', id), cleanData);
+      toast({ title: '成功', description: '維修紀錄已更新' });
+    } catch (error) {
+      toast({ variant: "destructive", title: "更新失敗", description: `無法更新此筆紀錄。` });
+    }
+  }, [user, firestore, toast]);
+
   const handleDeleteAllData = useCallback(async () => {
     if (!user || !firestore) { toast({ variant: 'destructive', title: '錯誤', description: '請先登入' }); return; }
     setIsLoading(true);
@@ -596,7 +646,7 @@ export function FinanceFlowClient() {
     }
   }, [user, firestore, toast]);
 
-  const isLoadingData = isLoadingCredit || isLoadingDeposit || isLoadingCash || (user && isLoadingSettings);
+  const isLoadingData = isLoadingCredit || isLoadingDeposit || isLoadingCash || isLoadingMaintenance || (user && isLoadingSettings);
 
   const combinedData: CombinedData[] = useMemo(() => {
     const parseDateSafe = (dateString: string): Date => {
@@ -675,6 +725,10 @@ export function FinanceFlowClient() {
         <TabsTrigger value="stock-radar" className="flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs md:text-sm text-cyan-600 font-bold data-[state=active]:text-cyan-700 data-[state=active]:bg-cyan-50">
           <Activity className="h-3.5 w-3.5 shrink-0" />
           <span className="truncate">股市雷達</span>
+        </TabsTrigger>
+        <TabsTrigger value="maintenance" className="flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs md:text-sm text-slate-700 font-bold data-[state=active]:text-primary">
+          <Wrench className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">維修紀錄</span>
         </TabsTrigger>
       </TabsList>
       <TabsContent value="importer" className="mt-4">
@@ -772,6 +826,23 @@ export function FinanceFlowClient() {
               </div>
             </CardContent>
           </Card>
+        )}
+      </TabsContent>
+      <TabsContent value="maintenance" className="mt-4">
+        {isLoadingData && user ? (
+          <div className="space-y-4 pt-4">
+            <Card><CardHeader><Skeleton className="h-8 w-48 rounded-md" /></CardHeader>
+              <CardContent className="space-y-4"><Skeleton className="h-48 w-full rounded-md" /></CardContent></Card>
+          </div>
+        ) : (
+          <MaintenanceManager
+            records={maintenanceRecords}
+            onAddRecord={handleAddMaintenanceRecord}
+            onDeleteRecord={handleDeleteMaintenanceRecord}
+            onUpdateRecord={handleUpdateMaintenanceRecord}
+            user={user}
+            isProcessing={isLoading}
+          />
         )}
       </TabsContent>
       <TabsContent value="stock-radar" className="mt-1 pt-0 outline-none overflow-hidden">
