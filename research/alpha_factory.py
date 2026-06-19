@@ -33,6 +33,10 @@ class AlphaFactory:
         print(f"🕵️ 正在檢測整體市場環境 ({self.market_proxy})...")
         m_df = self.loader.get_stock_data(self.market_proxy)
         if not m_df.empty:
+            m_df.dropna(subset=['Close'], inplace=True)
+            if m_df.empty:
+                print("⚠️ 大盤數據過濾後為空")
+                return
             m_df.set_index('date', inplace=True)
             # 計算加權指數 MA200
             m_df['MA200'] = m_df['Close'].rolling(200).mean()
