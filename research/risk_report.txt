@@ -1,0 +1,14 @@
+Position Sizing Test: 2330.TW starting...
+
+Comparison Results:
+Metric               | Fixed Full           | Risk Based          
+-----------------------------------------------------------------
+Total Return %       |               127.94 |                19.94
+Max Drawdown %       |                -19.5 |                -4.87
+Sharpe Ratio         |                 0.86 |                 0.59
+Expectancy %         |                 9.57 |                 9.57
+Avg PnL %            |                 9.57 |                 9.57
+
+Total Trades: 17 (Fixed) vs 17 (Risk)
+
+Plot saved to: D:\MyProjects\FinanceFlow\research\risk_sizing_comparison.png

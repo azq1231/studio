@@ -1,0 +1,75 @@
+=== 2330.TW Stress Test ===
+🕵️ 正在啟動 2330.TW 的『2022 大空頭生存壓力測試』...
+
+📊 --- Walk-Forward 壓力測試報告 ---
+指標              | In-Sample (2019-21)  | Out-of-Sample (2022)
+-----------------------------------------------------------------
+Total Return %  |                66.26 |                -1.03
+Max Drawdown %  |               -18.49 |                -8.56
+Sharpe Ratio    |                 1.23 |                 -0.2
+Profit Factor   |                19.11 |                  0.0
+Expectancy %    |                35.45 |                -0.63
+Win Rate %      |                 50.0 |                  0.0
+
+🌍 --- 市場型態 (Regime) 績效分析 ---
+          Count  Avg_Daily_Ret%  Sharpe
+regime                                 
+Bear        249          0.0000    0.00
+Bull        972          0.1244    1.52
+High_Vol    103          0.0938    0.85
+Sideways    174          0.0000    0.00
+Unknown     198          0.0000    0.00
+
+📂 壓力測試圖標已儲存: D:\MyProjects\FinanceFlow\research\stress_test_2330.TW_2022.png
+
+==================================================
+
+=== 2454.TW Stress Test ===
+🕵️ 正在啟動 2454.TW 的『2022 大空頭生存壓力測試』...
+
+📊 --- Walk-Forward 壓力測試報告 ---
+指標              | In-Sample (2019-21)  | Out-of-Sample (2022)
+-----------------------------------------------------------------
+Total Return %  |                50.71 |                  0.0
+Max Drawdown %  |               -24.24 |                  0.0
+Sharpe Ratio    |                 0.71 |           -629940.79
+Profit Factor   |          470028011.2 |                    0
+Expectancy %    |                 23.5 |                    0
+Win Rate %      |                100.0 |                    0
+
+🌍 --- 市場型態 (Regime) 績效分析 ---
+          Count  Avg_Daily_Ret%  Sharpe
+regime                                 
+Bear        292          0.0000    0.00
+Bull        825          0.0811    0.87
+High_Vol    108         -0.3312   -2.46
+Sideways    273          0.0000    0.00
+Unknown     198          0.0000    0.00
+
+📂 壓力測試圖標已儲存: D:\MyProjects\FinanceFlow\research\stress_test_2454.TW_2022.png
+
+==================================================
+
+=== 1503.TW Stress Test ===
+🕵️ 正在啟動 1503.TW 的『2022 大空頭生存壓力測試』...
+
+📊 --- Walk-Forward 壓力測試報告 ---
+指標              | In-Sample (2019-21)  | Out-of-Sample (2022)
+-----------------------------------------------------------------
+Total Return %  |               -14.03 |                -5.22
+Max Drawdown %  |               -17.58 |                 -5.4
+Sharpe Ratio    |                -0.93 |                -1.55
+Profit Factor   |                  0.0 |                    0
+Expectancy %    |                -4.23 |                    0
+Win Rate %      |                  0.0 |                    0
+
+🌍 --- 市場型態 (Regime) 績效分析 ---
+          Count  Avg_Daily_Ret%  Sharpe
+regime                                 
+Bear        303          0.0000    0.00
+Bull        676         -0.0414   -1.14
+High_Vol    228          0.0000    0.00
+Sideways    291         -0.0111   -0.93
+Unknown     198          0.0000    0.00
+
+📂 壓力測試圖標已儲存: D:\MyProjects\FinanceFlow\research\stress_test_1503.TW_2022.png

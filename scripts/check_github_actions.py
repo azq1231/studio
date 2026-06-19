@@ -2,6 +2,7 @@ import urllib.request
 import json
 import subprocess
 import sys
+import time
 
 def get_token():
     try:
@@ -15,7 +16,6 @@ def get_token():
     return None
 
 def fetch_api(url, token, is_log=False):
-    # 客製 RedirectHandler 避免將 Authorization Header 洩漏到第三方儲存服務 (S3/GCS) 導致 403 錯誤
     class NoAuthRedirectHandler(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, req, fp, code, msg, headers, newurl):
             new_req = urllib.request.Request(newurl)
@@ -49,28 +49,67 @@ def main():
         print("❌ 無法取得 GitHub 憑證")
         sys.exit(1)
 
-    run_id = "27838552845"
-    url = f"https://api.github.com/repos/azq1231/studio/actions/runs/{run_id}/jobs"
+    # 取得本地 studio 倉庫最新 commit message
+    try:
+        commit_msg = subprocess.check_output(['git', '-C', 'studio', 'log', '-n', '1', '--format=%s'], text=True).strip()
+        print(f"🔎 正在監控本地最新 Commit: \"{commit_msg}\" 的 GitHub Actions 狀態...")
+    except Exception as e:
+        print(f"⚠️ 無法取得本地 commit message: {e}")
+        commit_msg = "feat: sync all scripts"
+
+    url = "https://api.github.com/repos/azq1231/studio/actions/runs?per_page=5"
     
-    data = fetch_api(url, token)
-    if data:
-        jobs = data.get('jobs', [])
-        for job in jobs:
-            job_id = job['id']
-            print(f"🔎 正在獲取 Job {job_id} 的 Logs...")
-            log_url = f"https://api.github.com/repos/azq1231/studio/actions/jobs/{job_id}/logs"
-            log_data = fetch_api(log_url, token, is_log=True)
-            if log_data:
-                print("="*80)
-                print(f"🚀 Job {job_id} ({job['name']}) 最後 40 行日誌：")
-                print("="*80)
-                lines = log_data.split('\n')
-                print('\n'.join(lines[-40:]))
-                print("="*80)
+    max_checks = 25
+    check_interval = 15
+    
+    for i in range(max_checks):
+        data = fetch_api(url, token)
+        if data:
+            runs = data.get('workflow_runs', [])
+            target_run = None
+            
+            # 尋找匹配最新 commit 訊息的 run (包含 in_progress 或是已完成的)
+            for run in runs:
+                msg = run.get('head_commit', {}).get('message', '')
+                if commit_msg in msg or msg in commit_msg:
+                    target_run = run
+                    break
+            
+            if target_run:
+                run_id = target_run['id']
+                status = target_run['status']
+                conclusion = target_run['conclusion']
+                html_url = target_run['html_url']
+                
+                print(f"[{i+1}/{max_checks}] Run ID: {run_id} | 狀態: {status} | 結果: {conclusion}")
+                
+                if status == 'completed':
+                    if conclusion == 'success':
+                        print(f"\n🎉 [部屬與驗證成功] GitHub Actions: {target_run.get('name')} 執行成功！")
+                        sys.exit(0)
+                    else:
+                        print(f"\n❌ [建置失敗] Actions {run_id} 執行結果為: {conclusion}")
+                        # 下載並印出失敗 Job 的 Log
+                        jobs_url = f"https://api.github.com/repos/azq1231/studio/actions/runs/{run_id}/jobs"
+                        jobs_data = fetch_api(jobs_url, token)
+                        if jobs_data:
+                            for job in jobs_data.get('jobs', []):
+                                if job['conclusion'] == 'failure':
+                                    print(f"❌ 失敗的 Job: {job['name']}")
+                                    log_url = f"https://api.github.com/repos/azq1231/studio/actions/jobs/{job['id']}/logs"
+                                    log_data = fetch_api(log_url, token, is_log=True)
+                                    if log_data:
+                                        print("日誌最後 30 行:")
+                                        lines = log_data.split('\n')
+                                        for line in lines[-30:]:
+                                            print(f"  {line}")
+                        sys.exit(1)
             else:
-                print("❌ 無法取得 Logs")
-    else:
-        print("❌ 無法取得 Jobs 資訊")
+                print("ℹ️ 尚未在 GitHub 上找到對應此 Commit 的 Runs...")
+                
+        time.sleep(check_interval)
+        
+    print("\n⚠️ 追蹤超時，請到 GitHub 網頁查看後續進度。")
 
 if __name__ == "__main__":
     main()
