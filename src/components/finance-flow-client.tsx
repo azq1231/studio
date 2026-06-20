@@ -1811,22 +1811,8 @@ export function FinanceFlowClient() {
                       <h3 className="text-3xl font-black text-slate-800">{pos.name}</h3>
                       <div className="flex items-center gap-2 mt-1">
                         <p className="text-xs text-slate-500 font-bold uppercase">
-                          買入成本: ${pos.avg_price} | 持有 {(pos.shares || 1000).toLocaleString()} 股
+                          買入成本: ${pos.avg_price} | 持有 {(pos.shares || 1000).toLocaleString()} 股 | 標的代號: {pos.symbol}
                         </p>
-                        <button
-                          onClick={() => handleOpenEditDialog(pos)}
-                          className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-all"
-                          title="調整持股成本/股數"
-                        >
-                          <Settings className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDeletePosition(pos.symbol, pos.name)}
-                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg transition-all"
-                          title="刪除此持股監控"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
                       </div>
                     </div>
                   </div>
@@ -1864,19 +1850,35 @@ export function FinanceFlowClient() {
                   </div>
                 </div>
 
-                {/* 模擬下單介面按鈕 (對照截圖：紅進綠出) */}
-                <div className="flex gap-4 pt-4">
+                {/* 模擬下單與配置按鈕列 */}
+                <div className="flex flex-wrap md:flex-nowrap gap-3 pt-4">
                   <button 
                     onClick={() => handleOpenTxDialog(pos, 'buy')}
-                    className="flex-1 py-4 bg-rose-500 text-white font-black rounded-2xl hover:bg-rose-600 shadow-lg shadow-rose-200 transition-all active:scale-95"
+                    className="flex-1 py-4 bg-rose-500 text-white font-black rounded-2xl hover:bg-rose-600 shadow-lg shadow-rose-200/50 transition-all active:scale-95 text-sm"
                   >
                     買進 (加碼)
                   </button>
                   <button 
                     onClick={() => handleOpenTxDialog(pos, 'sell')}
-                    className="flex-1 py-4 bg-emerald-500 text-white font-black rounded-2xl hover:bg-emerald-600 shadow-lg shadow-emerald-200 transition-all active:scale-95"
+                    className="flex-1 py-4 bg-emerald-500 text-white font-black rounded-2xl hover:bg-emerald-600 shadow-lg shadow-emerald-200/50 transition-all active:scale-95 text-sm"
                   >
                     賣出 (減碼)
+                  </button>
+                  
+                  {/* 齒輪與垃圾桶按鈕移到底部，解決重疊且方便行動端操作 */}
+                  <button
+                    onClick={() => handleOpenEditDialog(pos)}
+                    className="p-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl transition-all active:scale-95"
+                    title="調整持股成本/股數"
+                  >
+                    <Settings className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => handleDeletePosition(pos.symbol, pos.name)}
+                    className="p-4 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-2xl transition-all active:scale-95"
+                    title="刪除此持股監控"
+                  >
+                    <Trash2 className="w-5 h-5" />
                   </button>
                 </div>
               </div>
