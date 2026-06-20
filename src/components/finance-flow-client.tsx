@@ -19,10 +19,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Text, Settings, ClipboardCopy, FileText, BarChart2, Zap, ShoppingCart, Wallet, TrendingUp, Target, Activity, History, Calendar, AlertTriangle, UserCheck, TrendingDown, Clock, ShieldCheck, ArrowLeft, ArrowDown, ArrowRight } from 'lucide-react';
+import { Text, Settings, ClipboardCopy, FileText, BarChart2, Zap, ShoppingCart, Wallet, TrendingUp, Target, Activity, History, Calendar, AlertTriangle, UserCheck, TrendingDown, Clock, ShieldCheck, ArrowLeft, ArrowDown, ArrowRight, Plus, Trash2, HelpCircle, CheckCircle } from 'lucide-react';
 import { parse } from 'date-fns';
 import { formatCurrency, formatSafeDate } from "@/lib/utils";
 import { getCreditDisplayDate } from '@/lib/parser';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 import { type CombinedData } from '@/types/index';
 
@@ -153,6 +156,163 @@ export function FinanceFlowClient() {
       hotPicks: hotPick
     };
   }, [tw50Data]);
+
+  // --- 量化超賣推薦股 ---
+  const recommendedStocks = useMemo(() => {
+    if (!tw50Data || !Array.isArray(tw50Data)) return [];
+    return tw50Data
+      .filter((s: any) => s.st === 'BUY')
+      .map((s: any) => ({
+        s: s.s,
+        n: s.n || nameMap[s.s] || s.s.split('.')[0],
+        p: s.p,
+        b: s.b || 0,
+        j: s.j || 0,
+        bp: s.bp || 0,
+        st: s.st,
+        vol: s.vol,
+        amp: s.amp
+      }));
+  }, [tw50Data]);
+
+  // --- 實戰持股總覽數據計算 ---
+  const portfolioSummary = useMemo(() => {
+    if (!portfolioData || !portfolioData.positions || !Array.isArray(portfolioData.positions)) {
+      return { totalPNL: 0, currentTotalValue: 0, totalInvested: 0, pnlPercent: 0 };
+    }
+    const totalInvested = portfolioData.total_invested || 0;
+    const totalPNL = portfolioData.positions.reduce((acc: number, p: any) => acc + (p.pnl_value || 0), 0);
+    const currentTotalValue = totalInvested + totalPNL;
+    const pnlPercent = totalInvested > 0 ? (totalPNL / totalInvested) * 100 : 0;
+    return { totalPNL, currentTotalValue, totalInvested, pnlPercent };
+  }, [portfolioData]);
+
+  // --- 一鍵加入與刪除持股 States ---
+  const [isOpenAddDialog, setIsOpenAddDialog] = useState(false);
+  const [selectedRecStock, setSelectedRecStock] = useState<any>(null);
+  const [newAvgPrice, setNewAvgPrice] = useState("");
+  const [newShares, setNewShares] = useState("1000");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // --- 新增持股至實戰監控 ---
+  const handleOpenAddDialog = (stock: any) => {
+    setSelectedRecStock(stock);
+    setNewAvgPrice(String(stock.p || stock.price || ''));
+    setNewShares("1000");
+    setIsOpenAddDialog(true);
+  };
+
+  const handleAddPositionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedRecStock || !newAvgPrice) return;
+    
+    setIsSubmitting(true);
+    try {
+      const parsedAvgPrice = parseFloat(newAvgPrice);
+      const parsedShares = parseInt(newShares) || 1000;
+
+      const newPos = {
+        symbol: selectedRecStock.s || selectedRecStock.symbol,
+        name: selectedRecStock.n || selectedRecStock.name || nameMap[selectedRecStock.s || selectedRecStock.symbol] || (selectedRecStock.s || selectedRecStock.symbol).split('.')[0],
+        avg_price: parsedAvgPrice,
+        shares: parsedShares,
+        current_price: selectedRecStock.p || selectedRecStock.price || 0,
+        pnl_value: Math.round(((selectedRecStock.p || selectedRecStock.price || 0) - parsedAvgPrice) * parsedShares),
+        pnl_percent: Math.round(((selectedRecStock.p || selectedRecStock.price || parsedAvgPrice) / parsedAvgPrice - 1) * 10000) / 100,
+        j_val: selectedRecStock.j || selectedRecStock.j_val || 0,
+        bp: selectedRecStock.bp || 0,
+        action: "HOLD",
+        advice: "⏳ 已從推薦股票加入，點擊「同步即時損益」獲取最新量化訊號建議。",
+        targets: [parsedAvgPrice * 1.05, parsedAvgPrice * 1.12].map(v => Math.round(v * 10) / 10),
+        stop_loss: Math.round(parsedAvgPrice * 0.9 * 10) / 10
+      };
+
+      const currentPositions = portfolioData?.positions || [];
+      
+      if (currentPositions.some((p: any) => p.symbol.toUpperCase() === newPos.symbol.toUpperCase())) {
+        toast({
+          title: "⚠️ 標的已存在",
+          description: `您的持股中已包含 ${newPos.name}。`,
+          variant: "destructive",
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      const updatedPositions = [...currentPositions, newPos];
+      const updatedTotalInvested = updatedPositions.reduce((acc, p) => acc + (p.avg_price * (p.shares || 1000)), 0);
+
+      const updatedData = {
+        last_updated: portfolioData?.last_updated || new Date().toISOString().replace('T', ' ').substring(0, 19),
+        total_invested: updatedTotalInvested,
+        positions: updatedPositions
+      };
+
+      if (cloudPortfolioData && portfolioDocRef) {
+        await setDoc(portfolioDocRef, updatedData);
+        toast({
+          title: "✅ 成功加入實戰持股",
+          description: `已成功將 ${newPos.name} (${newPos.symbol}) 加入監控。`
+        });
+      } else {
+        setPortfolioDataLocal(updatedData);
+        toast({
+          title: "✅ 本地新增成功",
+          description: "目前處於本地模式，變更已在畫面上生效，但未寫入雲端。",
+        });
+      }
+
+      setIsOpenAddDialog(false);
+      setSelectedRecStock(null);
+    } catch (error: any) {
+      toast({
+        title: "❌ 新增失敗",
+        description: error.message || "更新配置時發生錯誤。",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // --- 刪除實戰持股 ---
+  const handleDeletePosition = async (symbolToDelete: string, name: string) => {
+    if (typeof window !== "undefined" && !window.confirm(`確定要刪除持股 ${name} (${symbolToDelete}) 嗎？`)) {
+      return;
+    }
+
+    try {
+      const currentPositions = portfolioData?.positions || [];
+      const updatedPositions = currentPositions.filter((p: any) => p.symbol !== symbolToDelete);
+      const updatedTotalInvested = updatedPositions.reduce((acc: number, p: any) => acc + (p.avg_price * (p.shares || 1000)), 0);
+
+      const updatedData = {
+        last_updated: portfolioData?.last_updated || new Date().toISOString().replace('T', ' ').substring(0, 19),
+        total_invested: updatedTotalInvested,
+        positions: updatedPositions
+      };
+
+      if (cloudPortfolioData && portfolioDocRef) {
+        await setDoc(portfolioDocRef, updatedData);
+        toast({
+          title: "🗑️ 刪除成功",
+          description: `已成功將 ${name} 從持股中移除。`
+        });
+      } else {
+        setPortfolioDataLocal(updatedData);
+        toast({
+          title: "🗑️ 本地刪除成功",
+          description: "變更已在本地生效，未寫入雲端。",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "❌ 刪除失敗",
+        description: error.message || "更新配置時發生錯誤。",
+        variant: "destructive",
+      });
+    }
+  };
 
   // 1. 獲取本地 fallback 資料
   useEffect(() => {
@@ -1005,106 +1165,233 @@ export function FinanceFlowClient() {
         {/* --- 模式 1: 總覽 --- */}
         {radarView === 'overview' && (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-700">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <Card className="bg-white border-slate-200 shadow-sm hover:shadow-md transition-all cursor-pointer group" onClick={() => setRadarView('tsmc')}>
-                <CardHeader className="pb-2">
-                  <div className="flex flex-col gap-0.5">
-                    <div className="flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                      <span className="flex items-center gap-1.5">
-                        TSMC 監測
-                        <span className={`flex items-center gap-1 px-1.5 py-0.5 text-[8px] rounded-full border ${cloudTsmcData ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' : 'bg-amber-500/10 text-amber-600 border-amber-500/20'}`}>
-                          <span className={`w-1 h-1 rounded-full ${cloudTsmcData ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
-                          {cloudTsmcData ? 'Cloud Live' : 'Local Cache'}
-                        </span>
-                      </span>
-                      <Activity className="w-3 h-3 text-cyan-500 group-hover:animate-pulse" />
-                    </div>
-                    <div className="text-[8px] text-slate-300 font-bold uppercase tracking-tighter">
-                      Src: Yahoo Finance • 10m Sync
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-black text-slate-800">{tsmcData?.risk_score ?? '--'}%</span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${tsmcData?.risk_score < 30 ? 'bg-emerald-50 text-emerald-600' :
-                      tsmcData?.risk_score < 70 ? 'bg-amber-50 text-amber-600' :
-                        'bg-rose-50 text-rose-600'
-                      }`}>
-                      {tsmcData?.risk_score < 30 ? '核心安全區' : (tsmcData?.risk_score < 70 ? '中性盤整期' : '極端警戒區')}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
+            {/* 總覽數值橫條 */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 bg-white/70 backdrop-blur-md border border-slate-100 p-6 rounded-3xl shadow-sm">
+              <div className="space-y-1">
+                <div className="text-slate-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5">
+                  <Wallet className="w-3.5 h-3.5 text-slate-500" />
+                  實戰總資產淨值
+                </div>
+                <div className="text-2xl font-black text-slate-800">
+                  ${portfolioSummary.currentTotalValue.toLocaleString()}
+                </div>
+                <div className="text-[10px] text-slate-400 font-bold">
+                  投入本金: ${portfolioSummary.totalInvested.toLocaleString()}
+                </div>
+              </div>
 
-              <Card className={`bg-white border-slate-200 shadow-sm hover:shadow-md transition-all border-l-4 cursor-pointer group ${portfolioData?.positions?.[0]?.pnl_value >= 0 ? 'border-l-rose-500' : 'border-l-emerald-500'}`} onClick={() => setRadarView('portfolio')}>
-                <CardHeader className="pb-2">
-                  <div className="flex flex-col gap-0.5">
-                    <div className="flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                      <span className="flex items-center gap-1.5">
-                        持倉動態 ({nameMap[portfolioData?.positions?.[0]?.symbol] || portfolioData?.positions?.[0]?.name || portfolioData?.positions?.[0]?.symbol || '--'})
-                        <span className={`flex items-center gap-1 px-1.5 py-0.5 text-[8px] rounded-full border ${cloudPortfolioData ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' : 'bg-amber-500/20 text-amber-400 border-amber-500/20'}`}>
-                          {cloudPortfolioData ? 'Cloud live' : 'Local file'}
-                        </span>
-                      </span>
-                      <Target className="w-3 h-3 text-indigo-500" />
-                    </div>
-                    <div className="text-[8px] text-slate-300 font-bold uppercase tracking-tighter">
-                      Updated: {safeTimeStr(portfolioData?.last_updated)}
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-black text-slate-800">${portfolioData?.positions?.[0]?.current_price || '--'}</span>
-                    <span className={`text-[10px] font-black tracking-tighter animate-pulse ${portfolioData?.positions?.[0]?.pnl_value >= 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
-                      {portfolioData?.positions?.[0]?.pnl_value >= 0 ? '獲利中 +' : '盤整中 '}{portfolioData?.positions?.[0]?.pnl_percent}%
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
+              <div className="space-y-1 border-t sm:border-t-0 sm:border-l border-slate-100 pt-4 sm:pt-0 sm:pl-6">
+                <div className="text-slate-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5">
+                  <TrendingUp className="w-3.5 h-3.5 text-slate-500" />
+                  累積浮動損益
+                </div>
+                <div className={`text-2xl font-black ${portfolioSummary.totalPNL >= 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                  {portfolioSummary.totalPNL >= 0 ? '+' : ''}{portfolioSummary.totalPNL.toLocaleString()}
+                </div>
+                <div className={`text-[10px] font-bold ${portfolioSummary.totalPNL >= 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
+                  投報率: {portfolioSummary.totalPNL >= 0 ? '+' : ''}{portfolioSummary.pnlPercent.toFixed(2)}%
+                </div>
+              </div>
 
-              <Card className="bg-white border-slate-200 shadow-sm hover:shadow-md transition-all cursor-pointer group hover:bg-rose-50/10 border-rose-100" onClick={() => setRadarView('alpha')}>
-                <CardHeader className="pb-2">
-                  <div className="flex justify-between items-center text-[10px] font-black text-rose-500 uppercase tracking-widest">
-                    <span>Alpha Factory 量化掃描</span>
-                    <BarChart2 className="w-3 h-3" />
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-black text-slate-800">{alphaData?.market_state || '--'}</span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 bg-rose-50 text-rose-600 rounded-full animate-pulse border border-rose-100">
-                      今日觸發 {alphaData?.summary?.candidates_count || 0} 家
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-white border-slate-200 shadow-sm hover:shadow-md transition-all cursor-pointer group" onClick={() => setRadarView('tw50')}>
-                <CardHeader className="pb-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">明日行情預測</CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-700">
-                      {tw50Data?.find((s: any) => s.st === 'BUY')?.s === '2603.TW' ? '航海王：長榮' :
-                        tw50Data?.find((s: any) => s.st === 'BUY')?.s === '5871.TW' ? '中租 5871' :
-                          tw50Data?.find((s: any) => s.st === 'BUY')?.s === '2609.TW' ? '陽明 2609' :
-                            tw50Data?.find((s: any) => s.st === 'BUY')?.s ? (tw50Data.find((s: any) => s.st === 'BUY').n || nameMap[tw50Data.find((s: any) => s.st === 'BUY').s] || tw50Data.find((s: any) => s.st === 'BUY').s) :
-                              '市場中性'}
-                    </span>
-                    <span className={`text-[10px] font-black ${tw50Data?.some((s: any) => s.st === 'BUY') ? 'text-rose-600 bg-rose-50' : 'text-slate-400 bg-slate-50'} px-2 py-0.5 rounded-full shadow-sm`}>
-                      {tw50Data?.some((s: any) => s.st === 'BUY') ? '超跌強彈觸發' : '無顯著機會'}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
+              <div className="space-y-1 border-t sm:border-t-0 sm:border-l border-slate-100 pt-4 sm:pt-0 sm:pl-6">
+                <div className="text-slate-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5">
+                  <Target className="w-3.5 h-3.5 text-slate-500" />
+                  數據庫更新時間
+                </div>
+                <div className="text-base font-black text-slate-700 mt-1">
+                  {safeTimeStr(portfolioData?.last_updated)}
+                </div>
+                <div className="text-[9px] text-slate-400 font-bold flex items-center gap-1">
+                  <span className={`w-1.5 h-1.5 rounded-full ${cloudPortfolioData ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'}`}></span>
+                  資料來源: {cloudPortfolioData ? '雲端即時同步' : '本地備援快取'}
+                </div>
+              </div>
             </div>
 
-            <div className="p-8 bg-blue-50/50 border border-blue-100 rounded-3xl flex items-start gap-4">
-              <ShieldCheck className="w-6 h-6 text-blue-500 mt-1 shrink-0" />
+            {/* 雙欄內容 */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              
+              {/* 左欄：當前實戰持股 (7 Columns) */}
+              <div className="lg:col-span-7 space-y-6">
+                <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                  <Wallet className="w-4 h-4 text-slate-600" />
+                  監控中的持股 ({portfolioData?.positions?.length || 0})
+                </h3>
+
+                {!portfolioData || !portfolioData.positions || portfolioData.positions.length === 0 ? (
+                  <div className="bg-white/50 border border-slate-100 rounded-3xl p-12 text-center shadow-sm">
+                    <AlertTriangle className="w-8 h-8 text-slate-400 mx-auto mb-3" />
+                    <div className="text-slate-700 font-bold text-sm mb-1">目前無監控持股</div>
+                    <p className="text-slate-400 text-[11px] max-w-sm mx-auto leading-relaxed">
+                      尚未建立任何實戰持股。您可以參考右側「量化超賣推薦」標的，點擊加號一鍵加入監控。
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {portfolioData.positions.map((pos: any, idx: number) => {
+                      const hasJVal = pos.j_val !== undefined;
+                      const hasBp = pos.bp !== undefined;
+                      const isLoss = pos.pnl_value < 0;
+
+                      return (
+                        <div key={idx} className="bg-white border border-slate-100 rounded-3xl p-6 hover:shadow-md transition-all duration-300 relative group overflow-hidden">
+                          {/* 右上角刪除按鈕 */}
+                          <button
+                            onClick={() => handleDeletePosition(pos.symbol, pos.name)}
+                            className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                            title="移除此持股"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+
+                          <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                            {/* 基本資訊與損益 */}
+                            <div className="md:col-span-5 space-y-3">
+                              <div>
+                                <div className="flex items-center gap-2 mb-0.5">
+                                  <span className="px-1.5 py-0.5 text-[9px] bg-slate-100 text-slate-600 rounded font-bold uppercase">
+                                    持有中
+                                  </span>
+                                  <h4 className="font-black text-slate-800 text-base">{pos.name}</h4>
+                                </div>
+                                <span className="text-[10px] text-slate-400 font-mono">{pos.symbol} • {(pos.shares || 1000).toLocaleString()} 股</span>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-50">
+                                <div>
+                                  <div className="text-[9px] text-slate-400">平均成本</div>
+                                  <div className="text-xs font-black text-slate-700">${pos.avg_price}</div>
+                                </div>
+                                <div>
+                                  <div className="text-[9px] text-slate-400">當前現價</div>
+                                  <div className="text-xs font-black text-slate-700">${pos.current_price}</div>
+                                </div>
+                              </div>
+
+                              <div className="pt-2 border-t border-slate-50 flex items-center justify-between">
+                                <span className="text-[9px] text-slate-400">浮動損益</span>
+                                <span className={`text-xs font-black ${isLoss ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                  {isLoss ? '' : '+'}{pos.pnl_value.toLocaleString()} ({pos.pnl_percent}%)
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* 技術指標與決策指令 */}
+                            <div className="md:col-span-7 space-y-3.5 flex flex-col justify-between pt-2 md:pt-0 md:pl-4 md:border-l border-slate-50">
+                              <div className="space-y-2">
+                                <div>
+                                  <div className="flex justify-between text-[9px] text-slate-500 mb-0.5">
+                                    <span>J 值 (目前: {hasJVal ? pos.j_val : '待同步'})</span>
+                                    <span className={(pos.j_val || 0) < 0 ? 'text-rose-600 font-bold' : 'text-slate-500'}>
+                                      {(pos.j_val || 0) < 0 ? '超賣冰點' : '平穩區'}
+                                    </span>
+                                  </div>
+                                  <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
+                                    <div className="h-full bg-indigo-500 transition-all" style={{ width: `${Math.max(0, Math.min(100, ((pos.j_val || 0) + 20) * 0.8))}%` }}></div>
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <div className="flex justify-between text-[9px] text-slate-500 mb-0.5">
+                                    <span>布林通道 BP (目前: {hasBp ? pos.bp : '待同步'})</span>
+                                    <span className={(pos.bp || 0.5) < 0.15 ? 'text-rose-600 font-bold' : 'text-slate-500'}>
+                                      {(pos.bp || 0.5) < 0.15 ? '下軌超賣' : '安全區'}
+                                    </span>
+                                  </div>
+                                  <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
+                                    <div className="h-full bg-emerald-500 transition-all" style={{ width: `${Math.max(0, Math.min(100, ((pos.bp || 0.5) + 0.5) * 60))}%` }}></div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className={`p-3 rounded-xl border text-[11px] leading-relaxed ${(pos.j_val || 0) < 0 ? 'bg-rose-50/50 border-rose-100 text-rose-800' : 'bg-emerald-50/50 border-emerald-100 text-emerald-800'}`}>
+                                <div className="font-black flex items-center gap-1 mb-1 text-slate-800">
+                                  <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" />
+                                  決策指令: {pos.advice ? pos.advice.split('：')[0] : pos.action}
+                                </div>
+                                {pos.advice || '⏳ 等待同步數據計算。'}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* 右欄：量化超賣推薦 (5 Columns) */}
+              <div className="lg:col-span-5 space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-slate-600" />
+                    量化超賣推薦股票 ({recommendedStocks.length})
+                  </h3>
+                  <span title="自動篩選自台灣50成份股中，J值小於15且布林位階小於0.15的冰點超賣股票">
+                    <HelpCircle className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+                  </span>
+                </div>
+
+                {recommendedStocks.length === 0 ? (
+                  <div className="bg-slate-50 border border-slate-100 rounded-3xl p-8 text-center text-slate-500 text-[11px] shadow-sm">
+                    <CheckCircle className="w-8 h-8 text-emerald-500 mx-auto mb-3" />
+                    目前大盤成分股中無符合超賣冰點之推薦標的。
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {recommendedStocks.map((stock: any, idx: number) => (
+                      <div key={idx} className="bg-white border border-slate-100 p-4 rounded-2xl hover:shadow-sm transition-all duration-300 flex justify-between items-center gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-black text-slate-800 text-sm">{stock.n}</span>
+                            <span className="text-[9px] text-slate-400 font-mono">{stock.s}</span>
+                          </div>
+                          <div className="text-[10px] text-slate-500">當前現價: <strong className="text-slate-800 font-black">${stock.p}</strong></div>
+                          
+                          <div className="flex gap-2 text-[9px] pt-1">
+                            <span className="text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">
+                              J值: {stock.j}
+                            </span>
+                            <span className="text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
+                              布林位階: {stock.bp}
+                            </span>
+                          </div>
+                        </div>
+
+                        <Button
+                          onClick={() => handleOpenAddDialog(stock)}
+                          variant="outline"
+                          size="sm"
+                          className="border-emerald-200 bg-emerald-50/50 hover:bg-emerald-100 text-emerald-700 rounded-xl p-2 shrink-0 h-8 w-8"
+                          title="將此推薦股加入監控"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* 心法卡片 */}
+                <div className="bg-gradient-to-br from-indigo-50/70 to-slate-50/50 border border-indigo-100/50 p-6 rounded-3xl space-y-3 shadow-sm">
+                  <h4 className="text-xs font-black text-indigo-950 flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+                    量化選股核心思維
+                  </h4>
+                  <p className="text-[11px] text-slate-600 leading-relaxed font-medium">
+                    我們的主力策略在於 **「尋找別人恐慌時的黃金坑」**。
+                    當一檔優質大盤成分股的 J 值觸及負值（或低於 15）且布林位階低於 0.15 時，代表其短線處於非理性極度超賣。歷史回測顯示，在此處逢低買入具有極高的反彈勝率。
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* 戰略提示：守護利潤的紀律 */}
+            <div className="p-6 bg-blue-50/50 border border-blue-100 rounded-3xl flex items-start gap-4 shadow-sm">
+              <ShieldCheck className="w-5 h-5 text-blue-500 mt-0.5 shrink-0" />
               <div>
-                <h4 className="font-black text-blue-900 mb-2">戰略提示：守護利潤的紀律</h4>
-                <p className="text-sm text-blue-800/70 leading-relaxed font-medium">
+                <h4 className="font-black text-blue-900 mb-1 text-sm">戰略提示：守護利潤的紀律</h4>
+                <p className="text-xs text-blue-800/80 leading-relaxed font-medium">
                   目前的市場呈現出「核心持股穩健、業外短套」的局面。台積電風險係數健康，可以安心持有。中租目前的 J 軸冰點是系統贈與的低價獲利空間，切勿在此區域交出珍貴籌碼。
                 </p>
               </div>
@@ -1650,6 +1937,73 @@ export function FinanceFlowClient() {
           </div>
         )}
       </TabsContent>
+      {/* 一鍵加入實戰對話框 */}
+      <Dialog open={isOpenAddDialog} onOpenChange={setIsOpenAddDialog}>
+        <DialogContent className="sm:max-w-[400px] bg-white border border-slate-200 text-slate-800 rounded-3xl shadow-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-black text-slate-800 flex items-center gap-2">
+              <Plus className="w-5 h-5 text-emerald-600" />
+              加入持股監控
+            </DialogTitle>
+            <DialogDescription className="text-slate-500 text-xs font-bold">
+              正在將 <strong className="text-slate-800">{selectedRecStock?.n || (selectedRecStock && nameMap[selectedRecStock.s]) || selectedRecStock?.s}</strong> 加入您的持股清單，請設定您的買入明細。
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleAddPositionSubmit} className="space-y-4 py-2">
+            <div className="space-y-3 text-xs font-bold text-slate-600">
+              <div className="grid grid-cols-4 items-center gap-3">
+                <Label htmlFor="dialog_price" className="text-right">
+                  買入成本 <span className="text-rose-500">*</span>
+                </Label>
+                <Input
+                  id="dialog_price"
+                  type="number"
+                  step="0.01"
+                  placeholder="買入單價"
+                  value={newAvgPrice}
+                  onChange={(e) => setNewAvgPrice(e.target.value)}
+                  className="col-span-3 border-slate-200 rounded-xl focus:border-cyan-500 text-slate-800"
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-3">
+                <Label htmlFor="dialog_shares" className="text-right">
+                  持有股數
+                </Label>
+                <Input
+                  id="dialog_shares"
+                  type="number"
+                  placeholder="1000"
+                  value={newShares}
+                  onChange={(e) => setNewShares(e.target.value)}
+                  className="col-span-3 border-slate-200 rounded-xl focus:border-cyan-500 text-slate-800"
+                />
+              </div>
+            </div>
+            <DialogFooter className="pt-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setIsOpenAddDialog(false);
+                  setSelectedRecStock(null);
+                }}
+                className="text-slate-500 hover:text-slate-800 rounded-xl hover:bg-slate-50"
+                disabled={isSubmitting}
+              >
+                取消
+              </Button>
+              <Button
+                type="submit"
+                className="bg-emerald-500 hover:bg-emerald-600 text-black font-black px-6 rounded-xl transition-all"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? "正在儲存..." : "確認加入監控"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </Tabs >
   );
 }
