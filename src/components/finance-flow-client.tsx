@@ -245,6 +245,123 @@ export function FinanceFlowClient() {
   // --- TW50 機會篩選狀態 ---
   const [tw50Filter, setTw50Filter] = useState<'opportunity' | 'all'>('opportunity');
 
+  // --- 手動新增持股明細狀態 ---
+  const [manualSymbol, setManualSymbol] = useState("");
+  const [manualName, setManualName] = useState("");
+
+  // --- 加減碼交易狀態 ---
+  const [isOpenTxDialog, setIsOpenTxDialog] = useState(false);
+  const [txType, setTxType] = useState<'buy' | 'sell'>('buy');
+  const [txStock, setTxStock] = useState<any>(null);
+  const [txPrice, setTxPrice] = useState("");
+  const [txShares, setTxShares] = useState("");
+
+  const handleOpenTxDialog = (stock: any, type: 'buy' | 'sell') => {
+    setTxStock(stock);
+    setTxType(type);
+    setTxPrice(String(stock.current_price || stock.avg_price || ''));
+    setTxShares("1000");
+    setIsOpenTxDialog(true);
+  };
+
+  const handleTxSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!txStock || !txPrice || !txShares) return;
+    
+    setIsSubmitting(true);
+    try {
+      const parsedPrice = parseFloat(txPrice);
+      const parsedShares = parseInt(txShares) || 0;
+      if (parsedShares <= 0) throw new Error("交易股數必須大於 0");
+
+      const currentPositions = portfolioData?.positions || [];
+      const currentPos = currentPositions.find((p: any) => p.symbol.toUpperCase() === txStock.symbol.toUpperCase());
+      if (!currentPos) throw new Error("找不到該持股資料");
+
+      const origPrice = currentPos.avg_price || 0;
+      const origShares = currentPos.shares || 1000;
+
+      let updatedPositions = [];
+      let toastDesc = "";
+
+      if (txType === 'buy') {
+        // 加碼：計算加權平均價
+        const totalCost = origPrice * origShares + parsedPrice * parsedShares;
+        const totalShares = origShares + parsedShares;
+        const newAvg = Math.round((totalCost / totalShares) * 100) / 100;
+
+        updatedPositions = currentPositions.map((p: any) => {
+          if (p.symbol.toUpperCase() === txStock.symbol.toUpperCase()) {
+            return {
+              ...p,
+              avg_price: newAvg,
+              shares: totalShares,
+              pnl_value: Math.round(((p.current_price || newAvg) - newAvg) * totalShares),
+              pnl_percent: Math.round(((p.current_price || newAvg) / newAvg - 1) * 10000) / 100,
+              targets: [newAvg * 1.05, newAvg * 1.12].map(v => Math.round(v * 10) / 10),
+              stop_loss: Math.round(newAvg * 0.9 * 10) / 10
+            };
+          }
+          return p;
+        });
+        toastDesc = `已成功加碼買入 ${txStock.name} 共 ${parsedShares} 股，新均價為 $${newAvg}。`;
+      } else {
+        // 減碼：扣除股數
+        if (parsedShares > origShares) {
+          throw new Error(`減碼股數 (${parsedShares} 股) 不能大於持有股數 (${origShares} 股)`);
+        }
+        
+        const remainingShares = origShares - parsedShares;
+
+        if (remainingShares === 0) {
+          // 全部賣出，移除監控
+          updatedPositions = currentPositions.filter((p: any) => p.symbol.toUpperCase() !== txStock.symbol.toUpperCase());
+          toastDesc = `已成功全數賣出並移除 ${txStock.name} 的監控。`;
+        } else {
+          updatedPositions = currentPositions.map((p: any) => {
+            if (p.symbol.toUpperCase() === txStock.symbol.toUpperCase()) {
+              return {
+                ...p,
+                shares: remainingShares,
+                pnl_value: Math.round(((p.current_price || p.avg_price) - p.avg_price) * remainingShares),
+                pnl_percent: Math.round(((p.current_price || p.avg_price) / p.avg_price - 1) * 10000) / 100
+              };
+            }
+            return p;
+          });
+          toastDesc = `已成功減碼賣出 ${txStock.name} 共 ${parsedShares} 股，剩餘 ${remainingShares} 股。`;
+        }
+      }
+
+      const updatedTotalInvested = updatedPositions.reduce((acc: number, p: any) => acc + (p.avg_price * (p.shares || 1000)), 0);
+
+      const updatedData = {
+        last_updated: getTaipeiTimeStr(),
+        total_invested: updatedTotalInvested,
+        positions: updatedPositions
+      };
+
+      if (cloudPortfolioData && portfolioDocRef) {
+        await setDoc(portfolioDocRef, updatedData);
+        toast({ title: txType === 'buy' ? "📈 加碼成功" : "📉 減碼成功", description: toastDesc });
+      } else {
+        setPortfolioDataLocal(updatedData);
+        toast({ title: "✅ 本地更新成功", description: "交易調整已在本地生效（未同步至雲端）。" });
+      }
+
+      setIsOpenTxDialog(false);
+      setTxStock(null);
+    } catch (error: any) {
+      toast({
+        title: "❌ 交易失敗",
+        description: error.message || "處理交易時發生錯誤。",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // --- 調整持股對話框開啟 ---
   const handleOpenEditDialog = (stock: any) => {
     setSelectedEditStock(stock);
@@ -331,18 +448,33 @@ export function FinanceFlowClient() {
       const parsedAvgPrice = parseFloat(newAvgPrice);
       const parsedShares = parseInt(newShares) || 1000;
 
+      let symbol = selectedRecStock.s || selectedRecStock.symbol || "";
+      let name = selectedRecStock.n || selectedRecStock.name || "";
+      let current_price = selectedRecStock.p || selectedRecStock.price || 0;
+
+      if (selectedRecStock.isManual) {
+        symbol = manualSymbol.trim().toUpperCase();
+        if (!symbol) throw new Error("股票代號不能為空");
+        // 自動補足台股後綴
+        if (/^\d+$/.test(symbol)) {
+          symbol = symbol + ".TW";
+        }
+        name = manualName.trim() || nameMap[symbol] || symbol.split('.')[0];
+        current_price = parsedAvgPrice; // 手動加入時，先將現價設為均價，等背景 daemon 抓取最新價
+      }
+
       const newPos = {
-        symbol: selectedRecStock.s || selectedRecStock.symbol,
-        name: selectedRecStock.n || selectedRecStock.name || nameMap[selectedRecStock.s || selectedRecStock.symbol] || (selectedRecStock.s || selectedRecStock.symbol).split('.')[0],
+        symbol: symbol,
+        name: name,
         avg_price: parsedAvgPrice,
         shares: parsedShares,
-        current_price: selectedRecStock.p || selectedRecStock.price || 0,
-        pnl_value: Math.round(((selectedRecStock.p || selectedRecStock.price || 0) - parsedAvgPrice) * parsedShares),
-        pnl_percent: Math.round(((selectedRecStock.p || selectedRecStock.price || parsedAvgPrice) / parsedAvgPrice - 1) * 10000) / 100,
-        j_val: selectedRecStock.j || selectedRecStock.j_val || 0,
-        bp: selectedRecStock.bp || 0,
+        current_price: current_price,
+        pnl_value: Math.round((current_price - parsedAvgPrice) * parsedShares),
+        pnl_percent: Math.round(((current_price / parsedAvgPrice) - 1) * 10000) / 100,
+        j_val: selectedRecStock.j || selectedRecStock.j_val || 50,
+        bp: selectedRecStock.bp || 0.5,
         action: "HOLD",
-        advice: "⏳ 已從推薦股票加入，點擊「同步即時損益」獲取最新量化訊號建議。",
+        advice: "⏳ 已加入監控，點擊「同步即時損益」獲取最新量化訊號建議。",
         targets: [parsedAvgPrice * 1.05, parsedAvgPrice * 1.12].map(v => Math.round(v * 10) / 10),
         stop_loss: Math.round(parsedAvgPrice * 0.9 * 10) / 10
       };
@@ -1064,6 +1196,8 @@ export function FinanceFlowClient() {
             onDeleteTransaction={handleDeleteTransaction}
             hasProcessed={hasProcessed}
             user={user}
+            maintenanceRecords={maintenanceRecords}
+            onAddMaintenanceRecord={handleAddMaintenanceRecord}
           />
         ) : (isLoadingData && !hasData) ? (
           <div className="space-y-4 pt-4">
@@ -1354,10 +1488,25 @@ export function FinanceFlowClient() {
               
               {/* 左欄：當前實戰持股 (7 Columns) */}
               <div className="lg:col-span-7 space-y-6">
-                <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
-                  <Wallet className="w-4 h-4 text-slate-600" />
-                  監控中的持股 ({portfolioData?.positions?.length || 0})
-                </h3>
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                    <Wallet className="w-4 h-4 text-slate-600" />
+                    監控中的持股 ({portfolioData?.positions?.length || 0})
+                  </h3>
+                  <Button
+                    onClick={() => {
+                      setManualSymbol("");
+                      setManualName("");
+                      setNewAvgPrice("");
+                      setNewShares("1000");
+                      setSelectedRecStock({ s: "", n: "", p: 0, isManual: true });
+                      setIsOpenAddDialog(true);
+                    }}
+                    className="h-8 px-3 text-xs bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 shadow-sm rounded-xl transition-all font-black flex items-center gap-1.5"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-emerald-600" /> 新增持股監控
+                  </Button>
+                </div>
 
                 {!portfolioData || !portfolioData.positions || portfolioData.positions.length === 0 ? (
                   <div className="bg-white/50 border border-slate-100 rounded-3xl p-12 text-center shadow-sm">
@@ -1618,15 +1767,40 @@ export function FinanceFlowClient() {
         {/* --- 模式 3: 個人持倉詳情 --- */}
         {radarView === 'portfolio' && portfolioData && (
           <div className="animate-in fade-in slide-in-from-right-2 duration-500 space-y-8">
-            {/* 來源與時間標注 */}
-            <div className="flex items-center gap-3">
-              <span className={`px-2.5 py-1 text-[10px] font-black rounded-full ${cloudPortfolioData ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
-                {cloudPortfolioData ? '☁️ 雲端即時' : '💾 本地快取'}
-              </span>
-              <span className="text-[10px] text-slate-400 font-bold">更新時間: {safeTimeStr(portfolioData?.last_updated)}</span>
-              <span className="text-[10px] text-slate-300">• 來源: {cloudPortfolioData ? 'Firestore Realtime' : 'Local JSON'}</span>
+            {/* 實戰持股頂部 Header 與手動新增入口 */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+              <div>
+                <h3 className="text-2xl font-black text-slate-800">實戰持股詳情</h3>
+                <div className="flex items-center gap-3 mt-1.5">
+                  <span className={`px-2.5 py-1 text-[10px] font-black rounded-full ${cloudPortfolioData ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                    {cloudPortfolioData ? '☁️ 雲端即時' : '💾 本地快取'}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-bold">更新時間: {safeTimeStr(portfolioData?.last_updated)}</span>
+                  <span className="text-[10px] text-slate-300">• 來源: {cloudPortfolioData ? 'Firestore Realtime' : 'Local JSON'}</span>
+                </div>
+              </div>
+              <Button
+                onClick={() => {
+                  setManualSymbol("");
+                  setManualName("");
+                  setSelectedRecStock({ s: "", n: "", p: 0, isManual: true });
+                  setIsOpenAddDialog(true);
+                }}
+                className="h-10 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl transition-all flex items-center gap-1.5 shadow-md shadow-indigo-100"
+              >
+                <Plus className="w-4 h-4 text-white" /> 手動新增持股監控
+              </Button>
             </div>
-            {portfolioData.positions.map((pos: any, i: number) => (
+
+            {portfolioData.positions.length === 0 ? (
+              <div className="bg-white/50 border border-slate-100 rounded-3xl p-12 text-center shadow-sm">
+                <AlertTriangle className="w-8 h-8 text-slate-400 mx-auto mb-3" />
+                <div className="text-slate-700 font-bold text-sm mb-1">目前無監控持股</div>
+                <p className="text-slate-400 text-[11px] max-w-sm mx-auto leading-relaxed">
+                  尚未建立任何實戰持股。您可以點擊上方「手動新增持股監控」或參考其他分頁之標的一鍵加入。
+                </p>
+              </div>
+            ) : portfolioData.positions.map((pos: any, i: number) => (
               <div key={i} className="p-8 bg-white border border-slate-200 rounded-3xl shadow-sm space-y-8">
                 <div className="flex justify-between items-start">
                   <div className="flex items-center gap-4">
@@ -1642,9 +1816,16 @@ export function FinanceFlowClient() {
                         <button
                           onClick={() => handleOpenEditDialog(pos)}
                           className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-all"
-                          title="調整持股"
+                          title="調整持股成本/股數"
                         >
                           <Settings className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeletePosition(pos.symbol, pos.name)}
+                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg transition-all"
+                          title="刪除此持股監控"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>
@@ -1685,8 +1866,18 @@ export function FinanceFlowClient() {
 
                 {/* 模擬下單介面按鈕 (對照截圖：紅進綠出) */}
                 <div className="flex gap-4 pt-4">
-                  <button className="flex-1 py-4 bg-rose-500 text-white font-black rounded-2xl hover:bg-rose-600 shadow-lg shadow-rose-200 transition-all active:scale-95">買進 (加碼)</button>
-                  <button className="flex-1 py-4 bg-emerald-500 text-white font-black rounded-2xl hover:bg-emerald-600 shadow-lg shadow-emerald-200 transition-all active:scale-95">賣出 (減碼)</button>
+                  <button 
+                    onClick={() => handleOpenTxDialog(pos, 'buy')}
+                    className="flex-1 py-4 bg-rose-500 text-white font-black rounded-2xl hover:bg-rose-600 shadow-lg shadow-rose-200 transition-all active:scale-95"
+                  >
+                    買進 (加碼)
+                  </button>
+                  <button 
+                    onClick={() => handleOpenTxDialog(pos, 'sell')}
+                    className="flex-1 py-4 bg-emerald-500 text-white font-black rounded-2xl hover:bg-emerald-600 shadow-lg shadow-emerald-200 transition-all active:scale-95"
+                  >
+                    賣出 (減碼)
+                  </button>
                 </div>
               </div>
             ))}
@@ -2141,14 +2332,48 @@ export function FinanceFlowClient() {
           <DialogHeader>
             <DialogTitle className="text-lg font-black text-slate-800 flex items-center gap-2">
               <Plus className="w-5 h-5 text-emerald-600" />
-              加入持股監控
+              {selectedRecStock?.isManual ? "新增自訂持股監控" : "加入持股監控"}
             </DialogTitle>
             <DialogDescription className="text-slate-500 text-xs font-bold">
-              正在將 <strong className="text-slate-800">{selectedRecStock?.n || (selectedRecStock && nameMap[selectedRecStock.s]) || selectedRecStock?.s}</strong> 加入您的持股清單，請設定您的買入明細。
+              {selectedRecStock?.isManual 
+                ? "請手動輸入股票代號（例如 2330）與持有明細，同步後系統將自動抓取股價。"
+                : <span>正在將 <strong className="text-slate-800">{selectedRecStock?.n || (selectedRecStock && nameMap[selectedRecStock.s]) || selectedRecStock?.s}</strong> 加入您的持股清單，請設定您的買入明細。</span>
+              }
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleAddPositionSubmit} className="space-y-4 py-2">
             <div className="space-y-3 text-xs font-bold text-slate-600">
+              {selectedRecStock?.isManual && (
+                <>
+                  <div className="grid grid-cols-4 items-center gap-3">
+                    <Label htmlFor="dialog_symbol" className="text-right">
+                      股票代號 <span className="text-rose-500">*</span>
+                    </Label>
+                    <Input
+                      id="dialog_symbol"
+                      type="text"
+                      placeholder="例如 2330 或 2330.TW"
+                      value={manualSymbol}
+                      onChange={(e) => setManualSymbol(e.target.value)}
+                      className="col-span-3 border-slate-200 rounded-xl focus:border-cyan-500 text-slate-800"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-3">
+                    <Label htmlFor="dialog_name" className="text-right">
+                      股票名稱
+                    </Label>
+                    <Input
+                      id="dialog_name"
+                      type="text"
+                      placeholder="例如 台積電 (選填)"
+                      value={manualName}
+                      onChange={(e) => setManualName(e.target.value)}
+                      className="col-span-3 border-slate-200 rounded-xl focus:border-cyan-500 text-slate-800"
+                    />
+                  </div>
+                </>
+              )}
               <div className="grid grid-cols-4 items-center gap-3">
                 <Label htmlFor="dialog_price" className="text-right">
                   買入成本 <span className="text-rose-500">*</span>
@@ -2276,6 +2501,174 @@ export function FinanceFlowClient() {
                 className="bg-rose-600 hover:bg-rose-700 text-white font-black px-4 rounded-xl transition-all"
               >
                 刪除監控
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* 買進加碼 / 賣出減碼對話框 */}
+      <Dialog open={isOpenTxDialog} onOpenChange={setIsOpenTxDialog}>
+        <DialogContent className="sm:max-w-[420px] bg-white border border-slate-200 text-slate-800 rounded-3xl shadow-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-black text-slate-800 flex items-center gap-2">
+              {txType === 'buy' ? (
+                <>
+                  <TrendingUp className="w-5 h-5 text-rose-500" />
+                  <span>買進加碼 - {txStock?.name}</span>
+                </>
+              ) : (
+                <>
+                  <TrendingDown className="w-5 h-5 text-emerald-500" />
+                  <span>賣出減碼 - {txStock?.name}</span>
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription className="text-slate-500 text-xs font-bold">
+              輸入本次交易的單價與股數，系統將自動計算最新的持股權重或損益。
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleTxSubmit} className="space-y-4 py-2">
+            <div className="space-y-4 text-xs font-bold text-slate-600">
+              {/* 交易單價 */}
+              <div className="grid grid-cols-4 items-center gap-3">
+                <Label htmlFor="tx_price" className="text-right">
+                  交易單價 <span className="text-rose-500">*</span>
+                </Label>
+                <Input
+                  id="tx_price"
+                  type="number"
+                  step="0.01"
+                  value={txPrice}
+                  onChange={(e) => setTxPrice(e.target.value)}
+                  className="col-span-3 border-slate-200 rounded-xl focus:border-cyan-500 text-slate-800"
+                  required
+                />
+              </div>
+
+              {/* 交易股數 */}
+              <div className="grid grid-cols-4 items-center gap-3">
+                <Label htmlFor="tx_shares" className="text-right">
+                  交易股數 <span className="text-rose-500">*</span>
+                </Label>
+                <Input
+                  id="tx_shares"
+                  type="number"
+                  placeholder="例如 1000"
+                  value={txShares}
+                  onChange={(e) => setTxShares(e.target.value)}
+                  className="col-span-3 border-slate-200 rounded-xl focus:border-cyan-500 text-slate-800"
+                  required
+                />
+              </div>
+
+              {/* 即時動態計算與預覽視覺區 */}
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100/80 space-y-2">
+                <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">即時試算預覽</div>
+                {txStock && (
+                  <div className="space-y-1.5 text-slate-700">
+                    <div className="flex justify-between">
+                      <span>當前持有股數:</span>
+                      <span className="font-extrabold">{(txStock.shares || 1000).toLocaleString()} 股</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>當前平均成本:</span>
+                      <span className="font-extrabold">${txStock.avg_price}</span>
+                    </div>
+                    
+                    {txType === 'buy' ? (
+                      <>
+                        <div className="border-t border-dashed border-slate-200 my-2 pt-2 flex justify-between items-center">
+                          <span className="text-rose-600">加碼後總股數:</span>
+                          <span className="text-rose-600 font-extrabold">
+                            {((txStock.shares || 1000) + (parseInt(txShares) || 0)).toLocaleString()} 股
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-rose-600 font-black">加碼後平均成本:</span>
+                          <span className="text-rose-600 font-black text-lg">
+                            ${(() => {
+                              const origPrice = txStock.avg_price || 0;
+                              const origShares = txStock.shares || 1000;
+                              const pPrice = parseFloat(txPrice) || 0;
+                              const pShares = parseInt(txShares) || 0;
+                              if (pShares <= 0) return origPrice;
+                              const totalCost = origPrice * origShares + pPrice * pShares;
+                              const totalShares = origShares + pShares;
+                              return Math.round((totalCost / totalShares) * 100) / 100;
+                            })()}
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="border-t border-dashed border-slate-200 my-2 pt-2 flex justify-between items-center">
+                          <span className="text-emerald-600">減碼後剩餘股數:</span>
+                          <span className="text-emerald-600 font-extrabold">
+                            {Math.max(0, (txStock.shares || 1000) - (parseInt(txShares) || 0)).toLocaleString()} 股
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-slate-700 font-black">本次交易預估損益:</span>
+                          <span className={`font-black text-lg ${
+                            (() => {
+                              const origPrice = txStock.avg_price || 0;
+                              const pPrice = parseFloat(txPrice) || 0;
+                              const pShares = parseInt(txShares) || 0;
+                              return (pPrice - origPrice) * pShares;
+                            })() >= 0 ? 'text-rose-600' : 'text-emerald-600'
+                          }`}>
+                            {(() => {
+                              const origPrice = txStock.avg_price || 0;
+                              const pPrice = parseFloat(txPrice) || 0;
+                              const pShares = parseInt(txShares) || 0;
+                              const diff = (pPrice - origPrice) * pShares;
+                              const formattedDiff = Math.round(diff).toLocaleString();
+                              return diff >= 0 ? `+${formattedDiff}` : formattedDiff;
+                            })()}
+                          </span>
+                        </div>
+
+                        {/* 如果全部賣出，顯示警告 */}
+                        {Math.max(0, (txStock.shares || 1000) - (parseInt(txShares) || 0)) === 0 && (
+                          <div className="mt-3 p-3 bg-amber-50 border border-amber-100 rounded-xl flex items-start gap-2 text-amber-800 text-[11px] leading-relaxed">
+                            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+                            <div>
+                              剩餘持有股數將歸零。確認減碼後，系統將<strong>全數賣出並移出持股監控</strong>。
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <DialogFooter className="pt-2 gap-2 md:gap-0">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setIsOpenTxDialog(false);
+                  setTxStock(null);
+                }}
+                className="text-slate-500 hover:text-slate-800 rounded-xl hover:bg-slate-50"
+                disabled={isSubmitting}
+              >
+                取消
+              </Button>
+              <Button
+                type="submit"
+                className={`font-black px-6 rounded-xl transition-all ${
+                  txType === 'buy' 
+                    ? 'bg-rose-500 hover:bg-rose-600 text-white shadow-md shadow-rose-100' 
+                    : 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-md shadow-emerald-100'
+                }`}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? "處理中..." : txType === 'buy' ? "確認加碼" : "確認減碼"}
               </Button>
             </DialogFooter>
           </form>
