@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import type { User } from 'firebase/auth';
+import { getStorage, ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,7 +21,10 @@ import {
   Check,
   X,
   Loader2,
-  Pencil
+  Pencil,
+  Image as ImageIcon,
+  Camera,
+  Maximize2
 } from 'lucide-react';
 
 export interface MaintenanceRecord {
@@ -31,6 +35,7 @@ export interface MaintenanceRecord {
   vendor: string;
   amount: number;
   notes?: string;
+  photos?: string[];
   createdAt?: any;
 }
 
@@ -42,6 +47,40 @@ interface MaintenanceManagerProps {
   user: User | null;
   isProcessing?: boolean;
 }
+
+// 圖片壓縮輔助函數
+const compressImage = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 1024;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > MAX_WIDTH) {
+          height = Math.round((height * MAX_WIDTH) / width);
+          width = MAX_WIDTH;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        // 壓縮為 jpeg，品質 0.7
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+        resolve(dataUrl);
+      };
+      img.onerror = (err) => reject(err);
+    };
+    reader.onerror = (err) => reject(err);
+  });
+};
 
 export function MaintenanceManager({
   records = [],
@@ -64,11 +103,16 @@ export function MaintenanceManager({
   const [vendor, setVendor] = useState('');
   const [amount, setAmount] = useState('');
   const [notes, setNotes] = useState('');
+  const [selectedPhotos, setSelectedPhotos] = useState<(string | File)[]>([]);
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState('');
 
   // --- 編輯狀態 ---
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  // --- 燈箱 (Lightbox) 狀態 ---
+  const [activePhotoUrl, setActivePhotoUrl] = useState<string | null>(null);
 
   // --- 自動建議狀態 ---
   const [showLocationSuggest, setShowLocationSuggest] = useState(false);
@@ -106,7 +150,7 @@ export function MaintenanceManager({
 
   // --- 搜尋與過濾邏輯 ---
   const filteredRecords = useMemo(() => {
-    return records.filter(record => {
+    const result = records.filter(record => {
       // 地點過濾
       if (selectedLocation !== 'ALL' && record.location !== selectedLocation) {
         return false;
@@ -122,12 +166,34 @@ export function MaintenanceManager({
       }
       return true;
     });
+
+    // 由最新日期開始排序 (降序)
+    return result.sort((a, b) => b.date.localeCompare(a.date));
   }, [records, selectedLocation, searchQuery]);
 
   // 篩選後總金額
   const totalAmount = useMemo(() => {
     return filteredRecords.reduce((sum, r) => sum + (r.amount || 0), 0);
   }, [filteredRecords]);
+
+  // --- 圖片選取處理 ---
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const files = Array.from(e.target.files);
+      // 限制最多 3 張圖片
+      if (selectedPhotos.length + files.length > 3) {
+        setFormError('最多只能上傳 3 張照片');
+        return;
+      }
+      setFormError('');
+      setSelectedPhotos(prev => [...prev, ...files]);
+    }
+  };
+
+  // 移除待上傳/已上傳照片
+  const handleRemovePhoto = (index: number) => {
+    setSelectedPhotos(prev => prev.filter((_, i) => i !== index));
+  };
 
   // --- 編輯功能處理 ---
   const handleStartEdit = (record: MaintenanceRecord) => {
@@ -142,6 +208,7 @@ export function MaintenanceManager({
     setVendor(record.vendor);
     setAmount(String(record.amount));
     setNotes(record.notes || '');
+    setSelectedPhotos(record.photos || []);
 
     // 滾動到頁面最上方以方便編輯
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -157,6 +224,7 @@ export function MaintenanceManager({
     setVendor('');
     setAmount('');
     setNotes('');
+    setSelectedPhotos([]);
   };
 
   // --- 表單送出處理 ---
@@ -188,8 +256,44 @@ export function MaintenanceManager({
     }
 
     setIsSubmitting(true);
+    setUploadStatus('正在處理圖片...');
+
     try {
-      // 轉換日期格式為 YYYY/MM/DD 以便與其他帳單一致
+      // 1. 照片壓縮與上傳處理 (第一軌 Storage / 第二軌 Base64)
+      const finalPhotos: string[] = [];
+      const storage = getStorage();
+      
+      for (let i = 0; i < selectedPhotos.length; i++) {
+        const photo = selectedPhotos[i];
+        
+        if (typeof photo === 'string') {
+          // 已經是 URL 或是 Base64，直接保留
+          finalPhotos.push(photo);
+        } else if (photo instanceof File) {
+          // 新上傳的照片，進行壓縮上傳
+          setUploadStatus(`正在壓縮並上傳第 ${i + 1}/${selectedPhotos.length} 張照片...`);
+          try {
+            const compressedDataUrl = await compressImage(photo);
+            try {
+              // 嘗試雲端 Storage 上傳
+              const uniqueId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+              const fileRef = storageRef(storage, `users/${user.uid}/maintenancePhotos/${uniqueId}.jpg`);
+              await uploadString(fileRef, compressedDataUrl, 'data_url');
+              const downloadUrl = await getDownloadURL(fileRef);
+              finalPhotos.push(downloadUrl);
+            } catch (storageErr) {
+              console.warn("Storage upload failed, falling back to Base64:", storageErr);
+              // 降級備援：直接將 Base64 寫入 Firestore
+              finalPhotos.push(compressedDataUrl);
+            }
+          } catch (compressErr) {
+            console.error("Failed to compress or upload photo:", compressErr);
+          }
+        }
+      }
+
+      // 2. 寫入資料庫
+      setUploadStatus(editingId ? '正在更新資料庫...' : '正在儲存至資料庫...');
       const formattedDate = date.replace(/-/g, '/');
       const recordData = {
         date: formattedDate,
@@ -198,6 +302,7 @@ export function MaintenanceManager({
         vendor: vendor.trim(),
         amount: numAmount,
         notes: notes.trim() || undefined,
+        photos: finalPhotos.length > 0 ? finalPhotos : undefined
       };
 
       if (editingId) {
@@ -207,17 +312,19 @@ export function MaintenanceManager({
         await onAddRecord(recordData);
       }
 
-      // 成功後重置所有欄位（包括地點與廠商）
+      // 成功後重置所有欄位（包括地點、廠商與照片）
       setLocation('');
       setItem('');
       setVendor('');
       setAmount('');
       setNotes('');
+      setSelectedPhotos([]);
     } catch (err) {
       setFormError(editingId ? '更新失敗，請稍後再試' : '新增失敗，請稍後再試');
       console.error(err);
     } finally {
       setIsSubmitting(false);
+      setUploadStatus('');
     }
   };
 
@@ -381,13 +488,62 @@ export function MaintenanceManager({
 
             </div>
 
+            {/* 照片上傳區域 */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
+                <Camera className="h-3.5 w-3.5" /> 上傳照片 (選填，最多 3 張)
+              </label>
+              
+              <div className="flex flex-wrap gap-4 items-center">
+                {/* 照片選擇框 */}
+                <div className="relative overflow-hidden w-28 h-20 border border-dashed border-slate-300 rounded-xl hover:border-primary/60 transition-colors flex flex-col justify-center items-center gap-1 cursor-pointer bg-slate-50">
+                  <ImageIcon className="h-5 w-5 text-slate-400" />
+                  <span className="text-[10px] font-bold text-slate-500">選擇照片</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    disabled={selectedPhotos.length >= 3}
+                    onChange={handlePhotoSelect}
+                    className="absolute inset-0 opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                  />
+                </div>
+
+                {/* 照片預覽區 */}
+                <div className="flex flex-wrap gap-2.5">
+                  {selectedPhotos.map((photo, index) => {
+                    const src = typeof photo === 'string' ? photo : URL.createObjectURL(photo);
+                    return (
+                      <div key={index} className="relative w-28 h-20 rounded-xl overflow-hidden border border-slate-200 shadow-sm group">
+                        <img src={src} className="w-full h-full object-cover" alt="preview" />
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePhoto(index)}
+                          className="absolute top-1 right-1 bg-black/60 hover:bg-red-600 text-white rounded-lg p-1 transition-colors"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
             {formError && (
               <div className="text-xs font-semibold text-red-500 bg-red-50 border border-red-200 p-2.5 rounded-lg flex items-center gap-1.5">
                 <X className="h-3.5 w-3.5 shrink-0" /> {formError}
               </div>
             )}
 
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex justify-end items-center gap-3 pt-2">
+              {uploadStatus && (
+                <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5 animate-pulse">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                  {uploadStatus}
+                </span>
+              )}
+
               {editingId && (
                 <Button
                   type="button"
@@ -492,7 +648,7 @@ export function MaintenanceManager({
                   className="group relative bg-white border border-slate-100 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-primary/20 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4"
                 >
                   {/* 主要資訊 */}
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="bg-primary/10 text-primary text-xs px-2.5 py-0.5 rounded-full font-bold">
                         {record.location}
@@ -506,7 +662,7 @@ export function MaintenanceManager({
                       {record.item}
                     </h4>
 
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 pb-1.5">
                       <span className="flex items-center gap-1">
                         <UserIcon className="h-3 w-3 text-slate-400" /> 廠商: {record.vendor}
                       </span>
@@ -516,6 +672,24 @@ export function MaintenanceManager({
                         </span>
                       )}
                     </div>
+
+                    {/* 照片清單展示 */}
+                    {record.photos && record.photos.length > 0 && (
+                      <div className="flex flex-wrap gap-2 pt-1.5">
+                        {record.photos.map((photoUrl, photoIdx) => (
+                          <div
+                            key={photoIdx}
+                            onClick={() => setActivePhotoUrl(photoUrl)}
+                            className="relative w-14 h-14 rounded-lg overflow-hidden border border-slate-200 cursor-zoom-in hover:border-primary/50 transition-colors shadow-sm"
+                          >
+                            <img src={photoUrl} className="w-full h-full object-cover" alt="maintenance" />
+                            <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors flex justify-center items-center">
+                              <Maximize2 className="h-3 w-3 text-white opacity-0 hover:opacity-100 transition-opacity" />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* 金額與刪除/修改操作 */}
@@ -556,6 +730,29 @@ export function MaintenanceManager({
           )}
         </CardContent>
       </Card>
+
+      {/* Lightbox 放大預覽 */}
+      {activePhotoUrl && (
+        <div
+          onClick={() => setActivePhotoUrl(null)}
+          className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[200] flex justify-center items-center animate-in fade-in duration-200 cursor-zoom-out"
+        >
+          <button
+            onClick={() => setActivePhotoUrl(null)}
+            className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white rounded-full p-2.5 transition-colors"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          
+          <div className="max-w-[90vw] max-h-[85vh] overflow-hidden rounded-2xl border border-white/10 shadow-2xl">
+            <img
+              src={activePhotoUrl}
+              className="max-w-full max-h-[85vh] object-contain select-none"
+              alt="maintenance zoom"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -14,6 +14,7 @@ import { FixedItemsSummary } from '@/components/finance-flow/fixed-items-summary
 import { BalanceTracker } from '@/components/finance-flow/balance-tracker';
 import { MaintenanceManager, type MaintenanceRecord } from '@/components/finance-flow/maintenance-manager';
 import { Wrench } from 'lucide-react';
+import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -48,6 +49,39 @@ async function sha1(str: string): Promise<string> {
     throw new Error('sha1 function running in a non-browser environment without Node.js crypto module.');
   }
 }
+
+const compressImage = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 1024;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > MAX_WIDTH) {
+          height = Math.round((height * MAX_WIDTH) / width);
+          width = MAX_WIDTH;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        // 壓縮為 jpeg，品質 0.7
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+        resolve(dataUrl);
+      };
+      img.onerror = (err) => reject(err);
+    };
+    reader.onerror = (err) => reject(err);
+  });
+};
 
 
 // =======================================================================
@@ -208,6 +242,9 @@ export function FinanceFlowClient() {
   const [editAvgPrice, setEditAvgPrice] = useState("");
   const [editShares, setEditShares] = useState("");
 
+  // --- TW50 機會篩選狀態 ---
+  const [tw50Filter, setTw50Filter] = useState<'opportunity' | 'all'>('opportunity');
+
   // --- 調整持股對話框開啟 ---
   const handleOpenEditDialog = (stock: any) => {
     setSelectedEditStock(stock);
@@ -242,7 +279,7 @@ export function FinanceFlowClient() {
         return p;
       });
 
-      const updatedTotalInvested = updatedPositions.reduce((acc, p) => acc + (p.avg_price * (p.shares || 1000)), 0);
+      const updatedTotalInvested = updatedPositions.reduce((acc: number, p: any) => acc + (p.avg_price * (p.shares || 1000)), 0);
 
       const updatedData = {
         last_updated: getTaipeiTimeStr(),
@@ -822,14 +859,28 @@ export function FinanceFlowClient() {
 
   const handleDeleteMaintenanceRecord = useCallback(async (id: string) => {
     if (!user || !firestore) return;
+    const recordToDelete = maintenanceRecords.find(r => r.id === id);
     setMaintenanceRecords(prev => prev.filter(item => item.id !== id));
     try {
+      if (recordToDelete && recordToDelete.photos) {
+        const storage = getStorage();
+        for (const photoUrl of recordToDelete.photos) {
+          if (photoUrl.startsWith('https://firebasestorage.googleapis.com')) {
+            try {
+              const fileRef = storageRef(storage, photoUrl);
+              await deleteObject(fileRef);
+            } catch (err) {
+              console.error("Failed to delete storage file:", err);
+            }
+          }
+        }
+      }
       await deleteDoc(doc(firestore, 'users', user.uid, 'maintenanceRecords', id));
       toast({ title: '成功', description: '維修紀錄已刪除' });
     } catch (error) {
       toast({ variant: "destructive", title: "刪除失敗", description: `無法從資料庫中刪除此筆紀錄。` });
     }
-  }, [user, firestore, toast]);
+  }, [user, firestore, toast, maintenanceRecords]);
 
   const handleUpdateMaintenanceRecord = useCallback(async (id: string, updatedRecordData: Partial<Omit<MaintenanceRecord, 'id'>>) => {
     if (!user || !firestore) return;
@@ -1666,17 +1717,49 @@ export function FinanceFlowClient() {
               </div>
             </header>
 
+            {/* 篩選切換膠囊按鈕 */}
+            <div className="flex gap-1 bg-slate-100/80 backdrop-blur-sm p-1 rounded-xl w-fit border border-slate-200/50">
+              <button
+                onClick={() => setTw50Filter('opportunity')}
+                className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all ${
+                  tw50Filter === 'opportunity'
+                    ? 'bg-white text-slate-800 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                黃金機會 & 核心股
+              </button>
+              <button
+                onClick={() => setTw50Filter('all')}
+                className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all ${
+                  tw50Filter === 'all'
+                    ? 'bg-white text-slate-800 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                全部 50 檔成份股
+              </button>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {(tw50Data && tw50Data.length > 0) ? (
                 tw50Data
-                  .filter((stock: any) => stock?.st === 'BUY' || stock?.s === '2330.TW' || stock?.s === '2603.TW')
+                  .filter((stock: any) => {
+                    if (tw50Filter === 'opportunity') {
+                      return stock?.st === 'BUY' || stock?.s === '2330.TW' || stock?.s === '2603.TW';
+                    }
+                    return true;
+                  })
                   .map((stock: any, idx: number) => {
                     if (!stock) return null;
                     const isShipping = ['2603.TW', '2609.TW', '2615.TW'].includes(stock.s);
                     const isWeight = ['2330.TW', '2317.TW', '2454.TW'].includes(stock.s);
 
                     return (
-                      <Card key={idx} className={`p-6 border-slate-200 shadow-sm hover:shadow-md transition-all ${stock.st === 'BUY' ? 'border-l-4 border-l-emerald-500' : ''}`}>
+                      <Card key={idx} className={`p-6 border-slate-200 shadow-sm hover:shadow-md transition-all ${
+                        stock.st === 'BUY' ? 'border-l-4 border-l-emerald-500 bg-emerald-50/10' : 
+                        stock.st === 'SELL' ? 'border-l-4 border-l-rose-500 bg-rose-50/10' : ''
+                      }`}>
                         <div className="flex justify-between items-start mb-4">
                           <div>
                             <div className="flex items-center gap-2">
@@ -1687,10 +1770,14 @@ export function FinanceFlowClient() {
                               {isWeight ? '電子權值龍頭' : isShipping ? '避險/航運板塊' : '技術轉機股'}
                             </p>
                           </div>
-                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${stock.st === 'BUY' ? 'bg-emerald-50 text-emerald-600' :
+                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                            stock.st === 'BUY' ? 'bg-emerald-50 text-emerald-600' :
+                            stock.st === 'SELL' ? 'bg-rose-50 text-rose-600' :
                             isShipping ? 'bg-cyan-50 text-cyan-600' : 'bg-slate-50 text-slate-400'
-                            }`}>
-                            {stock.st === 'BUY' ? '機會凹洞區' : isShipping ? '資金避風港' : '暫時觀望'}
+                          }`}>
+                            {stock.st === 'BUY' ? '機會凹洞區' : 
+                             stock.st === 'SELL' ? '過熱警戒區' : 
+                             isShipping ? '資金避風港' : '暫時觀望'}
                           </span>
                         </div>
 
@@ -1713,6 +1800,7 @@ export function FinanceFlowClient() {
                               {stock.analysis || (stock.s === '2330.TW' ? '受美伊新聞影響出現絕望性賣壓，J 值與 BP 顯示已進入長期價值區。' :
                                 isShipping ? '受惠戰爭預期運價上漲，目前走勢與大盤背離，展現強勁防禦力。' :
                                   stock.st === 'BUY' ? '技術指標顯示已處於極度超跌，建議分批佈局。' :
+                                  stock.st === 'SELL' ? '技術指標顯示短期已進入超買區，建議注意回檔風險或分批獲利了結。' :
                                     '股價處於中性整理，目前無顯著買入訊號，優先觀察電子權值動向。')}
                             </p>
                           </div>
