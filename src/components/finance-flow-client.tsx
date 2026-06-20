@@ -187,12 +187,95 @@ export function FinanceFlowClient() {
     return { totalPNL, currentTotalValue, totalInvested, pnlPercent };
   }, [portfolioData]);
 
+    // --- 台北時間格式化 Helper ---
+  const getTaipeiTimeStr = () => {
+    const date = new Date();
+    const offset = 8 * 60 * 60 * 1000;
+    const localDate = new Date(date.getTime() + offset);
+    return localDate.toISOString().replace('T', ' ').substring(0, 19);
+  };
+
   // --- 一鍵加入與刪除持股 States ---
   const [isOpenAddDialog, setIsOpenAddDialog] = useState(false);
   const [selectedRecStock, setSelectedRecStock] = useState<any>(null);
   const [newAvgPrice, setNewAvgPrice] = useState("");
   const [newShares, setNewShares] = useState("1000");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // --- 調整持股 States ---
+  const [isOpenEditDialog, setIsOpenEditDialog] = useState(false);
+  const [selectedEditStock, setSelectedEditStock] = useState<any>(null);
+  const [editAvgPrice, setEditAvgPrice] = useState("");
+  const [editShares, setEditShares] = useState("");
+
+  // --- 調整持股對話框開啟 ---
+  const handleOpenEditDialog = (stock: any) => {
+    setSelectedEditStock(stock);
+    setEditAvgPrice(String(stock.avg_price || ''));
+    setEditShares(String(stock.shares || 1000));
+    setIsOpenEditDialog(true);
+  };
+
+  // --- 提交持股調整 ---
+  const handleEditPositionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedEditStock || !editAvgPrice) return;
+    
+    setIsSubmitting(true);
+    try {
+      const parsedAvgPrice = parseFloat(editAvgPrice);
+      const parsedShares = parseInt(editShares) || 1000;
+
+      const currentPositions = portfolioData?.positions || [];
+      const updatedPositions = currentPositions.map((p: any) => {
+        if (p.symbol.toUpperCase() === selectedEditStock.symbol.toUpperCase()) {
+          return {
+            ...p,
+            avg_price: parsedAvgPrice,
+            shares: parsedShares,
+            pnl_value: Math.round(((p.current_price || 0) - parsedAvgPrice) * parsedShares),
+            pnl_percent: Math.round(((p.current_price || parsedAvgPrice) / parsedAvgPrice - 1) * 10000) / 100,
+            targets: [parsedAvgPrice * 1.05, parsedAvgPrice * 1.12].map(v => Math.round(v * 10) / 10),
+            stop_loss: Math.round(parsedAvgPrice * 0.9 * 10) / 10
+          };
+        }
+        return p;
+      });
+
+      const updatedTotalInvested = updatedPositions.reduce((acc, p) => acc + (p.avg_price * (p.shares || 1000)), 0);
+
+      const updatedData = {
+        last_updated: getTaipeiTimeStr(),
+        total_invested: updatedTotalInvested,
+        positions: updatedPositions
+      };
+
+      if (cloudPortfolioData && portfolioDocRef) {
+        await setDoc(portfolioDocRef, updatedData);
+        toast({
+          title: "✅ 持股調整成功",
+          description: `已成功更新 ${selectedEditStock.name} 的持有成本及股數。`
+        });
+      } else {
+        setPortfolioDataLocal(updatedData);
+        toast({
+          title: "✅ 本地更新成功",
+          description: "持股調整已在本地生效，未同步至雲端。",
+        });
+      }
+
+      setIsOpenEditDialog(false);
+      setSelectedEditStock(null);
+    } catch (error: any) {
+      toast({
+        title: "❌ 調整失敗",
+        description: error.message || "更新配置時發生錯誤。",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   // --- 新增持股至實戰監控 ---
   const handleOpenAddDialog = (stock: any) => {
@@ -243,7 +326,7 @@ export function FinanceFlowClient() {
       const updatedTotalInvested = updatedPositions.reduce((acc, p) => acc + (p.avg_price * (p.shares || 1000)), 0);
 
       const updatedData = {
-        last_updated: portfolioData?.last_updated || new Date().toISOString().replace('T', ' ').substring(0, 19),
+        last_updated: getTaipeiTimeStr(),
         total_invested: updatedTotalInvested,
         positions: updatedPositions
       };
@@ -287,7 +370,7 @@ export function FinanceFlowClient() {
       const updatedTotalInvested = updatedPositions.reduce((acc: number, p: any) => acc + (p.avg_price * (p.shares || 1000)), 0);
 
       const updatedData = {
-        last_updated: portfolioData?.last_updated || new Date().toISOString().replace('T', ' ').substring(0, 19),
+        last_updated: getTaipeiTimeStr(),
         total_invested: updatedTotalInvested,
         positions: updatedPositions
       };
@@ -341,7 +424,7 @@ export function FinanceFlowClient() {
   }, []);
 
   // (Deprecated) Auto-sync migration removed to prevent permission errors
-  // --- 手動同步邏輯 ---
+    // --- 手動同步邏輯 (支援 GitHub API 與 Firestore Fallback 雙管齊下) ---
   const [isSyncing, setIsSyncing] = useState(false);
   const handleManualSync = async () => {
     if (isSyncing) return;
@@ -349,31 +432,38 @@ export function FinanceFlowClient() {
     try {
       console.log("Triggering manual sync...");
       const pat = process.env.NEXT_PUBLIC_GITHUB_PAT;
+      let syncTriggeredViaGithub = false;
 
       if (pat) {
-        const response = await fetch("https://api.github.com/repos/azq1231/studio/actions/workflows/market-sync.yml/dispatches", {
-          method: "POST",
-          headers: {
-            "Accept": "application/vnd.github.v3+json",
-            "Authorization": `token ${pat}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ ref: "main" })
-        });
+        try {
+          const response = await fetch("https://api.github.com/repos/azq1231/studio/actions/workflows/market-sync.yml/dispatches", {
+            method: "POST",
+            headers: {
+              "Accept": "application/vnd.github.v3+json",
+              "Authorization": `token ${pat}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ ref: "main" })
+          });
 
-        if (!response.ok) {
-          const errText = await response.text();
-          console.error("GitHub API failed:", errText);
-          throw new Error(`GitHub 發送失敗: HTTP ${response.status}`);
+          if (response.ok) {
+            syncTriggeredViaGithub = true;
+            toast({
+              title: "🚀 雲端自動化已喚醒",
+              description: "GitHub 伺服器正在進行計算更新，請耐候 1~2 分鐘後重新整理頁面。",
+            });
+          } else {
+            const errText = await response.text();
+            console.warn("GitHub API dispatch failed:", errText);
+          }
+        } catch (githubErr) {
+          console.warn("GitHub dispatch network or CORS error:", githubErr);
         }
+      }
 
-        toast({
-          title: "🚀 雲端自動化已喚醒",
-          description: "GitHub 伺服器正在進行計算更新，請耐心稍候約 1~2 分鐘後重新整理頁面。",
-        });
-      } else {
-        if (!firestore) throw new Error("尚未載入 Firestore 或缺少 GitHub Token");
-        console.warn("未偵測到 NEXT_PUBLIC_GITHUB_PAT，將發送 Firebase 訊號。");
+      // 如果 GitHub 觸發不可用或失敗，自動 fallback 至 Firestore 寫入訊號以利 Daemon 回應
+      if (!syncTriggeredViaGithub) {
+        if (!firestore) throw new Error("尚未載入 Firestore 實例，請稍後重試。");
         const syncRef = doc(firestore, 'marketSync', 'trigger');
         await setDoc(syncRef, {
           last_requested_at: serverTimestamp(),
@@ -382,14 +472,14 @@ export function FinanceFlowClient() {
         });
         toast({
           title: "🔄 同步訊號已發送",
-          description: "目前使用本地 Daemon 模式接管。",
+          description: "已將同步指令寫入雲端數據庫，等待 Daemon 處理中...",
         });
       }
     } catch (error: any) {
       console.error("Sync trigger error:", error);
       toast({
-        title: "發送失敗",
-        description: error.message || "無法發送雲端觸發指令。",
+        title: "同步發送失敗",
+        description: error.message || "無法發送同步指令。",
         variant: "destructive",
       });
     } finally {
@@ -1235,6 +1325,15 @@ export function FinanceFlowClient() {
 
                       return (
                         <div key={idx} className="bg-white border border-slate-100 rounded-3xl p-6 hover:shadow-md transition-all duration-300 relative group overflow-hidden">
+                          {/* 右上角編輯按鈕 */}
+                          <button
+                            onClick={() => handleOpenEditDialog(pos)}
+                            className="absolute top-4 right-10 p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+                            title="調整持股成本/股數"
+                          >
+                            <Settings className="w-3.5 h-3.5" />
+                          </button>
+
                           {/* 右上角刪除按鈕 */}
                           <button
                             onClick={() => handleDeletePosition(pos.symbol, pos.name)}
@@ -1485,7 +1584,18 @@ export function FinanceFlowClient() {
                     </div>
                     <div>
                       <h3 className="text-3xl font-black text-slate-800">{pos.name}</h3>
-                      <p className="text-xs text-slate-500 font-bold mt-1 uppercase">買入成本: ${pos.avg_price} | 持有 1,000 股</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <p className="text-xs text-slate-500 font-bold uppercase">
+                          買入成本: ${pos.avg_price} | 持有 {(pos.shares || 1000).toLocaleString()} 股
+                        </p>
+                        <button
+                          onClick={() => handleOpenEditDialog(pos)}
+                          className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-all"
+                          title="調整持股"
+                        >
+                          <Settings className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                   <div className="text-right">
@@ -2004,6 +2114,85 @@ export function FinanceFlowClient() {
           </form>
         </DialogContent>
       </Dialog>
-    </Tabs >
+
+      {/* 調整持股對話框 */}
+      <Dialog open={isOpenEditDialog} onOpenChange={setIsOpenEditDialog}>
+        <DialogContent className="sm:max-w-[400px] bg-white border border-slate-200 text-slate-800 rounded-3xl shadow-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-black text-slate-800 flex items-center gap-2">
+              <Settings className="w-5 h-5 text-indigo-600" />
+              調整持股資訊
+            </DialogTitle>
+            <DialogDescription className="text-slate-500 text-xs font-bold">
+              調整 <strong className="text-slate-800">{selectedEditStock?.name} ({selectedEditStock?.symbol})</strong> 的買入均價與持有股數。
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleEditPositionSubmit} className="space-y-4 py-2">
+            <div className="space-y-3 text-xs font-bold text-slate-600">
+              <div className="grid grid-cols-4 items-center gap-3">
+                <Label htmlFor="edit_price" className="text-right">
+                  買入成本 <span className="text-rose-500">*</span>
+                </Label>
+                <Input
+                  id="edit_price"
+                  type="number"
+                  step="0.01"
+                  value={editAvgPrice}
+                  onChange={(e) => setEditAvgPrice(e.target.value)}
+                  className="col-span-3 border-slate-200 rounded-xl focus:border-cyan-500 text-slate-800"
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-3">
+                <Label htmlFor="edit_shares" className="text-right">
+                  持有股數
+                </Label>
+                <Input
+                  id="edit_shares"
+                  type="number"
+                  value={editShares}
+                  onChange={(e) => setEditShares(e.target.value)}
+                  className="col-span-3 border-slate-200 rounded-xl focus:border-cyan-500 text-slate-800"
+                />
+              </div>
+            </div>
+            <DialogFooter className="pt-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setIsOpenEditDialog(false);
+                  setSelectedEditStock(null);
+                }}
+                className="text-slate-500 hover:text-slate-800 rounded-xl hover:bg-slate-50"
+                disabled={isSubmitting}
+              >
+                取消
+              </Button>
+              <Button
+                type="submit"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-black px-6 rounded-xl transition-all"
+                disabled={isSubmitting}
+              >
+                確認調整
+              </Button>
+              {/* 新增刪除按鈕，提供完整的調整彈性 */}
+              <Button
+                type="button"
+                onClick={() => {
+                  if (selectedEditStock) {
+                    handleDeletePosition(selectedEditStock.symbol, selectedEditStock.name);
+                    setIsOpenEditDialog(false);
+                  }
+                }}
+                className="bg-rose-600 hover:bg-rose-700 text-white font-black px-4 rounded-xl transition-all"
+              >
+                刪除監控
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </Tabs>
   );
 }
