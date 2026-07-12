@@ -46,13 +46,15 @@ function applyReplacementRules(text: string | undefined, rules: ReplacementRule[
                 processedText = processedText.replace(regex, rule.replace);
             }
         } catch (e) {
-            // 如果不是有效的正則表達式，回退到字串包含檢查
+            // 設定頁的「尋找文字」通常是一般文字；例如 A125***605
+            // 不是合法正則表達式（* 不能單獨出現），此時必須用字串取代，
+            // 不能再次 new RegExp，否則會把原本的錯誤重新拋出。
             if (processedText.includes(rule.find)) {
                 if (rule.deleteRow) {
                     shouldDelete = true;
                     break;
                 }
-                processedText = processedText.replace(new RegExp(rule.find, 'g'), rule.replace);
+                processedText = processedText.split(rule.find).join(rule.replace);
             }
         }
     }
