@@ -254,7 +254,12 @@ export type CashData = {
 };
 
 export async function parseDepositAccount(text: string): Promise<DepositData[]> {
-    const rawLines = text.split('\n').map(l => l.trim()).filter(l => l);
+    // 保留 TAB 欄位，不要移除報表行尾的空摘要欄位；
+    // 否則「交易類型 + 空白摘要」會被誤判成非 TAB 格式。
+    const rawLines = text
+        .split('\n')
+        .map(l => l.replace(/\r$/, ''))
+        .filter(l => l.trim());
     const results: DepositData[] = [];
 
     // Step 1: Merge multi-line entries
@@ -264,12 +269,14 @@ export async function parseDepositAccount(text: string): Promise<DepositData[]> 
     // 第三行 (可選): 帳號/備註資訊
     const mergedEntries: { date: string, mainLine: string, supplementaryLine: string }[] = [];
     let currentDate = '';
-    const dateLineRegex = /^(\d{4}\/\d{2}\/\d{2})$/;
+    // 部分銀行報表會在非當日／跨日資料的日期前加上「*」，但日期本身仍有效。
+    const dateLineRegex = /^\*?(\d{4}\/\d{2}\/\d{2})$/;
     const transactionLineRegex = /^\d{2}:\d{2}:\d{2}/;
 
     for (const line of rawLines) {
-        if (dateLineRegex.test(line)) {
-            currentDate = line;
+        const dateMatch = line.match(dateLineRegex);
+        if (dateMatch) {
+            currentDate = dateMatch[1];
             continue;
         }
 
