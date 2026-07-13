@@ -976,7 +976,7 @@ export function ResultsDisplay({
                                                 <TableCell className="whitespace-nowrap">{item.category}</TableCell>
                                                 <TableCell>{item.description}</TableCell>
                                                 <TableCell>{(item as any).bankCode || (item as any).notes || ''}</TableCell>
-                                                <TableCell className="whitespace-nowrap">{(item as any).source || '信用卡'}</TableCell>
+                                                <TableCell className="whitespace-nowrap">{(item as any).source === '活存帳戶' ? '活存' : ((item as any).source || '信用卡')}</TableCell>
                                                 <TableCell className={`whitespace-nowrap text-right ${item.amount < 0 ? 'text-green-600' : ''}`}>
                                                     {item.amount.toLocaleString()}
                                                 </TableCell>
