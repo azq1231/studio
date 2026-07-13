@@ -19,11 +19,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from '@/lib/utils';
-import { Download, AlertCircle, Trash2, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2, FileText, Combine, Search, ChevronsLeft, ChevronsRight, ArrowRight, CreditCard, Landmark, Banknote, Calendar, Tag, MoreHorizontal } from 'lucide-react';
+import { Download, AlertCircle, Trash2, ChevronsUpDown, ArrowDown, ArrowUp, BarChart2, FileText, Combine, Search, ChevronsLeft, ChevronsRight, ArrowRight, CreditCard, Landmark, Banknote, Calendar, Tag, MoreHorizontal, Wrench, Check } from 'lucide-react';
 import { AppSettings } from './settings-manager';
 import { CashTransactionForm } from './cash-transaction-form';
 import type { CombinedData } from '@/types/index';
 import { Badge } from '@/components/ui/badge';
+import { MaintenanceSyncDialog } from './maintenance-sync-dialog';
+import { ResultsSummaryTab } from './results-summary-tab';
 
 
 const EditableCell = ({ value, onUpdate, disabled }: { value: string; onUpdate: (value: string) => void; disabled?: boolean; }) => {
@@ -61,13 +63,17 @@ const PaginationControls = ({ currentPage, totalPages, onPageChange }: { current
 };
 
 const TransactionCard = ({
-    id, date, description, amount, category, type, extra, onUpdate, onDelete, categories, disabled
+    id, date, description, amount, category, type, extra, onUpdate, onDelete, categories, disabled,
+    isSynced, onSync, showSync
 }: {
     id: string; date: string; description: string; amount: number; category: string;
     type: 'credit' | 'deposit' | 'cash'; extra?: string;
     onUpdate: (id: string, field: any, value: string | number, type: 'credit' | 'deposit' | 'cash') => void;
     onDelete: (id: string, type: 'credit' | 'deposit' | 'cash') => void;
     categories: string[]; disabled?: boolean;
+    isSynced?: boolean;
+    onSync?: () => void;
+    showSync?: boolean;
 }) => {
     const iconMap = {
         credit: <CreditCard className="h-4 w-4 text-blue-500" />,
@@ -116,15 +122,35 @@ const TransactionCard = ({
                     )}
                 </div>
 
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => onDelete(id, type)}
-                    disabled={disabled}
-                    className="h-8 w-8 text-destructive ml-auto"
-                >
-                    <Trash2 className="h-4 w-4" />
-                </Button>
+                <div className="flex items-center gap-1 ml-auto">
+                    {showSync && onSync && (
+                        isSynced ? (
+                            <div className="h-8 w-8 flex items-center justify-center text-green-600" title="已同步">
+                                <Check className="h-4 w-4" />
+                            </div>
+                        ) : (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={onSync}
+                                disabled={disabled}
+                                className="h-8 w-8 text-muted-foreground hover:text-primary"
+                                title="同步至房屋維修紀錄"
+                            >
+                                <Wrench className="h-4 w-4" />
+                            </Button>
+                        )
+                    )}
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => onDelete(id, type)}
+                        disabled={disabled}
+                        className="h-8 w-8 text-destructive"
+                    >
+                        <Trash2 className="h-4 w-4" />
+                    </Button>
+                </div>
             </div>
         </div>
     );
@@ -146,19 +172,28 @@ const SortableHeader = <T extends string>({ sortKey, currentSortKey, sortDirecti
 
 
 export function ResultsDisplay({
-    creditData, depositData, cashData, settings, onAddCashTransaction, onUpdateTransaction, onDeleteTransaction, hasProcessed, user
+    creditData, depositData, cashData, settings, onAddCashTransaction, onUpdateTransaction, onDeleteTransaction, hasProcessed, user,
+    maintenanceRecords, onAddMaintenanceRecord
 }: {
     creditData: CreditData[]; depositData: DepositData[]; cashData: CashData[]; settings: AppSettings;
     onAddCashTransaction: (data: Omit<CashData, 'id'>) => void;
     onUpdateTransaction: (id: string, field: keyof any, value: string | number, type: 'credit' | 'deposit' | 'cash') => void;
     onDeleteTransaction: (id: string, type: 'credit' | 'deposit' | 'cash') => void;
     hasProcessed: boolean; user: User | null;
+    maintenanceRecords?: any[];
+    onAddMaintenanceRecord?: (record: any) => Promise<void>;
 }) {
     const { toast } = useToast();
     const [searchQuery, setSearchQuery] = useState('');
+    const [listCategoryFilter, setListCategoryFilter] = useState('ALL');
     const [creditPage, setCreditPage] = useState(1);
     const [depositPage, setDepositPage] = useState(1);
     const [cashPage, setCashPage] = useState(1);
+    const [combinedPage, setCombinedPage] = useState(1);
+
+    useEffect(() => {
+        setCombinedPage(1);
+    }, [searchQuery, listCategoryFilter]);
     const [creditSortKey, setCreditSortKey] = useState<keyof CreditData | null>('transactionDate');
     const [creditSortDirection, setCreditSortDirection] = useState<'asc' | 'desc'>('desc');
     const [depositSortKey, setDepositSortKey] = useState<keyof DepositData | null>('date');
@@ -171,6 +206,100 @@ export function ResultsDisplay({
     const [summarySelectedCategories, setSummarySelectedCategories] = useState<string[]>([]);
     const [isSummaryFilterOpen, setIsSummaryFilterOpen] = useState(false);
 
+    // Sync state
+    const [isSyncDialogOpen, setIsSyncDialogOpen] = useState(false);
+    const [syncForm, setSyncForm] = useState<{
+        txId: string;
+        date: string;
+        description: string;
+        amount: number;
+        location: string;
+        notes: string;
+        source: string;
+        vendor?: string;
+    } | null>(null);
+
+
+    const locationSuggestions = useMemo(() => {
+        if (!maintenanceRecords) return [];
+        const locations = maintenanceRecords.map(r => r.location).filter(Boolean);
+        return Array.from(new Set(locations)) as string[];
+    }, [maintenanceRecords]);
+
+    const vendorSuggestions = useMemo(() => {
+        if (!maintenanceRecords) return [];
+        const vends = maintenanceRecords.map(r => r.vendor).filter(Boolean);
+        return Array.from(new Set(vends)) as string[];
+    }, [maintenanceRecords]);
+
+    const syncedTxIds = useMemo(() => {
+        const ids = new Set<string>();
+        if (maintenanceRecords) {
+            maintenanceRecords.forEach(r => {
+                if (r.txId) ids.add(r.txId);
+            });
+        }
+        return ids;
+    }, [maintenanceRecords]);
+
+    const checkIsSynced = React.useCallback((row: any) => {
+        if (!maintenanceRecords || maintenanceRecords.length === 0) return false;
+        
+        // 1. 精確 ID 比對
+        if (maintenanceRecords.some(r => r.txId === row.id)) return true;
+        
+        // 2. 彈性雙軌模糊比對
+        const rowAmount = Math.abs(row.amount);
+        
+        // 取得 row 的標準化 MM/DD 日期
+        const rowDateStr = row.date || (row.transactionDate ? getCreditDisplayDate(row.transactionDate) : '');
+        const normalizeDate = (dStr: string) => {
+            if (!dStr) return '';
+            let s = dStr.replace(/[-.\s]/g, '/');
+            const parts = s.split('/').filter(Boolean);
+            if (parts.length >= 2) {
+                const mm = parts[parts.length - 2].padStart(2, '0');
+                const dd = parts[parts.length - 1].padStart(2, '0');
+                return `${mm}/${dd}`;
+            }
+            return s;
+        };
+        const normRowDate = normalizeDate(rowDateStr);
+        const rowDesc = (row.description || '').trim().toLowerCase();
+        
+        return maintenanceRecords.some(r => {
+            const rAmount = Math.abs(r.amount);
+            const normRDate = normalizeDate(r.date || '');
+            const rItem = (r.item || '').trim().toLowerCase();
+            
+            if (rAmount === rowAmount && normRDate === normRowDate) {
+                if (rItem && rowDesc && (rItem.includes(rowDesc) || rowDesc.includes(rItem))) {
+                    return true;
+                }
+            }
+            return false;
+        });
+    }, [maintenanceRecords]);
+
+
+    const handleSyncClick = (row: any, source: string) => {
+        const amount = Math.abs(row.amount);
+        const notesVal = row.bankCode || row.notes || '';
+        const displayDate = source === '信用卡' ? getCreditDisplayDate(row.transactionDate) : row.date;
+        setSyncForm({
+            txId: row.id,
+            date: displayDate || '',
+            description: row.description || '',
+            amount,
+            location: '',
+            notes: notesVal,
+            source,
+            vendor: ''
+        });
+        setIsSyncDialogOpen(true);
+    };
+
+
     useEffect(() => {
         if (hasProcessed || creditData.length > 0 || depositData.length > 0 || cashData.length > 0) {
             setSummarySelectedCategories(settings.availableCategories);
@@ -181,8 +310,20 @@ export function ResultsDisplay({
     const handleDepositSort = (key: keyof DepositData) => { setDepositPage(1); if (depositSortKey === key) setDepositSortDirection(prev => prev === 'asc' ? 'desc' : 'asc'); else { setDepositSortKey(key); setDepositSortDirection('desc'); } };
     const handleCashSort = (key: keyof CashData) => { setCashPage(1); if (cashSortKey === key) setCashSortDirection(prev => prev === 'asc' ? 'desc' : 'asc'); else { setCashSortKey(key); setCashSortDirection('desc'); } };
 
-    const sortAndPaginate = <T, K extends keyof T>(data: T[], sortKey: K | null, sortDirection: 'asc' | 'desc', page: number, searchFn: (item: T, query: string) => boolean, dateKey?: keyof T, dateParser?: (dateStr: string) => string): { data: T[], totalPages: number } => {
+    const sortAndPaginate = <T, K extends keyof T>(
+        data: T[],
+        sortKey: K | null,
+        sortDirection: 'asc' | 'desc',
+        page: number,
+        searchFn: (item: T, query: string) => boolean,
+        dateKey?: keyof T,
+        dateParser?: (dateStr: string) => string,
+        categoryKey?: keyof T
+    ): { data: T[], totalPages: number } => {
         let filteredData = searchQuery ? data.filter(item => searchFn(item, searchQuery.toLowerCase())) : data;
+        if (categoryKey && listCategoryFilter !== 'ALL') {
+            filteredData = filteredData.filter(item => (item[categoryKey] as any) === listCategoryFilter);
+        }
         if (sortKey) {
             filteredData.sort((a, b) => {
                 let comparison = 0;
@@ -206,9 +347,9 @@ export function ResultsDisplay({
         return { data: paginatedData, totalPages };
     };
 
-    const sortedCreditData = useMemo(() => sortAndPaginate(creditData, creditSortKey, creditSortDirection, creditPage, (item, q) => item.description.toLowerCase().includes(q) || (item.bankCode || '').toLowerCase().includes(q), 'transactionDate', getCreditDisplayDate), [creditData, creditSortKey, creditSortDirection, creditPage, searchQuery]);
-    const sortedDepositData = useMemo(() => sortAndPaginate(depositData, depositSortKey, depositSortDirection, depositPage, (item, q) => item.description.toLowerCase().includes(q) || (item.bankCode || '').toLowerCase().includes(q), 'date', d => d), [depositData, depositSortKey, depositSortDirection, depositPage, searchQuery]);
-    const sortedCashData = useMemo(() => sortAndPaginate(cashData, cashSortKey, cashSortDirection, cashPage, (item, q) => item.description.toLowerCase().includes(q) || (item.notes || '').toLowerCase().includes(q), 'date', d => d), [cashData, cashSortKey, cashSortDirection, cashPage, searchQuery]);
+    const sortedCreditData = useMemo(() => sortAndPaginate(creditData, creditSortKey, creditSortDirection, creditPage, (item, q) => item.description.toLowerCase().includes(q) || (item.bankCode || '').toLowerCase().includes(q), 'transactionDate', getCreditDisplayDate, 'category'), [creditData, creditSortKey, creditSortDirection, creditPage, searchQuery, listCategoryFilter]);
+    const sortedDepositData = useMemo(() => sortAndPaginate(depositData, depositSortKey, depositSortDirection, depositPage, (item, q) => item.description.toLowerCase().includes(q) || (item.bankCode || '').toLowerCase().includes(q), 'date', d => d, 'category'), [depositData, depositSortKey, depositSortDirection, depositPage, searchQuery, listCategoryFilter]);
+    const sortedCashData = useMemo(() => sortAndPaginate(cashData, cashSortKey, cashSortDirection, cashPage, (item, q) => item.description.toLowerCase().includes(q) || (item.notes || '').toLowerCase().includes(q), 'date', d => d, 'category'), [cashData, cashSortKey, cashSortDirection, cashPage, searchQuery, listCategoryFilter]);
 
 
     const combinedData = useMemo<CombinedData[]>(() => {
@@ -234,8 +375,12 @@ export function ResultsDisplay({
         const combined: CombinedData[] = [];
 
         const filterAndMap = (data: any[], source: CombinedData['source'], dateKey: string) => {
+            let dbData = data;
+            if (listCategoryFilter !== 'ALL') {
+                dbData = dbData.filter(d => d.category === listCategoryFilter);
+            }
             const q = searchQuery.toLowerCase();
-            (searchQuery ? data.filter(d => (d.description && d.description.toLowerCase().includes(q)) || (d.bankCode && d.bankCode.toLowerCase().includes(q)) || (d.notes && d.notes.toLowerCase().includes(q))) : data).forEach(d => {
+            (searchQuery ? dbData.filter(d => (d.description && d.description.toLowerCase().includes(q)) || (d.bankCode && d.bankCode.toLowerCase().includes(q)) || (d.notes && d.notes.toLowerCase().includes(q))) : dbData).forEach(d => {
                 const displayDate = dateKey === 'transactionDate' ? getCreditDisplayDate(d[dateKey]) : d[dateKey];
                 const dateObj = parseDateSafe(displayDate);
                 combined.push({ ...d, date: displayDate, dateObj, source });
@@ -247,7 +392,12 @@ export function ResultsDisplay({
         filterAndMap(cashData, '現金', 'date');
 
         return combined.sort((a, b) => b.dateObj.getTime() - a.dateObj.getTime());
-    }, [creditData, depositData, cashData, searchQuery]);
+    }, [creditData, depositData, cashData, searchQuery, listCategoryFilter]);
+
+    const totalCombinedPages = Math.ceil(combinedData.length / 50);
+    const paginatedCombinedData = useMemo(() => {
+        return combinedData.slice((combinedPage - 1) * 50, combinedPage * 50);
+    }, [combinedData, combinedPage]);
 
     const summaryReportData = useMemo(() => {
         const monthlyData: Record<string, Record<string, number>> = {};
@@ -335,9 +485,34 @@ export function ResultsDisplay({
             <CardContent className="pb-24 md:pb-6">
                 {hasData ? (
                     <>
-                        <div className="flex justify-between items-center mb-4 gap-4">
-                            <div className="relative w-full max-w-sm"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="尋找交易項目或備註..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" /></div>
-                            <Button variant="outline" size="sm" onClick={handleDownload}><Download className="mr-2 h-4 w-4" />下載 Excel</Button>
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
+                            <div className="flex flex-col sm:flex-row gap-2 w-full sm:max-w-xl">
+                                <div className="relative w-full sm:max-w-sm flex-grow">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                    <Input placeholder="尋找交易項目或備註..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
+                                </div>
+                                <Select 
+                                    value={listCategoryFilter} 
+                                    onValueChange={(val) => {
+                                        console.log("Select category filter changed to:", val);
+                                        setListCategoryFilter(val);
+                                    }}
+                                    onOpenChange={(open) => {
+                                        console.log("Select open state changed to:", open);
+                                    }}
+                                >
+                                    <SelectTrigger className="w-full sm:w-[180px] shrink-0">
+                                        <SelectValue placeholder="所有交易類型" />
+                                    </SelectTrigger>
+                                    <SelectContent className="z-[100] max-h-[300px] overflow-y-auto" position="popper" sideOffset={4}>
+                                        <SelectItem value="ALL">所有交易類型</SelectItem>
+                                        {Array.from(new Set(settings.availableCategories.filter(Boolean))).map(c => (
+                                            <SelectItem key={c} value={c}>{c}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <Button variant="outline" size="sm" onClick={handleDownload} className="shrink-0"><Download className="mr-2 h-4 w-4" />下載 Excel</Button>
                         </div>
                         <Tabs defaultValue={defaultTab} className="w-full">
                             {/* Desktop TabsList */}
@@ -410,18 +585,34 @@ export function ResultsDisplay({
                                                 <TableHead className="w-[100px]">日期</TableHead>
                                                 <TableHead className="w-[100px]">類型</TableHead>
                                                 <TableHead className="min-w-[150px]">交易項目</TableHead>
+                                                <TableHead className="min-w-[120px]">備註</TableHead>
                                                 <TableHead className="w-[80px]">來源</TableHead>
-                                                <TableHead className="text-right w-[100px]">金額</TableHead>
+                                                <TableHead className="text-right w-[125px] min-w-[125px]">金額</TableHead>
+                                                {onAddMaintenanceRecord && <TableHead className="w-[80px] text-center">操作</TableHead>}
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {combinedData.map((row) => (
+                                            {paginatedCombinedData.map((row) => (
                                                 <TableRow key={row.id}>
                                                     <TableCell className="font-mono whitespace-nowrap">{row.date}</TableCell>
                                                     <TableCell>{row.category}</TableCell>
                                                     <TableCell>{row.description}</TableCell>
+                                                    <TableCell>{row.bankCode || row.notes || ''}</TableCell>
                                                     <TableCell>{row.source}</TableCell>
                                                     <TableCell className={`text-right font-mono ${row.amount < 0 ? 'text-green-600' : ''}`}>{row.amount.toLocaleString()}</TableCell>
+                                                    {onAddMaintenanceRecord && (
+                                                        <TableCell className="text-center">
+                                                            {checkIsSynced(row) ? (
+                                                                <div className="h-8 w-8 mx-auto flex items-center justify-center text-green-600" title="已同步">
+                                                                    <Check className="h-4 w-4" />
+                                                                </div>
+                                                            ) : (
+                                                                <Button variant="ghost" size="icon" onClick={() => handleSyncClick(row, row.source)} disabled={!user} className="h-8 w-8 text-muted-foreground hover:text-primary mx-auto" title="同步至房屋維修紀錄">
+                                                                    <Wrench className="h-4 w-4" />
+                                                                </Button>
+                                                            )}
+                                                        </TableCell>
+                                                    )}
                                                 </TableRow>
                                             ))}
                                         </TableBody>
@@ -430,8 +621,8 @@ export function ResultsDisplay({
 
                                 {/* Mobile View */}
                                 <div className="md:hidden space-y-1">
-                                    {combinedData.length > 0 ? (
-                                        combinedData.map((row) => (
+                                    {paginatedCombinedData.length > 0 ? (
+                                        paginatedCombinedData.map((row) => (
                                             <div key={row.id} className="p-3 border-b last:border-0">
                                                 <div className="flex justify-between items-start mb-1">
                                                     <span className="text-[10px] font-mono text-muted-foreground">{row.date} • {row.source}</span>
@@ -440,8 +631,24 @@ export function ResultsDisplay({
                                                     </span>
                                                 </div>
                                                 <div className="text-sm font-medium mb-1">{row.description}</div>
-                                                <div className="text-[10px] inline-flex items-center px-1.5 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">
-                                                    {row.category}
+                                                {(row.bankCode || row.notes) && (
+                                                    <div className="text-xs text-muted-foreground mb-1">{row.bankCode || row.notes}</div>
+                                                )}
+                                                <div className="flex justify-between items-center mt-2">
+                                                    <div className="text-[10px] inline-flex items-center px-1.5 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium">
+                                                        {row.category}
+                                                    </div>
+                                                    {onAddMaintenanceRecord && (
+                                                        checkIsSynced(row) ? (
+                                                            <div className="h-6 w-6 flex items-center justify-center text-green-600" title="已同步">
+                                                                <Check className="h-4 w-4" />
+                                                            </div>
+                                                        ) : (
+                                                            <Button variant="ghost" size="icon" onClick={() => handleSyncClick(row, row.source)} disabled={!user} className="h-8 w-8 text-muted-foreground hover:text-primary" title="同步至房屋維修紀錄">
+                                                                <Wrench className="h-4 w-4" />
+                                                            </Button>
+                                                        )
+                                                    )}
                                                 </div>
                                             </div>
                                         ))
@@ -449,6 +656,7 @@ export function ResultsDisplay({
                                         <div className="text-center py-8 text-muted-foreground">沒有資料</div>
                                     )}
                                 </div>
+                                <PaginationControls currentPage={combinedPage} totalPages={totalCombinedPages} onPageChange={setCombinedPage} />
                             </TabsContent>
                             <TabsContent value="credit">
                                 {/* Desktop View */}
@@ -459,7 +667,7 @@ export function ResultsDisplay({
                                                 <SortableHeader sortKey="transactionDate" currentSortKey={creditSortKey} sortDirection={creditSortDirection} onSort={handleCreditSort} style={{ width: '100px' }}>日期</SortableHeader>
                                                 <TableHead style={{ width: '100px' }}>類型</TableHead>
                                                 <TableHead className="min-w-[150px]">交易項目</TableHead>
-                                                <SortableHeader sortKey="amount" currentSortKey={creditSortKey} sortDirection={creditSortDirection} onSort={handleCreditSort} style={{ width: '100px' }}>金額</SortableHeader>
+                                                <SortableHeader sortKey="amount" currentSortKey={creditSortKey} sortDirection={creditSortDirection} onSort={handleCreditSort} style={{ width: '125px', minWidth: '125px' }}>金額</SortableHeader>
                                                 <TableHead className="min-w-[120px]">銀行代碼/備註</TableHead>
                                                 <TableHead className="w-[80px] text-center">操作</TableHead>
                                             </TableRow>
@@ -479,16 +687,29 @@ export function ResultsDisplay({
                                                     <TableCell>
                                                         <EditableCell value={row.description} onUpdate={v => onUpdateTransaction(row.id, 'description', v, 'credit')} disabled={!user} />
                                                     </TableCell>
-                                                    <TableCell style={{ width: '100px' }}>
+                                                    <TableCell style={{ width: '125px', minWidth: '125px' }}>
                                                         <EditableCell value={row.amount.toString()} onUpdate={v => onUpdateTransaction(row.id, 'amount', parseFloat(v) || 0, 'credit')} disabled={!user} />
                                                     </TableCell>
                                                     <TableCell style={{ minWidth: '120px' }}>
                                                         <EditableCell value={row.bankCode || ''} onUpdate={v => onUpdateTransaction(row.id, 'bankCode', v, 'credit')} disabled={!user} />
                                                     </TableCell>
                                                     <TableCell className="text-center">
-                                                        <Button variant="ghost" size="icon" onClick={() => onDeleteTransaction(row.id, 'credit')} disabled={!user} className="h-8 w-8 text-destructive">
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
+                                                        <div className="flex items-center justify-center gap-1">
+                                                            {onAddMaintenanceRecord && (
+                                                                checkIsSynced(row) ? (
+                                                                    <div className="h-8 w-8 flex items-center justify-center text-green-600" title="已同步">
+                                                                        <Check className="h-4 w-4" />
+                                                                    </div>
+                                                                ) : (
+                                                                    <Button variant="ghost" size="icon" onClick={() => handleSyncClick(row, '信用卡')} disabled={!user} className="h-8 w-8 text-muted-foreground hover:text-primary" title="同步至房屋維修紀錄">
+                                                                        <Wrench className="h-4 w-4" />
+                                                                    </Button>
+                                                                )
+                                                            )}
+                                                            <Button variant="ghost" size="icon" onClick={() => onDeleteTransaction(row.id, 'credit')} disabled={!user} className="h-8 w-8 text-destructive">
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        </div>
                                                     </TableCell>
                                                 </TableRow>
                                             ))}
@@ -512,6 +733,9 @@ export function ResultsDisplay({
                                             onDelete={onDeleteTransaction}
                                             categories={settings.availableCategories}
                                             disabled={!user}
+                                            isSynced={syncedTxIds.has(row.id)}
+                                            onSync={() => handleSyncClick(row, '信用卡')}
+                                            showSync={!!onAddMaintenanceRecord}
                                         />
                                     ))}
                                 </div>
@@ -527,7 +751,7 @@ export function ResultsDisplay({
                                                 <SortableHeader sortKey="date" currentSortKey={depositSortKey} sortDirection={depositSortDirection} onSort={handleDepositSort} style={{ width: '100px' }}>日期</SortableHeader>
                                                 <SortableHeader sortKey="category" currentSortKey={depositSortKey} sortDirection={depositSortDirection} onSort={handleDepositSort} style={{ width: '100px' }}>類型</SortableHeader>
                                                 <SortableHeader sortKey="description" currentSortKey={depositSortKey} sortDirection={depositSortDirection} onSort={handleDepositSort}>交易項目</SortableHeader>
-                                                <SortableHeader sortKey="amount" currentSortKey={depositSortKey} sortDirection={depositSortDirection} onSort={handleDepositSort} style={{ width: '100px' }}>金額</SortableHeader>
+                                                <SortableHeader sortKey="amount" currentSortKey={depositSortKey} sortDirection={depositSortDirection} onSort={handleDepositSort} style={{ width: '125px', minWidth: '125px' }}>金額</SortableHeader>
                                                 <TableHead className="min-w-[120px]">銀行代碼/備註</TableHead>
                                                 <TableHead className="w-[80px] text-center">操作</TableHead>
                                             </TableRow>
@@ -547,16 +771,29 @@ export function ResultsDisplay({
                                                     <TableCell>
                                                         <EditableCell value={row.description} onUpdate={v => onUpdateTransaction(row.id, 'description', v, 'deposit')} disabled={!user} />
                                                     </TableCell>
-                                                    <TableCell style={{ width: '100px' }}>
+                                                    <TableCell style={{ width: '125px', minWidth: '125px' }}>
                                                         <EditableCell value={row.amount.toString()} onUpdate={v => onUpdateTransaction(row.id, 'amount', parseFloat(v) || 0, 'deposit')} disabled={!user} />
                                                     </TableCell>
                                                     <TableCell style={{ minWidth: '120px' }}>
                                                         <EditableCell value={row.bankCode || ''} onUpdate={v => onUpdateTransaction(row.id, 'bankCode', v, 'deposit')} disabled={!user} />
                                                     </TableCell>
                                                     <TableCell className="text-center">
-                                                        <Button variant="ghost" size="icon" onClick={() => onDeleteTransaction(row.id, 'deposit')} disabled={!user} className="h-8 w-8 text-destructive">
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
+                                                        <div className="flex items-center justify-center gap-1">
+                                                            {onAddMaintenanceRecord && (
+                                                                syncedTxIds.has(row.id) ? (
+                                                                    <div className="h-8 w-8 flex items-center justify-center text-green-600" title="已同步">
+                                                                        <Check className="h-4 w-4" />
+                                                                    </div>
+                                                                ) : (
+                                                                    <Button variant="ghost" size="icon" onClick={() => handleSyncClick(row, '活存帳戶')} disabled={!user} className="h-8 w-8 text-muted-foreground hover:text-primary" title="同步至房屋維修紀錄">
+                                                                        <Wrench className="h-4 w-4" />
+                                                                    </Button>
+                                                                )
+                                                            )}
+                                                            <Button variant="ghost" size="icon" onClick={() => onDeleteTransaction(row.id, 'deposit')} disabled={!user} className="h-8 w-8 text-destructive">
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        </div>
                                                     </TableCell>
                                                 </TableRow>
                                             ))}
@@ -581,6 +818,9 @@ export function ResultsDisplay({
                                             onDelete={onDeleteTransaction}
                                             categories={settings.availableCategories}
                                             disabled={!user}
+                                            isSynced={syncedTxIds.has(row.id)}
+                                            onSync={() => handleSyncClick(row, '活存帳戶')}
+                                            showSync={!!onAddMaintenanceRecord}
                                         />
                                     ))}
                                 </div>
@@ -605,7 +845,7 @@ export function ResultsDisplay({
                                                 <SortableHeader sortKey="date" currentSortKey={cashSortKey} sortDirection={cashSortDirection} onSort={handleCashSort} style={{ width: '100px' }}>日期</SortableHeader>
                                                 <TableHead style={{ width: '100px' }}>類型</TableHead>
                                                 <TableHead className="min-w-[150px]">交易項目</TableHead>
-                                                <SortableHeader sortKey="amount" currentSortKey={cashSortKey} sortDirection={cashSortDirection} onSort={handleCashSort} style={{ width: '100px' }}>金額</SortableHeader>
+                                                <SortableHeader sortKey="amount" currentSortKey={cashSortKey} sortDirection={cashSortDirection} onSort={handleCashSort} style={{ width: '125px', minWidth: '125px' }}>金額</SortableHeader>
                                                 <TableHead className="min-w-[120px]">備註</TableHead>
                                                 <TableHead className="w-[80px] text-center">操作</TableHead>
                                             </TableRow>
@@ -625,16 +865,29 @@ export function ResultsDisplay({
                                                     <TableCell>
                                                         <EditableCell value={row.description} onUpdate={v => onUpdateTransaction(row.id, 'description', v, 'cash')} disabled={!user} />
                                                     </TableCell>
-                                                    <TableCell style={{ width: '100px' }}>
+                                                    <TableCell style={{ width: '125px', minWidth: '125px' }}>
                                                         <EditableCell value={row.amount.toString()} onUpdate={v => onUpdateTransaction(row.id, 'amount', parseFloat(v) || 0, 'cash')} disabled={!user} />
                                                     </TableCell>
                                                     <TableCell style={{ minWidth: '120px' }}>
                                                         <EditableCell value={row.notes || ''} onUpdate={v => onUpdateTransaction(row.id, 'notes', v, 'cash')} disabled={!user} />
                                                     </TableCell>
                                                     <TableCell className="text-center">
-                                                        <Button variant="ghost" size="icon" onClick={() => onDeleteTransaction(row.id, 'cash')} disabled={!user} className="h-8 w-8 text-destructive">
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
+                                                        <div className="flex items-center justify-center gap-1">
+                                                            {onAddMaintenanceRecord && (
+                                                                syncedTxIds.has(row.id) ? (
+                                                                    <div className="h-8 w-8 flex items-center justify-center text-green-600" title="已同步">
+                                                                        <Check className="h-4 w-4" />
+                                                                    </div>
+                                                                ) : (
+                                                                    <Button variant="ghost" size="icon" onClick={() => handleSyncClick(row, '現金')} disabled={!user} className="h-8 w-8 text-muted-foreground hover:text-primary" title="同步至房屋維修紀錄">
+                                                                        <Wrench className="h-4 w-4" />
+                                                                    </Button>
+                                                                )
+                                                            )}
+                                                            <Button variant="ghost" size="icon" onClick={() => onDeleteTransaction(row.id, 'cash')} disabled={!user} className="h-8 w-8 text-destructive">
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        </div>
                                                     </TableCell>
                                                 </TableRow>
                                             ))}
@@ -659,116 +912,42 @@ export function ResultsDisplay({
                                             onDelete={onDeleteTransaction}
                                             categories={settings.availableCategories}
                                             disabled={!user}
+                                            isSynced={syncedTxIds.has(row.id)}
+                                            onSync={() => handleSyncClick(row, '現金')}
+                                            showSync={!!onAddMaintenanceRecord}
                                         />
                                     ))}
                                 </div>
                                 <PaginationControls currentPage={cashPage} totalPages={sortedCashData.totalPages} onPageChange={setCashPage} />
                             </TabsContent>
                             <TabsContent value="summary">
-                                <div className="flex flex-wrap items-center gap-2 my-4">
-                                    <Popover open={isSummaryFilterOpen} onOpenChange={setIsSummaryFilterOpen}>
-                                        <PopoverTrigger asChild><Button variant="outline">篩選類型 ({summarySelectedCategories.length}/{settings.availableCategories.length})<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button></PopoverTrigger>
-                                        <PopoverContent className="w-[250px] p-0">
-                                            <div className="p-2 space-y-1"><Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => setSummarySelectedCategories(settings.availableCategories)}>全選</Button><Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => setSummarySelectedCategories([])}>全部取消</Button></div>
-                                            <div className="border-t max-h-60 overflow-y-auto p-2">{[...settings.availableCategories].sort((a, b) => a.localeCompare(b, 'zh-Hant')).map(category => (<div key={category} className="flex items-center space-x-2 p-1"><Checkbox id={`cat-${category}`} checked={summarySelectedCategories.includes(category)} onCheckedChange={(c) => c ? setSummarySelectedCategories([...summarySelectedCategories, category]) : setSummarySelectedCategories(summarySelectedCategories.filter(i => i !== category))} /><label htmlFor={`cat-${category}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">{category}</label></div>))}</div>
-                                        </PopoverContent>
-                                    </Popover>
-                                    {settings.quickFilters.map((filter, index) => <Button key={index} variant="outline" size="sm" onClick={() => setSummarySelectedCategories(filter.categories)}>{filter.name}</Button>)}
-                                    <p className="text-sm text-muted-foreground hidden md:block ml-auto">點擊表格中的數字可查看該月份的交易明細。</p>
-                                </div>
-                                {/* Desktop View */}
-                                <div className="hidden md:block rounded-md border overflow-x-auto bg-card">
-                                    <Table className="min-w-full">
-                                        <TableHeader>
-                                            <TableRow>
-                                                {summaryReportData.headers.map(h => (
-                                                    <TableHead
-                                                        key={h}
-                                                        className={`whitespace-nowrap px-4 py-3 ${h === '日期（年月）' ? 'w-24' : 'text-right min-w-[80px]'}`}
-                                                    >
-                                                        {h}
-                                                    </TableHead>
-                                                ))}
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {summaryReportData.rows.map((row, i) => (
-                                                <TableRow key={i}>
-                                                    {summaryReportData.headers.map(header => {
-                                                        const value = row[header];
-                                                        const isClickable = header !== '日期（年月）' && header !== '總計' && typeof value === 'number' && value !== 0;
-                                                        let textColor = '';
-                                                        if (typeof value === 'number') {
-                                                            if (value < 0) textColor = 'text-green-600';
-                                                        }
-                                                        return (
-                                                            <TableCell
-                                                                key={header}
-                                                                className={`font-mono whitespace-nowrap px-4 py-2 ${header !== '日期（年月）' ? 'text-right' : ''} ${textColor}`}
-                                                            >
-                                                                {isClickable ? (
-                                                                    <button
-                                                                        onClick={() => handleSummaryCellClick(row['日期（年月）'] as string, header)}
-                                                                        className="hover:underline hover:text-blue-500"
-                                                                    >
-                                                                        {value.toLocaleString()}
-                                                                    </button>
-                                                                ) : (
-                                                                    typeof value === 'number' ? value.toLocaleString() : value
-                                                                )}
-                                                            </TableCell>
-                                                        );
-                                                    })}
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </div>
-
-                                {/* Mobile View (Accordion List) */}
-                                <div className="md:hidden space-y-3 pt-2">
-                                    {summaryReportData.rows.map((row, index) => {
-                                        const month = row['日期（年月）'] as string;
-                                        const total = row['總計'] as number;
-                                        return (
-                                            <Accordion key={index} type="single" collapsible className="w-full border rounded-xl bg-card shadow-sm px-4">
-                                                <AccordionItem value={`month-${index}`} className="border-b-0">
-                                                    <AccordionTrigger className="hover:no-underline py-3">
-                                                        <div className="flex justify-between items-center w-full pr-4">
-                                                            <span className="font-bold text-sm sm:text-base">{month}</span>
-                                                            <span className={cn("font-bold font-mono text-sm sm:text-base", total < 0 ? "text-green-600" : "text-foreground")}>
-                                                                {total.toLocaleString()}
-                                                            </span>
-                                                        </div>
-                                                    </AccordionTrigger>
-                                                    <AccordionContent className="pt-2 pb-4 border-t border-dashed space-y-2.5">
-                                                        {summaryReportData.headers.filter(h => h !== '日期（年月）' && h !== '總計').map(header => {
-                                                            const value = row[header] as number;
-                                                            if (value === 0) return null;
-                                                            return (
-                                                                <div key={header} className="flex justify-between items-center py-1.5 border-b border-muted/30 last:border-0">
-                                                                    <span className="text-xs sm:text-sm font-medium text-muted-foreground">{header}</span>
-                                                                    <button
-                                                                        onClick={() => handleSummaryCellClick(month, header)}
-                                                                        className={cn("text-xs sm:text-sm font-bold font-mono hover:underline text-blue-500", value < 0 ? "text-green-600 hover:text-blue-500" : "")}
-                                                                    >
-                                                                        {value.toLocaleString()}
-                                                                    </button>
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </AccordionContent>
-                                                </AccordionItem>
-                                            </Accordion>
-                                        );
-                                    })}
-                                </div>
+                                <ResultsSummaryTab
+                                    settings={settings}
+                                    summarySelectedCategories={summarySelectedCategories}
+                                    setSummarySelectedCategories={setSummarySelectedCategories}
+                                    summaryReportData={summaryReportData}
+                                    combinedData={combinedData}
+                                    onCellClick={handleSummaryCellClick}
+                                />
                             </TabsContent>
                         </Tabs>
                     </>
                 ) : (noDataFound && (
                     <div className="text-center py-10"><AlertCircle className="mx-auto h-12 w-12 text-muted-foreground" /><h3 className="mt-4 text-lg font-semibold">沒有找到資料</h3><p className="mt-2 text-sm text-muted-foreground">我們無法從您提供的內容中解析出任何報表資料。<br />請確認格式是否正確，或嘗試貼上其他內容。</p></div>
                 ))}
+                
+                {onAddMaintenanceRecord && (
+                    <MaintenanceSyncDialog
+                        open={isSyncDialogOpen}
+                        onOpenChange={setIsSyncDialogOpen}
+                        syncForm={syncForm}
+                        setSyncForm={setSyncForm}
+                        locationSuggestions={locationSuggestions}
+                        vendorSuggestions={vendorSuggestions}
+                        onAddMaintenanceRecord={onAddMaintenanceRecord}
+                    />
+                )}
+
                 <Dialog open={isDetailViewOpen} onOpenChange={setIsDetailViewOpen}>
                     <DialogContent className="max-w-4xl h-4/5 flex flex-col">
                         <DialogHeader>
