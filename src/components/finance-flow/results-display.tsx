@@ -956,28 +956,28 @@ export function ResultsDisplay({
                                 顯示 {detailViewTitle} 的詳細交易清單表格
                             </DialogDescription>
                         </DialogHeader>
-                        <div className="flex-grow overflow-y-auto">
-                            <Table>
+                        <div className="flex-grow overflow-auto">
+                            <Table className="min-w-[900px]">
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead>日期</TableHead>
-                                        <TableHead>類型</TableHead>
-                                        <TableHead>交易項目</TableHead>
-                                        <TableHead>備註</TableHead>
-                                        <TableHead>來源</TableHead>
-                                        <TableHead className="text-right">金額</TableHead>
+                                        <TableHead className="w-[110px] whitespace-nowrap">日期</TableHead>
+                                        <TableHead className="w-[80px] whitespace-nowrap">類型</TableHead>
+                                        <TableHead className="min-w-[260px]">交易項目</TableHead>
+                                        <TableHead className="min-w-[240px]">備註</TableHead>
+                                        <TableHead className="w-[90px] whitespace-nowrap">來源</TableHead>
+                                        <TableHead className="w-[110px] whitespace-nowrap text-right">金額</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {detailViewData.length > 0 ? (
                                         detailViewData.map(item => (
                                             <TableRow key={item.id}>
-                                                <TableCell>{(item as any).date || getCreditDisplayDate((item as any).transactionDate)}</TableCell>
-                                                <TableCell>{item.category}</TableCell>
+                                                <TableCell className="whitespace-nowrap">{(item as any).date || getCreditDisplayDate((item as any).transactionDate)}</TableCell>
+                                                <TableCell className="whitespace-nowrap">{item.category}</TableCell>
                                                 <TableCell>{item.description}</TableCell>
                                                 <TableCell>{(item as any).bankCode || (item as any).notes || ''}</TableCell>
-                                                <TableCell>{(item as any).source || '信用卡'}</TableCell>
-                                                <TableCell className={`text-right ${item.amount < 0 ? 'text-green-600' : ''}`}>
+                                                <TableCell className="whitespace-nowrap">{(item as any).source || '信用卡'}</TableCell>
+                                                <TableCell className={`whitespace-nowrap text-right ${item.amount < 0 ? 'text-green-600' : ''}`}>
                                                     {item.amount.toLocaleString()}
                                                 </TableCell>
                                             </TableRow>
