@@ -123,6 +123,9 @@ export async function processBankStatement(
         // 建立現有資料的 ID 快速查找表
         const existingCreditIds = new Set(existingCreditData.map(d => d.id));
         const existingDepositIds = new Set(existingDepositData.map(d => d.id));
+        const existingDepositByLegacyId = new Map(
+            existingDepositData.map(item => [item.legacyId || item.id, item])
+        );
         const existingCashIds = new Set(existingCashData.map(d => d.id));
         const existingCreditDataMap = new Map<string, CreditData>(existingCreditData.map(d => [d.id, d]));
 
@@ -222,8 +225,12 @@ export async function processBankStatement(
 
             // 4. Process deposit account entries by applying rules
             const processedDepositPromises = uniqueBatchDepositRaw.map(async (entry): Promise<DepositData | null> => {
-                // 檢查是否已存在
-                if (existingDepositIds.has(entry.id)) {
+                const existingLegacyTransaction = existingDepositByLegacyId.get(entry.legacyId || entry.id);
+                const isSameLegacyTransaction = existingLegacyTransaction
+                    && (existingLegacyTransaction.bankCode || '').trim() === (entry.bankCode || '').trim();
+
+                // 新版 ID 直接比對；舊版資料則額外比對銀行代碼，避免不同代碼互相誤擋。
+                if (existingDepositIds.has(entry.id) || isSameLegacyTransaction) {
                     skippedDuplicates.deposit++;
                     return null;
                 }

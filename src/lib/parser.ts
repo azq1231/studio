@@ -237,6 +237,8 @@ export async function parseCreditCard(text: string): Promise<RawCreditData[]> {
 
 export type DepositData = {
     id: string; // Add ID for uniqueness
+    // 舊版 ID 未包含銀行代碼；保留它以便與既有資料相容地去重。
+    legacyId?: string;
     date: string; // yyyy/MM/dd format
     category: string;
     description: string;
@@ -370,11 +372,13 @@ export async function parseDepositAccount(text: string): Promise<DepositData[]> 
             }
         }
 
-        const idString = `${entry.date}-${time}-${finalDescription}-${amount}`;
-        const id = await sha1(idString);
+        // 舊版 ID 未納入銀行代碼，會把同時間、同金額但不同代碼的交易誤判成重複。
+        const legacyId = await sha1(`${entry.date}-${time}-${finalDescription}-${amount}`);
+        const id = await sha1(`${legacyId}-${finalBankCode}`);
 
         results.push({
             id,
+            legacyId,
             date: entry.date,
             category: '',
             description: finalDescription,
